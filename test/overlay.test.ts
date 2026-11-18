@@ -794,7 +794,23 @@ describe('panel stays off the selection', () => {
     layout(el('a1'), { x: 600, y: 100, width: 300, height: 60 });
     click(el('a1'));
     await frame();
+    await new Promise((r) => setTimeout(r, 0));
     expect(panelEl().classList.contains('left')).toBe(true);
+  });
+
+  it('tucks into the free band above or below a full-width element that both sides would cover', async () => {
+    panelEl().getBoundingClientRect = () => rect(750, 1010);
+    layout(el('a2'), { x: 10, y: 100, width: 1000, height: 60 });
+    click(el('a2'));
+    await frame();
+    await new Promise((r) => setTimeout(r, 0));
+    const room = Math.max(100 - 14 - 28, innerHeight - 160 - 14 - 28);
+    expect(panelEl().style.maxHeight).toBe(`${room}px`);
+    layout(el('a1'), { x: 100, y: 100, width: 200, height: 60 }); // a clear spot restores the usual place
+    click(el('a1'));
+    await frame();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(panelEl().style.maxHeight).toBe('');
   });
 
   it('stays put when the selection is clear of it, or when the other side is no better', async () => {
@@ -802,10 +818,12 @@ describe('panel stays off the selection', () => {
     layout(el('a1'), { x: 100, y: 100, width: 200, height: 60 });
     click(el('a1'));
     await frame();
+    await new Promise((r) => setTimeout(r, 0));
     expect(panelEl().classList.contains('left')).toBe(false);
     layout(el('a2'), { x: 10, y: 100, width: 1000, height: 60 }); // spans the page: both sides cover it equally
     click(el('a2'));
     await frame();
+    await new Promise((r) => setTimeout(r, 0));
     expect(panelEl().classList.contains('left')).toBe(false);
   });
 

@@ -752,21 +752,47 @@ export function createPanel(hooks: PanelHooks) {
   const overlap = (a: { left: number; right: number; top: number; bottom: number }, b: { left: number; right: number; top: number; bottom: number }) =>
     Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) * Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
 
-  /** When a newly selected element sits under the panel, hop to the other side if that covers less of it. */
+  /**
+   * Keep a newly selected element clear of the panel: hop to the other side if that covers less of it and,
+   * when neither side is clear (a full-width element), shrink into the free band above or below it.
+   * Measured just after, once the panel has filled in with the element's fields.
+   */
   const dodge = (el: Element | null) => {
     if (!el || panel.style.right === 'auto' || panel.classList.contains('preview')) return;
-    const r = el.getBoundingClientRect();
-    const p = panel.getBoundingClientRect();
-    if (!r.width || !r.height || !p.width) return;
-    const now = overlap(r, p);
-    if (now / (r.width * r.height) < 0.15) return;
-    const onLeft = panel.classList.contains('left');
-    const other = { left: onLeft ? innerWidth - 14 - p.width : 14, right: onLeft ? innerWidth - 14 : 14 + p.width, top: p.top, bottom: p.bottom };
-    if (overlap(r, other) >= now) return; // no better spot: stay put
-    panel.classList.toggle('left');
-    panel.style.animation = 'none';
-    void panel.offsetWidth;
-    panel.style.animation = '';
+    const place = () => {
+      panel.style.top = panel.style.maxHeight = '';
+      const r = el.getBoundingClientRect();
+      const pad = 14; // room for the handles and the tag around the element
+      const box = { left: r.left - pad, right: r.right + pad, top: r.top - pad, bottom: r.bottom + pad };
+      const area = (box.right - box.left) * (box.bottom - box.top);
+      const p = panel.getBoundingClientRect();
+      if (!r.width || !r.height || !p.width || !area) return;
+      const share = (side: 'left' | 'right') => {
+        const left = side === 'left' ? 14 : innerWidth - 14 - p.width;
+        return overlap(box, { left, right: left + p.width, top: p.top, bottom: p.bottom }) / area;
+      };
+      const onLeft = panel.classList.contains('left');
+      const now = share(onLeft ? 'left' : 'right');
+      if (now < 0.02) return;
+      const there = share(onLeft ? 'right' : 'left');
+      let best = now;
+      if (there < now) {
+        panel.classList.toggle('left');
+        panel.style.animation = 'none';
+        void panel.offsetWidth;
+        panel.style.animation = '';
+        best = there;
+      }
+      if (best < 0.02) return;
+      // Neither side is clear: use whichever vertical band is taller, and let the panel scroll inside it.
+      const above = box.top - 28;
+      const below = innerHeight - box.bottom - 28;
+      const room = Math.max(above, below);
+      if (room < 220) return;
+      panel.style.maxHeight = `${room}px`;
+      panel.style.top = `${above >= below ? 14 : innerHeight - 14 - Math.min(room, p.height)}px`;
+    };
+    window.setTimeout(place, 0);
   };
 
   const api = {
