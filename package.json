@@ -10,8 +10,9 @@
     "typecheck": "tsc --noEmit",
     "demo": "tsx demo/record.ts",
     "demo:claude": "tsx demo/record-claude.ts",
-    "prepublishOnly": "npm run typecheck && npm test && npm run build && npm run check:cjs",
-    "check:cjs": "node scripts/check-cjs-deps.mjs"
+    "prepublishOnly": "npm run typecheck && npm test && npm run build && npm run check:cjs && npm run check:types",
+    "check:cjs": "node scripts/check-cjs-deps.mjs",
+    "check:types": "node scripts/check-types.mjs"
   },
   "dependencies": {
     "@babel/parser": "^7.29.14",
@@ -39,15 +40,25 @@
   },
   "exports": {
     "./vite": {
-      "types": "./dist/vite.d.ts",
-      "import": "./dist/vite.js",
-      "require": "./dist/vite.cjs",
+      "import": {
+        "types": "./dist/vite.d.ts",
+        "default": "./dist/vite.js"
+      },
+      "require": {
+        "types": "./dist/vite.d.cts",
+        "default": "./dist/vite.cjs"
+      },
       "default": "./dist/vite.js"
     },
     "./next": {
-      "types": "./dist/next.d.ts",
-      "import": "./dist/next.js",
-      "require": "./dist/next.cjs",
+      "import": {
+        "types": "./dist/next.d.ts",
+        "default": "./dist/next.js"
+      },
+      "require": {
+        "types": "./dist/next.d.cts",
+        "default": "./dist/next.cjs"
+      },
       "default": "./dist/next.js"
     },
     "./next/script": {
@@ -107,5 +118,18 @@
   },
   "engines": {
     "node": ">=20.9"
+  },
+  "typesVersions": {
+    "*": {
+      "vite": [
+        "dist/vite.d.ts"
+      ],
+      "next": [
+        "dist/next.d.ts"
+      ],
+      "next/script": [
+        "dist/next-script.d.ts"
+      ]
+    }
   }
 }

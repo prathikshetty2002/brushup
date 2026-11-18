@@ -40,24 +40,31 @@ await build({
 });
 await build({ ...node, platform: 'neutral', entryPoints: ['src/next/script.ts'], outfile: 'dist/next-script.js', format: 'esm', external: ['react'], mainFields: ['module', 'main'] });
 
-await writeFile(
-  'dist/vite.d.ts',
+// A package with "type": "module" reads .d.ts as ES module types, so require() consumers need their own .d.cts.
+const declare = (name, text) => Promise.all([writeFile(`dist/${name}.d.ts`, text), writeFile(`dist/${name}.d.cts`, text)]);
+
+await declare(
+  'vite',
   `import type { Plugin } from 'vite';
 
 export interface BrushupOptions {
   /** How style edits are written: Tailwind utilities, inline style props, or auto-detect (default). */
   style?: 'auto' | 'inline' | 'tailwind';
+  /** When the agent edits a file under the page, find elements again by their source and refuse if unsure. Default true; false trusts recorded positions. */
+  strict?: boolean;
 }
 
 export default function brushup(options?: BrushupOptions): Plugin;
 `,
 );
 
-await writeFile(
-  'dist/next.d.ts',
+await declare(
+  'next',
   `export interface BrushupNextOptions {
   /** How style edits are written: Tailwind utilities, inline style props, or auto-detect (default). */
   style?: 'auto' | 'inline' | 'tailwind';
+  /** When the agent edits a file under the page, find elements again by their source and refuse if unsure. Default true; false trusts recorded positions. */
+  strict?: boolean;
   /** Also tag component usages (<Button>) so edits reach the usage site. Default true. */
   components?: boolean;
 }
