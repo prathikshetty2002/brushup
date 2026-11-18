@@ -27,7 +27,7 @@ When your agent changes the code, the canvas updates in place.
 
 | | Tested | Notes |
 | --- | --- | --- |
-| Node | 22 / 26 locally; dependency ranges verified for **Node 20.9+** | CI runs Node 20, 22 and 24 |
+| Node | 26 locally; **20.9, 22 and 24 in CI** | Node 22 and 24 run the full test suite; Node 20.9 installs the packed package and exercises the commands, both module formats, the MCP server and the static server (the test tooling itself needs Node 22+) |
 | Next.js | 16.4 (Turbopack and webpack) | `>=15.3` is the lowest version with the stable `turbopack.rules` config |
 | Vite | 8 | plugin API is unchanged back to 5, untested |
 | React | 19 | |
