@@ -59,6 +59,9 @@ const run = (cmd, args, opts = {}) => spawnSync(cmd, args, { cwd: dir, encoding:
 const deps = framework === 'vite' ? ['vite', '@vitejs/plugin-react', 'react', 'react-dom'] : ['next', 'react', 'react-dom'];
 let server;
 let browser;
+let serverLog = '';
+let page;
+let failureDetails = () => '';
 try {
   const install = run('npm', ['install', ...deps, tarball, '--no-audit', '--no-fund']);
   check('installs the framework and the packed Brushup', install.status === 0, install.stderr.slice(-400));
@@ -70,17 +73,23 @@ try {
 
   const port = 5200 + Math.floor(Math.random() * 600);
   const bin = framework === 'vite' ? path.join(dir, 'node_modules/vite/bin/vite.js') : path.join(dir, 'node_modules/next/dist/bin/next');
-  server = spawn(process.execPath, framework === 'vite' ? [bin, '--port', String(port), '--strictPort', '--host', '127.0.0.1'] : [bin, 'dev', '--port', String(port), '--hostname', '127.0.0.1'], { cwd: dir, stdio: 'ignore', env: { ...process.env, NEXT_TELEMETRY_DISABLED: '1' } });
+  server = spawn(process.execPath, framework === 'vite' ? [bin, '--port', String(port), '--strictPort', '--host', '127.0.0.1'] : [bin, 'dev', '--port', String(port), '--hostname', '127.0.0.1'], { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, NEXT_TELEMETRY_DISABLED: '1' } });
+  for (const stream of [server.stdout, server.stderr]) stream.on('data', (d) => (serverLog = (serverLog + d).slice(-4000)));
   const url = `http://127.0.0.1:${port}/`;
   const up = await until(() => fetch(url).then((r) => r.status < 500).catch(() => false), 240000);
   check('dev server starts', up);
   if (!up) throw new Error('dev server did not start');
 
   browser = await { chromium, firefox, webkit }[browserName].launch({ headless: true, ...(browserName === 'chromium' && process.env.BRUSHUP_CHROME ? { executablePath: process.env.BRUSHUP_CHROME, args: ['--no-sandbox'] } : {}) });
-  const page = await (await browser.newContext({ viewport: { width: 1100, height: 700 } })).newPage();
+  page = await (await browser.newContext({ viewport: { width: 1100, height: 700 } })).newPage();
   const errors = [];
-  page.on('pageerror', (e) => errors.push(String(e)));
-  page.on('console', (m) => m.type() === 'error' && /hydrat/i.test(m.text()) && errors.push(m.text()));
+  const consoleErrors = [];
+  page.on('pageerror', (e) => (errors.push(String(e)), consoleErrors.push(`pageerror: ${e}`)));
+  page.on('console', (m) => {
+    if (m.type() === 'error') consoleErrors.push(m.text().slice(0, 300));
+    if (m.type() === 'error' && /hydrat/i.test(m.text())) errors.push(m.text());
+  });
+  failureDetails = () => `console errors: ${consoleErrors.slice(0, 6).join(' | ')}`;
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 });
   await page.waitForSelector('#brushup-root', { state: 'attached', timeout: 120000 });
   check('the canvas loads', await page.locator('.panel').first().isVisible());
@@ -110,6 +119,16 @@ try {
   check('no page or hydration errors', errors.length === 0, errors.join('; ').slice(0, 300));
 } catch (err) {
   check('run', false, String(err).slice(0, 400));
+  // What the browser and the dev server were doing when it went wrong.
+  console.log(`--- diagnostics [${label}]`);
+  console.log(failureDetails());
+  try {
+    console.log('page body:', ((await page?.evaluate(() => document.body.innerHTML.replace(/<script[\s\S]*?<\/script>/g, '').slice(0, 700))) ?? '').replace(/\s+/g, ' '));
+    console.log('tagged elements:', await page?.evaluate(() => document.querySelectorAll('[data-brushup-src]').length));
+  } catch {
+    /* page already gone */
+  }
+  console.log('dev server output (tail):\n' + serverLog.slice(-1500));
 } finally {
   await browser?.close().catch(() => {});
   if (server?.pid) {
