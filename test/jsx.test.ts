@@ -371,3 +371,78 @@ describe('CSS modules', () => {
     expect(out.files[sheet('card.module.css')]).toBe(css);
   });
 });
+
+describe('text that comes from data written in the same file', () => {
+  const code = `const features = [
+  { title: "Drag to place", body: "Move any element where it belongs." },
+  { title: 'Tune the details', body: \`Spacing, type and color.\` },
+  { title: "Stay in sync", body: "When your agent edits code, it follows." },
+];
+
+export default function P() {
+  return (
+    <ul>
+      {features.map((f) => (
+        <li key={f.title}>
+          <h3>{f.title}</h3>
+          <p>{f.body}</p>
+        </li>
+      ))}
+    </ul>
+  );
+}
+`;
+  const text = (tag: string, instance: number | undefined, to: string, was?: string, src = code): Edit => ({ kind: 'text', id: idOf(src, tag), tag, text: to, instance, was });
+  const run = (e: Edit, src = code) => applyJsxEdit({ [FILE]: src }, FILE, e, { tailwind: false }).files[FILE];
+
+  it('writes the edit into the item the element was rendered from', () => {
+    const out = run(text('p', 1, 'Spacing, type, colour.', 'Spacing, type and color.'));
+    expect(out).toContain('body: `Spacing, type, colour.`');
+    expect(out).toContain('body: "Move any element where it belongs."');
+    expect(out).toContain('title: \'Tune the details\'');
+    expect(out).toContain('{f.body}'); // the JSX is untouched
+  });
+
+  it('works for each item, and for a title as well as a body', () => {
+    expect(run(text('p', 2, 'Done.'))).toContain('body: "Done."');
+    expect(run(text('h3', 0, 'Place it'))).toContain('title: "Place it"');
+  });
+
+  it('keeps each literal\'s quote style and escapes what needs it', () => {
+    expect(run(text('p', 0, 'She said "hi"'))).toContain('body: "She said \\"hi\\""');
+    expect(run(text('p', 1, 'a `tick` and ${x}'))).toContain('body: `a \\`tick\\` and \\${x}`');
+    expect(run(text('h3', 1, "it's"))).toContain("title: 'it\\'s'");
+  });
+
+  it('understands a destructured parameter', () => {
+    const src = code.replace('(f) =>', '({ title, body }) =>').replace('{f.body}', '{body}').replace('{f.title}', '{title}').replace('key={f.title}', 'key={title}');
+    expect(run(text('p', 2, 'Changed', undefined, src), src)).toContain('body: "Changed"');
+  });
+
+  it('refuses when the page does not show the item the data says it should (a filter or a sort)', () => {
+    expect(() => run(text('p', 0, 'x', 'Something else entirely'))).toThrow(/doesn't show item 1 of that list/);
+  });
+
+  it('refuses a list that is filtered, spread, fetched or not a plain string, and says why', () => {
+    const filtered = code.replace('features.map', 'features.filter(Boolean).map');
+    expect(() => run(text('p', 0, 'x', undefined, filtered), filtered)).toThrow(/built by code/);
+    const spread = code.replace('{ title: "Drag to place"', '...more, { title: "Drag to place"');
+    expect(() => run(text('p', 1, 'x', undefined, spread), spread)).toThrow(/spreads other lists/);
+    const computed = code.replace('"Move any element where it belongs."', 'compute()');
+    expect(() => run(text('p', 0, 'x', undefined, computed), computed)).toThrow(/not a plain string/);
+    expect(() => run(text('p', 9, 'x'))).toThrow(/no matching item at position 10/);
+  });
+
+  it('needs to know which item, and says what the text comes from', () => {
+    expect(() => run(text('p', undefined, 'x'))).toThrow(/needs to know which item/);
+    const state = `export default function P({ label }) {\n  return <p>{label}</p>;\n}\n`;
+    expect(() => run(text('p', 0, 'x', undefined, state), state)).toThrow(/comes from \{label\}, which is an expression/);
+  });
+
+  it('edits a literal written as an expression: {"Save"} and {`Save`}', () => {
+    const quoted = 'export default () => <p>{"Save"}</p>;';
+    const ticked = 'export default () => <p>{`Save`}</p>;';
+    expect(run(text('p', 0, 'Saved', undefined, quoted), quoted)).toContain('{"Saved"}');
+    expect(run(text('p', 0, 'Saved', undefined, ticked), ticked)).toContain('{`Saved`}');
+  });
+});

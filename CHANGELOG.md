@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Text that comes from data can be edited.** Double-clicking `{f.body}` inside `items.map(...)` over a literal list in the same file now edits the string in that item of the list; `{"Save"}` and template-literal expressions are edited in place. Refusals say what the text comes from and why (a filter, a prop, state, a fetch).
+
 ## 0.1.2
 
 Windows fixes, found by driving real Vite and Next.js apps in a browser on Windows CI.

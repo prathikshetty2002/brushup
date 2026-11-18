@@ -40,6 +40,10 @@ export interface StyleEdit {
 export interface TextEdit {
   kind: 'text';
   ver?: string;
+  /** Which of the elements rendered from the same JSX this was (list items from one `.map`), in document order. */
+  instance?: number;
+  /** The text as it was on the page before the edit, to check it still matches the data it is written from. */
+  was?: string;
   /** The version token of `fallback`. */
   fallbackVer?: string;
   stale?: Staleness;

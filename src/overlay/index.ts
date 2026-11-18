@@ -518,7 +518,7 @@ function startTextEdit(el: HTMLElement) {
     state.editing = null;
     const text = (el.textContent ?? '').trim();
     if (commit && text && text !== original.trim()) {
-      void send({ kind: 'text', id: refOf(el), fallback: fallbackOf(el), tag: tagOf(el), text, ...(DEV ? { ident: identOf(el, false), ver: verOf(el), fallbackVer: el.hasAttribute(USE) ? (el.getAttribute(SV) ?? undefined) : undefined } : {}) }).then((r) => {
+      void send({ kind: 'text', id: refOf(el), fallback: fallbackOf(el), tag: tagOf(el), text, ...(DEV ? { ident: identOf(el, false), instance: Math.max(0, instances(refOf(el)).indexOf(el)), was: original.replace(/\s+/g, ' ').trim(), ver: verOf(el), fallbackVer: el.hasAttribute(USE) ? (el.getAttribute(SV) ?? undefined) : undefined } : {}) }).then((r) => {
         if (r.ok) reportSaved(el, r);
         else el.textContent = original;
       });

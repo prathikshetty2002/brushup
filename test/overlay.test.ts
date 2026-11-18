@@ -606,6 +606,15 @@ describe('dev-server mode references (component usage sites)', () => {
     expect(o.last('edit').edit).toMatchObject({ kind: 'text', id: 'src/app/page.tsx:12:6#Button', fallback: 'src/ui/button.tsx:5:4' });
   });
 
+  it('a text edit says which list item it was and what the text was, so data-driven text can be found', async () => {
+    const [, b] = [...document.querySelectorAll('li')];
+    pointer('dblclick', b);
+    b.textContent = 'beta';
+    key('Enter', {}, b);
+    await settle();
+    expect(o.last('edit').edit).toMatchObject({ kind: 'text', id: 'src/List.tsx:3:2', text: 'beta', instance: 1, was: 'b' });
+  });
+
   it('list items from one JSX line are one edit, and the status says how many share it', async () => {
     const [a, b] = [...document.querySelectorAll('li')];
     click(a);

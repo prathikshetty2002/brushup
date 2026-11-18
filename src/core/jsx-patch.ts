@@ -132,11 +132,111 @@ function styleLiteral(prop: string, value: string, q: string): string {
 
 const escapeJsxText = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\{/g, '&#123;').replace(/\}/g, '&#125;');
 
+type Lit = t.StringLiteral | t.TemplateLiteral;
+const plainString = (n: t.Node | null | undefined): n is Lit => !!n && (n.type === 'StringLiteral' || (n.type === 'TemplateLiteral' && n.expressions.length === 0));
+const litValue = (n: Lit) => (n.type === 'StringLiteral' ? n.value : (n.quasis[0].value.cooked ?? n.quasis[0].value.raw));
+const collapse2 = (v: string) => v.replace(/\s+/g, ' ').trim();
+
+/** Write `text` into a string literal, keeping its quote style and escaping what that quote needs. */
+function replaceLiteral(code: string, node: Lit, text: string): string {
+  const q = code[node.start!];
+  let body = text.replace(/\\/g, '\\\\').replace(/\n/g, '\\n');
+  body = q === '`' ? body.replace(/`/g, '\\`').replace(/\$\{/g, '\\${') : body.replace(new RegExp(q, 'g'), `\\${q}`);
+  return code.slice(0, node.start!) + q + body + q + code.slice(node.end!);
+}
+
+/** The nodes above `target`, outermost first, or null if it isn't in `root`. */
+function ancestors(root: t.Node, target: t.Node): t.Node[] | null {
+  const stack: t.Node[] = [];
+  const visit = (n: unknown): boolean => {
+    if (!n || typeof n !== 'object') return false;
+    if (Array.isArray(n)) return n.some(visit);
+    const node = n as t.Node;
+    if (typeof node.type !== 'string') return false;
+    if (node === target) return true;
+    stack.push(node);
+    for (const key of Object.keys(node)) if (key !== 'loc' && key !== 'extra' && !key.endsWith('Comments') && visit((node as unknown as Record<string, unknown>)[key])) return true;
+    stack.pop();
+    return false;
+  };
+  return visit(root) ? stack : null;
+}
+
+const unwrap = (n: t.Node | null | undefined): t.Node | null | undefined => {
+  while (n && (n.type === 'TSAsExpression' || n.type === 'TSSatisfiesExpression' || n.type === 'ParenthesizedExpression' || n.type === 'TSNonNullExpression')) n = n.expression;
+  return n;
+};
+const keyName = (k: t.Node, computed: boolean) => (!computed && k.type === 'Identifier' ? k.name : k.type === 'StringLiteral' ? k.value : null);
+
+/**
+ * `{f.body}` or `{body}` inside `items.map((f) => …)` where `items` is a literal array in this file: the string
+ * literal in the `instance`-th item that the text really comes from, or why it can't be found.
+ */
+function dataLiteral(ast: t.File, el: t.JSXElement, expr: t.Node, instance: number): { lit: Lit } | { why: string } {
+  const above = ancestors(ast.program, el);
+  if (!above) return { why: 'could not be located' };
+  const access = expr.type === 'MemberExpression' && expr.object.type === 'Identifier' ? { name: expr.object.name, key: keyName(expr.property, expr.computed) } : expr.type === 'Identifier' ? { name: expr.name, key: null } : null;
+  if (!access) return { why: 'is not a plain property of a list item' };
+  for (let i = above.length - 1; i > 0; i--) {
+    const fn = above[i];
+    const call = above[i - 1];
+    if ((fn.type !== 'ArrowFunctionExpression' && fn.type !== 'FunctionExpression') || call.type !== 'CallExpression' || call.arguments[0] !== fn) continue;
+    if (call.callee.type !== 'MemberExpression' || call.callee.property.type !== 'Identifier' || call.callee.property.name !== 'map') continue;
+    const param = fn.params[0];
+    let prop: string | null = null;
+    if (access.key !== null && param?.type === 'Identifier' && param.name === access.name) prop = access.key;
+    else if (access.key === null && param?.type === 'ObjectPattern') {
+      const hit = param.properties.find((p): p is t.ObjectProperty => p.type === 'ObjectProperty' && p.value.type === 'Identifier' && p.value.name === access.name);
+      prop = hit ? keyName(hit.key, hit.computed) : null;
+    }
+    if (!prop) continue;
+    // where the list comes from
+    let list = unwrap(call.callee.object);
+    if (list?.type === 'Identifier') {
+      const name = list.name;
+      list = null;
+      for (const stmt of ast.program.body) {
+        const decl = stmt.type === 'ExportNamedDeclaration' ? stmt.declaration : stmt;
+        if (decl?.type !== 'VariableDeclaration') continue;
+        const d = decl.declarations.find((x) => x.id.type === 'Identifier' && x.id.name === name);
+        if (d) list = unwrap(d.init);
+      }
+    }
+    if (list?.type !== 'ArrayExpression') return { why: 'is built by code (a filter, a fetch, a prop), not a literal list in this file' };
+    if (list.elements.some((x) => !x || x.type === 'SpreadElement')) return { why: 'is in a list that spreads other lists, so its position is unclear' };
+    const item = unwrap(list.elements[instance]);
+    if (item?.type !== 'ObjectExpression') return { why: `has no matching item at position ${instance + 1} in its list` };
+    const entry = item.properties.find((p): p is t.ObjectProperty => p.type === 'ObjectProperty' && keyName(p.key, p.computed) === prop);
+    const value = unwrap(entry?.value);
+    if (!plainString(value)) return { why: `is not a plain string in the list ("${prop}")` };
+    return { lit: value };
+  }
+  return { why: 'is an expression (a variable, state or a prop), not text written here' };
+}
+
 function patchText(code: string, file: string, edit: TextEdit): string {
   const { el } = located(code, file, edit);
   const kids = el.children;
   const label = parseSrc(edit.id)?.name ?? edit.tag;
   if (!el.closingElement) throw new TextNotHere(`<${label}> has no text children to edit here.`);
+  const only = kids.length === 1 ? kids[0] : null;
+  if (only?.type === 'JSXExpressionContainer') {
+    const e = only.expression;
+    const source = code.slice(only.start!, only.end!);
+    // {"Save"} or {`Save`}: the text is a literal, just written as an expression
+    if (plainString(e)) return replaceLiteral(code, e, edit.text.trim());
+    if (e.type === 'MemberExpression' || e.type === 'Identifier') {
+      const found = dataLiteral(parseSource(code, file), el, e, edit.instance ?? 0);
+      if ('why' in found) throw new TextNotHere(`The text in <${label}> comes from ${source}, which ${found.why}, so it can't be edited here.`);
+      if (typeof edit.instance !== 'number') throw new TextNotHere(`The text in <${label}> comes from ${source}, a value in a list, and Brushup needs to know which item this is.`);
+      // The page must still show what the data says, otherwise this isn't the item it appears to be (a filter, a sort)
+      if (edit.was !== undefined && collapse2(edit.was) !== collapse2(litValue(found.lit))) {
+        throw new TextNotHere(`The text in <${label}> comes from ${source}, but the page doesn't show item ${edit.instance + 1} of that list as written, so it can't be edited safely.`);
+      }
+      return replaceLiteral(code, found.lit, edit.text.trim());
+    }
+    throw new TextNotHere(`The text in <${label}> comes from ${source}, an expression, so it can't be edited here.`);
+  }
   if (kids.length !== 1 || kids[0].type !== 'JSXText') {
     throw new TextNotHere(`The text in <${label}> comes from an expression or nested elements, so it can't be edited here.`);
   }
