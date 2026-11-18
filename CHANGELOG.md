@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **A guided tour.** The `?` button in the panel walks through selecting, moving and resizing, the style fields, text editing, notes, undo and preview, highlighting each part as it goes. A dot on the button marks it until it has been opened once.
+- **Panel polish.** The margin/padding widget has more room, selection handles draw behind the panel, and the shortcuts are an aligned list.
+
 ## 0.1.3
 
 - **Text that comes from data can be edited.** Double-clicking `{f.body}` inside `items.map(...)` over a literal list in the same file now edits the string in that item of the list; `{"Save"}` and template-literal expressions are edited in place. Refusals say what the text comes from and why (a filter, a prop, state, a fetch).

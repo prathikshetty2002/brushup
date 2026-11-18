@@ -709,6 +709,28 @@ describe('panel position', () => {
   const panelEl = () => o.root.querySelector('.panel') as HTMLElement;
   const header = () => o.root.querySelector('header') as HTMLElement;
 
+  it('the ? button walks through a short tour, and remembers it was seen', () => {
+    const q = (sel: string) => o.root.querySelector(sel) as HTMLElement;
+    const tour = q('.tour');
+    expect(tour.hidden).toBe(true);
+    expect(q('[data-act=tour] .dot').hidden).toBe(false);
+    q('[data-act=tour]').click();
+    expect(tour.hidden).toBe(false);
+    expect(q('.tour .n').textContent).toBe('1 / 7');
+    (q('.tour .next') as HTMLButtonElement).click();
+    expect(q('.tour .n').textContent).toBe('2 / 7');
+    (q('.tour .back') as HTMLButtonElement).click();
+    expect(q('.tour .n').textContent).toBe('1 / 7');
+    for (let i = 0; i < 6; i++) (q('.tour .next') as HTMLButtonElement).click();
+    expect(q('.tour .next').textContent).toBe('Done');
+    (q('.tour .next') as HTMLButtonElement).click();
+    expect(tour.hidden).toBe(true);
+    expect(q('[data-act=tour] .dot').hidden).toBe(true);
+    q('[data-act=tour]').click();
+    tour.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(tour.hidden).toBe(true);
+  });
+
   it('the header drags the panel, and the dock button snaps it back', () => {
     pointer('pointerdown', header(), { clientX: 400, clientY: 20 });
     pointer('pointermove', header(), { clientX: 300, clientY: 90 });

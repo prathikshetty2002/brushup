@@ -161,6 +161,13 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .shared input:checked { background: var(--accent); } .shared input:checked::after { transform: translateX(12px); background: #fff; }
 .keys { margin: 14px 0 0; padding-top: 10px; border-top: 1px solid var(--line); display: grid; gap: 6px; color: var(--faint); font-size: 11.5px; }
 .keys div { display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: 8px; } .keys dt, .keys dd { margin: 0; } .keys kbd { margin: 0; }
+.iconbtn { position: relative; } .iconbtn .dot { position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.tour-ring { position: fixed; z-index: 5; pointer-events: none; border: 2px solid var(--accent); border-radius: 4px; box-shadow: 0 0 0 4px rgba(var(--accent-rgb), .18); transition: all .2s cubic-bezier(.2,.8,.2,1); }
+.tour { position: fixed; z-index: 6; width: 264px; padding: 14px 14px 12px; pointer-events: auto; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 14px 36px rgba(0,0,0,.28); animation: enter .2s cubic-bezier(.2,.8,.2,1); }
+.tour h3 { margin: 0 0 4px; font: italic 600 16px/1.25 var(--serif); } .tour p { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+.tour .foot { display: flex; align-items: center; gap: 8px; margin-top: 12px; } .tour .foot .n { flex: 1; color: var(--faint); font: 500 11px var(--mono); }
+.tour button { padding: 5px 11px; border-radius: 3px; } .tour .next { background: var(--accent); color: #fff; } .tour .skip { color: var(--muted); }
+.tour[hidden], .tour-ring[hidden] { display: none; }
 .hint { margin: 12px 0 0; color: var(--faint); font-size: 10.5px; line-height: 2; }
 kbd { white-space: nowrap; font: 500 11px/1 var(--mono); padding: 2px 5px; border-radius: 2px; border: 1px solid var(--line); color: var(--muted); margin: 0 1px; }
 .add { width: 100%; border: 1px dashed var(--accent); border-radius: 2px; color: var(--accent); padding: 8px; font-weight: 500; }
@@ -299,6 +306,7 @@ export function createPanel(hooks: PanelHooks) {
           <button class="iconbtn" data-act="redo" title="Redo (Ctrl/Cmd+Shift+Z)" aria-label="Redo"><svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 000 11H13"/></svg></button>
           <button class="iconbtn" data-act="parent" title="Select parent" aria-label="Select parent"><svg viewBox="0 0 24 24"><path d="M12 19V6"/><path d="M6 11l6-6 6 6"/></svg></button>
           <span class="sp"></span>
+          <button class="iconbtn" data-act="tour" title="How to use Brushup" aria-label="How to use Brushup"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 114 2c-.9.6-1.6 1-1.6 2.1"/><path d="M12 16.9v.1"/></svg><i class="dot" hidden></i></button>
           <button class="iconbtn" data-act="dock" title="Move panel to the other side" aria-label="Move panel"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/></svg></button>
         </div>
         <div class="tabs" role="tablist"><span class="ink"></span>
@@ -323,6 +331,8 @@ export function createPanel(hooks: PanelHooks) {
         </div>
       </div>
     </aside>
+    <div class="tour-ring" hidden></div>
+    <div class="tour" role="dialog" aria-label="Brushup tour" hidden><h3></h3><p></p><div class="foot"><span class="n"></span><button class="skip" type="button">Skip</button><button class="back skip" type="button">Back</button><button class="next" type="button"></button></div></div>
     <div class="toast" role="status" aria-live="polite" hidden><span class="bar"></span><span class="status"></span><button class="undo" data-act="toast-undo" hidden>Undo</button><button class="x" data-act="toast-x" aria-label="Dismiss">&times;</button></div>`;
   document.documentElement.appendChild(host);
 
@@ -577,6 +587,69 @@ export function createPanel(hooks: PanelHooks) {
     } catch {
       /* storage can be blocked */
     }
+  });
+
+  /* ----- guided tour ----- */
+  const tourEl = $<HTMLElement>('.tour');
+  const ring = $<HTMLElement>('.tour-ring');
+  const tourDot = root.querySelector<HTMLElement>('[data-act=tour] .dot')!;
+  const STEPS: { sel: string | null; title: string; body: string }[] = [
+    { sel: null, title: 'Click to select', body: 'Click any element on your page to select it. Shift-click adds more; drag on empty space to box-select. Esc deselects.' },
+    { sel: null, title: 'Move and resize', body: 'Drag an element to move it, or pull its handles to resize. Arrow keys nudge by 1px (hold Shift for 10). Guides snap to neighbours; hold Ctrl/Cmd to turn that off.' },
+    { sel: '.info', title: 'Change the style', body: 'The fields for the selected element appear here: size, colour, spacing, width. Every change is written straight into your source file.' },
+    { sel: null, title: 'Edit text in place', body: 'Double-click text to retype it. If the text comes from data Brushup can’t edit, it pins a note for Claude instead.' },
+    { sel: '[data-tab=notes]', title: 'Leave notes for Claude', body: 'Press N on a selected section or component to pin a note. Claude reads your notes and picks them up from your project.' },
+    { sel: '.actions', title: 'Undo anything', body: 'Undo and redo every edit, or select the parent element. Every change is a small edit to your files, so git shows it too.' },
+    { sel: '.seg', title: 'Preview', body: 'Switch to Preview to use the page normally, with no selection getting in the way. Switch back to Edit to keep tweaking.' },
+  ];
+  let step = -1;
+  const showStep = (i: number) => {
+    step = i;
+    const st = STEPS[i];
+    tourEl.hidden = false;
+    tourEl.querySelector('h3')!.textContent = st.title;
+    tourEl.querySelector('p')!.textContent = st.body;
+    tourEl.querySelector('.n')!.textContent = `${i + 1} / ${STEPS.length}`;
+    tourEl.querySelector<HTMLElement>('.back')!.hidden = i === 0;
+    tourEl.querySelector<HTMLElement>('.skip:not(.back)')!.hidden = i === STEPS.length - 1;
+    tourEl.querySelector('.next')!.textContent = i === STEPS.length - 1 ? 'Done' : 'Next';
+    const pr = panel.getBoundingClientRect();
+    const target = st.sel ? root.querySelector<HTMLElement>(st.sel) : null;
+    const tr = target?.getBoundingClientRect();
+    ring.hidden = !tr;
+    if (tr) Object.assign(ring.style, { left: `${tr.left - 4}px`, top: `${tr.top - 4}px`, width: `${tr.width + 8}px`, height: `${tr.height + 8}px` });
+    const w = 264, h = tourEl.offsetHeight || 150, gap = 14;
+    const onRight = pr.left + pr.width / 2 > innerWidth / 2;
+    const left = Math.max(8, Math.min(innerWidth - w - 8, onRight ? pr.left - w - gap : pr.right + gap));
+    const top = Math.max(8, Math.min(innerHeight - h - 8, tr ? tr.top : pr.top));
+    Object.assign(tourEl.style, { left: `${left}px`, top: `${top}px` });
+    tourEl.querySelector<HTMLElement>('.next')!.focus();
+  };
+  const endTour = () => {
+    step = -1;
+    tourEl.hidden = true;
+    ring.hidden = true;
+    tourDot.hidden = true;
+    try {
+      localStorage.setItem('brushup:tour', 'seen');
+    } catch {
+      /* storage can be blocked */
+    }
+  };
+  try {
+    tourDot.hidden = localStorage.getItem('brushup:tour') === 'seen';
+  } catch {
+    tourDot.hidden = false;
+  }
+  root.querySelector('[data-act=tour]')!.addEventListener('click', () => (step < 0 ? showStep(0) : endTour()));
+  tourEl.querySelector('.next')!.addEventListener('click', () => (step >= STEPS.length - 1 ? endTour() : showStep(step + 1)));
+  tourEl.querySelector('.back')!.addEventListener('click', () => step > 0 && showStep(step - 1));
+  tourEl.querySelector('.skip:not(.back)')!.addEventListener('click', endTour);
+  tourEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') endTour();
+    else if (e.key === 'ArrowRight') (e.preventDefault(), tourEl.querySelector<HTMLElement>('.next')!.click());
+    else if (e.key === 'ArrowLeft') (e.preventDefault(), tourEl.querySelector<HTMLElement>('.back')!.click());
+    e.stopPropagation();
   });
 
   /* ----- tabs ----- */
