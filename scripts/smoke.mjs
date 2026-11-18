@@ -65,6 +65,11 @@ for (let i = 0; i < 20 && !page; i++) {
 server.kill();
 check('brushup <page.html> serves the page with the canvas', page.includes('__brushup') && page.includes('Hello'));
 
-rmSync(dir, { recursive: true, force: true });
+try {
+  // On Windows the killed child processes can still hold the folder for a moment; cleanup is best effort.
+  rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 });
+} catch {
+  /* leave it to the OS temp cleanup */
+}
 console.log(failed ? `\n${failed} check(s) failed` : '\nall checks passed');
 process.exit(failed ? 1 : 0);
