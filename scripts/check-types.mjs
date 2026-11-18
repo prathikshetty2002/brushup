@@ -7,15 +7,18 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 const repo = process.cwd();
+// Run from `npm publish --dry-run` this inherits npm_config_dry_run (and friends), which would make the nested
+// `npm pack` write nothing; give the child npm calls a clean environment.
+const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^npm_(config_dry_run|command|lifecycle)/i.test(k)));
 const dir = mkdtempSync(path.join(tmpdir(), 'brushup-types-'));
-const run = (cmd, args) => spawnSync(cmd, args, { cwd: dir, encoding: 'utf8' });
+const run = (cmd, args) => spawnSync(cmd, args, { cwd: dir, encoding: 'utf8', env });
 const fail = (what, out) => {
   console.error(`FAIL ${what}\n${out}`);
   rmSync(dir, { recursive: true, force: true });
   process.exit(1);
 };
 
-const pack = spawnSync('npm', ['pack', repo, '--pack-destination', dir], { encoding: 'utf8' });
+const pack = spawnSync('npm', ['pack', repo, '--pack-destination', dir, '--ignore-scripts'], { encoding: 'utf8', env });
 const tarball = pack.stdout.trim().split('\n').pop();
 run('npm', ['init', '-y']);
 if (run('npm', ['install', path.join(dir, tarball), '--no-audit', '--no-fund']).status !== 0) fail('install', 'npm install failed');
