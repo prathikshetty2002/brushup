@@ -2,6 +2,7 @@ import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { EditError, StaleElement, type Edit } from '../core/edit-types';
+import { TextNotHere } from '../core/jsx-patch';
 import type { EditOutcome, FileSession, Selection } from './file-session';
 import type { NotesStore } from './notes';
 
@@ -108,7 +109,7 @@ export function createHub(session: FileSession, notes?: NotesStore) {
       await reload(out.files);
     } catch (err) {
       const message = err instanceof EditError ? err.message : `Unexpected error: ${(err as Error).message}`;
-      send(ws, { type: 'result', n: msg.n, ok: false, error: message, stale: err instanceof StaleElement, hash: await session.hash().catch(() => '') });
+      send(ws, { type: 'result', n: msg.n, ok: false, error: message, stale: err instanceof StaleElement, textSource: err instanceof TextNotHere, hash: await session.hash().catch(() => '') });
     }
   };
 

@@ -169,7 +169,7 @@ Brushup writes small, exact edits, and refuses when it can't be sure. These are 
 
 | Message | Meaning | What to do |
 | --- | --- | --- |
-| *The text in `<X>` comes from an expression or nested elements, so it can't be edited here.* | The text isn't a plain literal in JSX (e.g. `{f.title}`) | Edit the data, or use a note |
+| *The text in `<X>` comes from an expression or nested elements, so it can't be edited here.* | The text isn't a plain literal in JSX (e.g. `{f.title}`) | Brushup searches for where the text is written and edits that; if it's in several places, or in a database, it pins a note for Claude instead |
 | *That element contains other elements: select the one holding the text.* | You double-clicked a container | Double-click the text itself |
 | *This element's style prop is not an object literal.* | `style={styles.card}` is a variable | Edit it in code, or ask Claude |
 | *`<X>` is no longer at …, the file changed; try again.* | The file changed between render and your edit | Retry (the page has refreshed) |

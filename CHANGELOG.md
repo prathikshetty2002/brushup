@@ -3,6 +3,8 @@
 ## Unreleased
 
 - **Text that comes from data can be edited.** Double-clicking `{f.body}` inside `items.map(...)` over a literal list in the same file now edits the string in that item of the list; `{"Save"}` and template-literal expressions are edited in place. Refusals say what the text comes from and why (a filter, a prop, state, a fetch).
+- **Text is found by its value.** When the JSX doesn't hold the text (a prop, `useState("Save")`, a constant, a filtered list, a translation file like `messages/en.json`), Brushup searches the project for the one place that writes it and edits it there, with a warning that everything using that text changes too. If it's written in several places it refuses and lists them (`file:line`); tests, stories and `node_modules` are ignored; text under 3 characters isn't searched.
+- **A note is pinned when the source can't hold the text.** For text from a database, an API or a CMS, the canvas restores the text and pins a note on the element (“Change this text to X (it says Y)”) so Claude can make the change with full context. Repeating the same edit doesn't pin a second note.
 
 ## 0.1.2
 

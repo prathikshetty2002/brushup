@@ -26,6 +26,8 @@ interface Result {
   warning?: string;
   /** The file changed under the page and the server couldn't tell which element was meant. */
   stale?: boolean;
+  /** The server couldn't find where this text is written in the source. */
+  textSource?: boolean;
 }
 
 // Config comes from `window.__brushup` (static server, Vite plugin) or, for frameworks that render a plain
@@ -318,14 +320,25 @@ function locateNote(id: string) {
   el.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
 }
 
-async function saveNote(draft: NoteDraft, id: string | null, status?: 'open' | 'done') {
+async function saveNote(draft: NoteDraft, id: string | null, status?: 'open' | 'done', target?: HTMLElement) {
   const existing = id ? notes.find((n) => n.id === id) : undefined;
-  const el = selected();
+  const el = target ?? selected();
   if (!existing && !el) return panel.setStatus('Select an element first', 'err');
   const note = { id: existing?.id, kind: draft.kind, label: draft.label, text: draft.text, status: status ?? existing?.status ?? 'open', anchor: existing?.anchor ?? anchorFor(el!) };
   const r = await rpc({ type: 'note-save', note });
   if (r.ok) panel.setStatus(existing ? 'Note updated' : 'Note saved', 'ok');
   else panel.setStatus(r.error ?? 'Could not save the note', 'err');
+}
+
+/**
+ * A text edit the source can't take (the words come from a database, a prop passed in from elsewhere, built by code):
+ * don't lose the user's intent, pin it as a note on the element for Claude to carry out.
+ */
+async function noteForTextChange(el: HTMLElement, wanted: string, was: string, why: string) {
+  const text = `Change this text to “${wanted}” (it says “${was.trim()}”).\nBrushup couldn't write it into the source: ${why}`.slice(0, 3900);
+  if (notes.some((n) => n.status === 'open' && n.text === text)) return panel.setStatus('There is already a note for this change', 'warn');
+  await saveNote({ kind: suggestKind(el), label: 'Text change', text }, null, 'open', el);
+  panel.setStatus("Couldn't change the source, so a note for Claude was pinned instead", 'warn');
 }
 
 /* ---------- questions from agents (MCP) ---------- */
@@ -519,8 +532,9 @@ function startTextEdit(el: HTMLElement) {
     const text = (el.textContent ?? '').trim();
     if (commit && text && text !== original.trim()) {
       void send({ kind: 'text', id: refOf(el), fallback: fallbackOf(el), tag: tagOf(el), text, ...(DEV ? { ident: identOf(el, false), instance: Math.max(0, instances(refOf(el)).indexOf(el)), was: original.replace(/\s+/g, ' ').trim(), ver: verOf(el), fallbackVer: el.hasAttribute(USE) ? (el.getAttribute(SV) ?? undefined) : undefined } : {}) }).then((r) => {
-        if (r.ok) reportSaved(el, r);
-        else el.textContent = original;
+        if (r.ok) return reportSaved(el, r);
+        el.textContent = original;
+        if (r.textSource) void noteForTextChange(el, text, original, r.error ?? 'the text is not written in a place Brushup can edit');
       });
     } else {
       el.textContent = original;

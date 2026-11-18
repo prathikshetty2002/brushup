@@ -372,6 +372,35 @@ describe('inline text editing', () => {
     await settle();
     expect(el('a2').textContent).toBe('World');
   });
+
+  it('pins a note for Claude when the text comes from data the source cannot hold, once', async () => {
+    for (let i = 0; i < 2; i++) {
+      pointer('dblclick', el('a2'));
+      el('a2').textContent = 'Changed';
+      key('Enter', {}, el('a2'));
+      await settle();
+      o.reply({ ok: false, textSource: true, error: 'comes from {label}' });
+      await settle();
+      const saved = o.all('note-save');
+      if (saved.length) o.receive({ type: 'notes', notes: [{ ...saved[0].note, id: 'n1', status: 'open', createdAt: '', updatedAt: '' }] });
+    }
+    expect(el('a2').textContent).toBe('World');
+    const saves = o.all('note-save');
+    expect(saves).toHaveLength(1);
+    expect(saves[0].note.text).toContain('Change this text to \u201cChanged\u201d');
+    expect(saves[0].note.text).toContain('it says \u201cWorld\u201d');
+    expect(saves[0].note.text).toContain('comes from {label}');
+  });
+
+  it('does not pin a note for other refusals', async () => {
+    pointer('dblclick', el('a2'));
+    el('a2').textContent = 'Changed';
+    key('Enter', {}, el('a2'));
+    await settle();
+    o.reply({ ok: false, error: 'No rule can be edited here' });
+    await settle();
+    expect(o.all('note-save')).toHaveLength(0);
+  });
 });
 
 describe('notes', () => {

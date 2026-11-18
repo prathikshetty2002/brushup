@@ -1,10 +1,11 @@
-import { readdir, readFile } from 'node:fs/promises';
+import { readdir, readFile, stat } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { EditError, type Edit, type Staleness } from '../core/edit-types';
 import { fileHash, parseSrc, parseVer } from '../core/jsx';
 import { applyJsxEdit, describeElement, TextNotHere } from '../core/jsx-patch';
 import type { Scale } from '../core/tailwind';
+import { needleOf, placesIn, SKIPPED, TEXT_FILES, writePlace } from '../core/text-search';
 import type { Files } from '../core/patch';
 import { FileSession, type Selection, type Target } from './file-session';
 
@@ -124,6 +125,16 @@ export class DevProject extends FileSession {
     if (edit.kind === 'style' && edit.scope === 'rule') {
       for (const css of await this.cssFiles()) files[css] = await readFile(css, 'utf8');
     }
+    // A text edit the element's own source can't take may be found elsewhere by its value: load the files that mention it.
+    if (edit.kind === 'text' && edit.was && edit.was.trim().length >= 3) {
+      let refused = false;
+      try {
+        this.transform(files, edit, files);
+      } catch (err) {
+        refused = err instanceof TextNotHere;
+      }
+      if (refused) await this.addTextCandidates(files, edit.was);
+    }
     return files;
   }
 
@@ -152,6 +163,61 @@ export class DevProject extends FileSession {
   }
 
   protected transform(files: Files, edit: Edit, before: Files): { files: Files; target?: Target; warning?: string } {
+    try {
+      return this.structured(files, edit, before);
+    } catch (err) {
+      // The text isn't written at the element (props, state, a filtered list, a translation file): the text on the
+      // page is the key, so look for the one string in the project that says exactly that.
+      if (edit.kind === 'text' && err instanceof TextNotHere) {
+        const found = this.byValue(files, edit);
+        if (found) return found;
+      }
+      throw err;
+    }
+  }
+
+  /** The one place in the loaded files that writes `edit.was`, edited; null if nothing does; refuses if several do. */
+  private byValue(files: Files, edit: Edit & { kind: 'text' }): { files: Files; target: Target; warning: string } | null {
+    const was = edit.was?.replace(/\s+/g, ' ').trim() ?? '';
+    if (was.length < 3) return null;
+    const places = Object.keys(files).flatMap((f) => (TEXT_FILES.test(f) && !SKIPPED.test(path.relative(this.root, f)) ? placesIn(files[f], f, was) : []));
+    if (!places.length) return null;
+    const where = (p: (typeof places)[number]) => `${path.relative(this.root, p.file).split(path.sep).join('/')}:${p.line}`;
+    if (places.length > 1) {
+      throw new TextNotHere(`"${was.slice(0, 60)}" is written in ${places.length} places (${places.slice(0, 5).map(where).join(', ')}${places.length > 5 ? ', …' : ''}), so Brushup can't tell which one this is.`);
+    }
+    const [at] = places;
+    return {
+      files: { ...files, [at.file]: writePlace(files[at.file], at, edit.text) },
+      target: 'text',
+      warning: `Written where it's defined (${where(at)}); everything that uses that text changes too`,
+    };
+  }
+
+  /** Project files that write `text`, added to `files` so the value search can see them. */
+  private async addTextCandidates(files: Files, text: string) {
+    const needle = needleOf(text);
+    if (!needle) return;
+    let scanned = 0;
+    let found = 0;
+    const visit = async (dir: string): Promise<void> => {
+      for (const entry of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
+        if (found >= 40 || scanned >= 4000 || SKIP_DIRS.has(entry.name)) continue;
+        const full = path.join(dir, entry.name);
+        if (SKIPPED.test(path.relative(this.root, full))) continue;
+        if (entry.isDirectory()) await visit(full);
+        else if (TEXT_FILES.test(entry.name) && !(full in files)) {
+          scanned++;
+          if ((await stat(full).catch(() => null))?.size! > 400_000) continue;
+          const code = await readFile(full, 'utf8').catch(() => '');
+          if (code.includes(needle)) (files[full] = code), found++;
+        }
+      }
+    };
+    await visit(this.root);
+  }
+
+  private structured(files: Files, edit: Edit, before: Files): { files: Files; target?: Target; warning?: string } {
     const opts = { tailwind: this.tailwind, scale: this.scale };
     const file = this.resolve(edit.id).file;
     // Always set from the server's own comparison: a client can't claim the file is unchanged.

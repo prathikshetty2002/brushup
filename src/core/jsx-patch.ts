@@ -130,7 +130,7 @@ function styleLiteral(prop: string, value: string, q: string): string {
 
 /* ---------- text ---------- */
 
-const escapeJsxText = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\{/g, '&#123;').replace(/\}/g, '&#125;');
+export const escapeJsxText = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\{/g, '&#123;').replace(/\}/g, '&#125;');
 
 type Lit = t.StringLiteral | t.TemplateLiteral;
 const plainString = (n: t.Node | null | undefined): n is Lit => !!n && (n.type === 'StringLiteral' || (n.type === 'TemplateLiteral' && n.expressions.length === 0));
@@ -138,7 +138,7 @@ const litValue = (n: Lit) => (n.type === 'StringLiteral' ? n.value : (n.quasis[0
 const collapse2 = (v: string) => v.replace(/\s+/g, ' ').trim();
 
 /** Write `text` into a string literal, keeping its quote style and escaping what that quote needs. */
-function replaceLiteral(code: string, node: Lit, text: string): string {
+export function replaceLiteral(code: string, node: Lit, text: string): string {
   const q = code[node.start!];
   let body = text.replace(/\\/g, '\\\\').replace(/\n/g, '\\n');
   body = q === '`' ? body.replace(/`/g, '\\`').replace(/\$\{/g, '\\${') : body.replace(new RegExp(q, 'g'), `\\${q}`);
