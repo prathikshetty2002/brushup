@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **A Changes tab.** Shows the git diff of your project against the last commit, file by file, with the files Brushup edited marked, a Copy diff button, and a refresh that happens by itself while the tab is open. Not in a git repo? It says so. The tour has a step for it.
+- **The agent's reply is shown on each note** (“Claude: …”), under the note on the canvas.
 - **An inbox for agents.** `brushup_get_notes` and `brushup_recent_edits` take `since` and return a `cursor`, so an agent only sees what is new. `brushup_update_note` takes a one-line `reply` (what was done), saved with the note. Manual edits are marked `locked`, with a rule saying not to revert them. The server now sends usage instructions to any agent that connects.
 - **Fix:** reading notes no longer re-stamped every note's `updatedAt` with the current time.
 - **`brushup init --agents`** sets up other agents too: the Brushup instructions go into `AGENTS.md` (beside anything already there), the MCP server into `.cursor/mcp.json`, and it prints the one command for Codex and the snippet for Gemini CLI. Idempotent, and off unless asked for.

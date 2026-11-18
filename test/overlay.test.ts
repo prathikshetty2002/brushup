@@ -705,6 +705,52 @@ describe('brushup_inspect overflow reporting', () => {
   });
 });
 
+describe('the Changes tab', () => {
+  const q = (sel: string) => o.root.querySelector(sel) as HTMLElement;
+  const changes = {
+    repo: true, branch: 'main', truncated: false,
+    files: [
+      { file: 'src/page.tsx', status: 'M', additions: 1, deletions: 1, byBrushup: true, diff: 'diff --git a/src/page.tsx b/src/page.tsx\n--- a/src/page.tsx\n+++ b/src/page.tsx\n@@ -1 +1 @@\n-<p>Hello</p>\n+<p><img src=x onerror=alert(1)></p>\n' },
+      { file: 'notes.md', status: '?', additions: 0, deletions: 0, byBrushup: false, diff: '' },
+    ],
+  };
+
+  it('asks the server for the diff when opened, and shows files, counts and diff lines as text', async () => {
+    q('[data-tab=changes]').click();
+    await settle();
+    expect(o.last('changes')).toBeTruthy();
+    o.reply({ ok: true, changes });
+    await settle();
+    expect(q('.chsum').textContent).toBe('2 changed');
+    expect(o.root.querySelectorAll('.chfile')).toHaveLength(2);
+    expect(q('.chfile .chby').textContent).toBe('Brushup');
+    expect(o.root.querySelectorAll('.chfile pre .cha')).toHaveLength(1);
+    expect(o.root.querySelector('.chfile img')).toBeNull(); // diff text is never parsed as HTML
+    expect(q('.chfile pre .cha').textContent).toContain('onerror=alert(1)');
+    expect((q('[data-act=changes-copy]') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('says so for a project that is not in git, and for a clean tree', async () => {
+    q('[data-tab=changes]').click();
+    await settle();
+    o.reply({ ok: true, changes: { repo: false, reason: 'This project is not in a git repository.' } });
+    await settle();
+    expect(q('.chsum').textContent).toBe('No git repository');
+    expect(q('.chnote').textContent).toContain('not in a git repository');
+    (q('[data-act=changes-refresh]') as HTMLButtonElement).click();
+    await settle();
+    o.reply({ ok: true, changes: { repo: true, branch: 'main', truncated: false, files: [] } });
+    await settle();
+    expect(q('.chsum').textContent).toBe('No changes');
+  });
+
+  it('shows what the agent replied on a done note', async () => {
+    o.receive({ type: 'notes', notes: [{ id: 'n1', kind: 'section', label: 'Hero', text: 'More space', status: 'done', reply: 'Added py-16 in page.tsx', createdAt: '', updatedAt: '', anchor: { tag: 'h1', classes: [], text: 'Hello', index: 0, page: '/' } }] });
+    o.tick();
+    expect(q('.note .reply').textContent).toBe('Claude: Added py-16 in page.tsx');
+  });
+});
+
 describe('panel position', () => {
   const panelEl = () => o.root.querySelector('.panel') as HTMLElement;
   const header = () => o.root.querySelector('header') as HTMLElement;
@@ -716,12 +762,12 @@ describe('panel position', () => {
     expect(q('[data-act=tour] .dot').hidden).toBe(false);
     q('[data-act=tour]').click();
     expect(tour.hidden).toBe(false);
-    expect(q('.tour .n').textContent).toBe('1 / 7');
+    expect(q('.tour .n').textContent).toBe('1 / 8');
     (q('.tour .next') as HTMLButtonElement).click();
-    expect(q('.tour .n').textContent).toBe('2 / 7');
+    expect(q('.tour .n').textContent).toBe('2 / 8');
     (q('.tour .back') as HTMLButtonElement).click();
-    expect(q('.tour .n').textContent).toBe('1 / 7');
-    for (let i = 0; i < 6; i++) (q('.tour .next') as HTMLButtonElement).click();
+    expect(q('.tour .n').textContent).toBe('1 / 8');
+    for (let i = 0; i < 7; i++) (q('.tour .next') as HTMLButtonElement).click();
     expect(q('.tour .next').textContent).toBe('Done');
     (q('.tour .next') as HTMLButtonElement).click();
     expect(tour.hidden).toBe(true);

@@ -95,6 +95,7 @@ npx brushup page.html          # http://127.0.0.1:4321
 | Edit text | Double-click an element that only contains text; Enter commits, Esc cancels |
 | Type, spacing, size | Fields in the **Style** tab |
 | Add a note | Select an element, press **N** (or Notes tab) |
+| Review what changed | **Changes** tab: the git diff against your last commit, files Brushup edited marked, Copy diff |
 | Undo / redo | `Ctrl/Cmd+Z`, `Ctrl/Cmd+Shift+Z` |
 | Use the page normally | Switch to **Preview** |
 

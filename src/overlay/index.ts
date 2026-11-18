@@ -3,7 +3,7 @@ import type { Note } from '../server/notes';
 import { moveBase, moveProps, type MoveBase } from './drag';
 import { explainSize, handleLabel, handleProps, sizeProps, type BoxStart, type HandleKind, type SizeStyle } from './handles-math';
 import { morphPage, refreshStylesheets } from './morph';
-import { createPanel, type HandleInfo, type Mode, type NoteDraft, type NoteKind, type NoteView } from './panel';
+import { createPanel, type HandleInfo, type Mode, type NoteDraft, type NoteKind, type NoteView, type ChangesView } from './panel';
 
 interface Boot {
   /** 'static': Brushup serves one HTML page. 'dev': a framework dev server serves the app. */
@@ -28,6 +28,8 @@ interface Result {
   stale?: boolean;
   /** The server couldn't find where this text is written in the source. */
   textSource?: boolean;
+  /** Answer to a `changes` request. */
+  changes?: ChangesView;
 }
 
 // Config comes from `window.__brushup` (static server, Vite plugin) or, for frameworks that render a plain
@@ -97,6 +99,7 @@ function connect() {
       freshListeners.forEach((f) => f());
       state.hash = msg.hash;
       void reload(!!msg.css);
+      if (panel.changesOpen()) refreshChanges();
     } else if (msg.type === 'hmr') {
       freshListeners.forEach((f) => f());
       if (previews.size) settleSoon(250); // the dev server is hot-updating the page; our temporary previews can go once it lands
@@ -286,6 +289,8 @@ function resolveNote(n: Note): HTMLElement | null {
   return candidates[a.index] ?? candidates[0] ?? null;
 }
 
+const refreshChanges = () => void rpc({ type: 'changes' }).then((r) => panel.setChanges(r.ok ? (r.changes ?? null) : null));
+
 /** Re-resolve every note on this page and refresh the list. `force` redraws even if nothing visible changed. */
 function refreshNotes(force = false) {
   lastRefresh = Date.now();
@@ -295,7 +300,7 @@ function refreshNotes(force = false) {
   const views: NoteView[] = here.map((n) => {
     const el = resolveNote(n);
     resolved.set(n.id, el);
-    return { id: n.id, n: notes.indexOf(n) + 1, kind: n.kind, label: n.label, text: n.text, done: n.status === 'done', found: !!el };
+    return { id: n.id, n: notes.indexOf(n) + 1, kind: n.kind, label: n.label, text: n.text, done: n.status === 'done', reply: n.reply, found: !!el };
   });
   const sig = JSON.stringify([views, notes.length - here.length]);
   if (force || sig !== notesSig) {
@@ -849,6 +854,7 @@ const panel = createPanel({
     if (n) void saveNote({ kind: n.kind, label: n.label, text: n.text }, id, done ? 'done' : 'open');
   },
   onNoteLocate: locateNote,
+  onChangesRefresh: refreshChanges,
   onHandleDown(kind, e) {
     const el = selected();
     if (!el) return;

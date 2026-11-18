@@ -2,6 +2,7 @@ import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { EditError, StaleElement, type Edit } from '../core/edit-types';
+import { collectChanges } from './changes';
 import { TextNotHere } from '../core/jsx-patch';
 import type { EditOutcome, FileSession, Selection } from './file-session';
 import type { NotesStore } from './notes';
@@ -10,6 +11,7 @@ type ClientMessage =
   | { type: 'edit'; n: number; edit: Edit; hash: string }
   | { type: 'edits'; n: number; edits: Edit[]; hash: string }
   | { type: 'undo' | 'redo'; n: number }
+  | { type: 'changes'; n: number }
   | { type: 'select'; selection: Selection | null }
   | { type: 'note-save'; n: number; note: unknown }
   | { type: 'note-delete'; n: number; id: string }
@@ -80,6 +82,10 @@ export function createHub(session: FileSession, notes?: NotesStore) {
     if (msg.type === 'answer') {
       if (info?.role === 'canvas') finish(msg.id, { ok: !!msg.ok, data: msg.data, error: msg.error });
       return;
+    }
+    if (msg.type === 'changes') {
+      if (info?.role !== 'canvas') return;
+      return void send(ws, { type: 'result', n: msg.n, ok: true, changes: await collectChanges(session.root) });
     }
     if (msg.type === 'select') return void session.setSelection(msg.selection).catch(() => {});
     if (msg.type === 'note-save' || msg.type === 'note-delete') {

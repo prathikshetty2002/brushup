@@ -12,9 +12,16 @@ export interface NoteView {
   label: string;
   text: string;
   done: boolean;
+  /** What the agent said it did when it marked the note done. */
+  reply?: string;
   /** Whether the element could be found on the page right now. */
   found: boolean;
 }
+
+/** What the Changes tab shows: the git diff of the project's working tree. */
+export type ChangesView =
+  | { repo: false; reason: string }
+  | { repo: true; branch: string; truncated: boolean; files: { file: string; status: string; additions: number; deletions: number; diff: string; byBrushup: boolean }[] };
 
 export interface NoteDraft {
   kind: NoteKind;
@@ -36,6 +43,8 @@ export interface PanelHooks {
   onNoteDelete(id: string): void;
   onNoteDone(id: string, done: boolean): void;
   onNoteLocate(id: string): void;
+  /** The Changes tab was opened or refreshed: fetch the diff and call `setChanges`. */
+  onChangesRefresh(): void;
   onHandleDown(kind: HandleKind, e: PointerEvent): void;
 }
 
@@ -170,6 +179,14 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .tour button { padding: 5px 11px; border-radius: 3px; } .tour .next { background: var(--accent); color: var(--on-accent); } .tour .skip { color: var(--muted); }
 .tour[hidden], .tour-ring[hidden] { display: none; }
 .panel.mini .body { display: none; } .panel.mini header { border-bottom: 0; } .panel.mini [data-act=mini] svg { transform: rotate(180deg); }
+.chbar { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; color: var(--muted); font-size: 11.5px; } .chbar .sp { flex: 1; } .chbar .chsum { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; } .chbar .ghost { white-space: nowrap; } .chbar .ghost { padding: 3px 8px; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); } .chbar .ghost:hover:not(:disabled) { color: var(--text); } .chbar .ghost:disabled { opacity: .45; cursor: default; }
+.chlist { min-width: 0; } .chfile { border: 1px solid var(--line); border-radius: 3px; margin-bottom: 6px; overflow: hidden; background: var(--bg); } .chfile summary { display: flex; gap: 8px; align-items: baseline; padding: 6px 8px; cursor: pointer; list-style: none; } .chfile summary::-webkit-details-marker { display: none; }
+.chfile .chnm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 11px var(--mono); color: var(--text); direction: rtl; text-align: left; } .chfile .chst { font: 600 10px var(--mono); color: var(--faint); }
+.chfile .chby { font-size: 10px; color: var(--accent); } .chfile .chadd { color: var(--ok); font: 11px var(--mono); } .chfile .chdel { color: var(--err); font: 11px var(--mono); }
+.chfile pre { margin: 0; padding: 6px 0; background: var(--bg); max-width: 100%; max-height: 240px; overflow: auto; border-top: 1px solid var(--line); font: 10.5px/1.5 var(--mono); } .chfile pre span { display: block; padding: 0 8px; white-space: pre; }
+.chfile pre .cha { background: rgba(76, 194, 168, .14); } .chfile pre .chd { background: rgba(240, 115, 92, .14); } .chfile pre .chh { color: var(--faint); }
+.chnote { margin: 8px 0; padding: 7px 9px; border-left: 2px solid var(--warn); background: var(--raise); color: var(--muted); font-size: 11px; line-height: 1.5; }
+.note .reply { margin: 6px 0 0; padding: 5px 8px; border-left: 2px solid var(--ok); background: var(--raise); color: var(--muted); font-size: 11px; line-height: 1.5; }
 .hint { margin: 12px 0 0; color: var(--faint); font-size: 10.5px; line-height: 2; }
 kbd { white-space: nowrap; font: 500 11px/1 var(--mono); padding: 2px 5px; border-radius: 2px; border: 1px solid var(--line); color: var(--muted); margin: 0 1px; }
 .add { width: 100%; border: 1px dashed var(--accent); border-radius: 2px; color: var(--accent); padding: 8px; font-weight: 500; }
@@ -315,12 +332,17 @@ export function createPanel(hooks: PanelHooks) {
         <div class="tabs" role="tablist"><span class="ink"></span>
           <button role="tab" id="brushup-tab-style" aria-controls="brushup-pane-style" data-tab="style" aria-selected="true" tabindex="0">Style</button>
           <button role="tab" id="brushup-tab-notes" aria-controls="brushup-pane-notes" data-tab="notes" aria-selected="false" tabindex="-1">Notes<span class="count" hidden></span></button>
+          <button role="tab" id="brushup-tab-changes" aria-controls="brushup-pane-changes" data-tab="changes" aria-selected="false" tabindex="-1">Changes</button>
         </div>
         <div data-pane="style" role="tabpanel" id="brushup-pane-style" aria-labelledby="brushup-tab-style">
           <div class="info">Click an element to select it.</div>
           <div class="fields" hidden></div>
           <label class="shared" hidden title="Off: only the selected element changes. On: the CSS rule is edited, so every element it matches changes."><input type="checkbox" /><span><b>Edit the shared CSS rule</b><small class="why">Off: only this element changes.</small></span></label>
           <dl class="keys" aria-label="Shortcuts"><div><dt><kbd>drag</kbd></dt><dd>Move</dd></div><div><dt><kbd>↑ ↓ ← →</kbd></dt><dd>Nudge 1px, <kbd>⇧</kbd> for 10</dd></div><div><dt><kbd>double-click</kbd></dt><dd>Edit text</dd></div><div><dt><kbd>N</kbd></dt><dd>Add a note</dd></div><div><dt><kbd>Esc</kbd></dt><dd>Deselect</dd></div></dl>
+        </div>
+        <div data-pane="changes" role="tabpanel" id="brushup-pane-changes" aria-labelledby="brushup-tab-changes" hidden>
+          <div class="chbar"><span class="chsum">Not loaded yet</span><span class="sp"></span><button class="ghost" data-act="changes-refresh">Refresh</button><button class="ghost" data-act="changes-copy" disabled>Copy diff</button></div>
+          <div class="chlist"></div>
         </div>
         <div data-pane="notes" role="tabpanel" id="brushup-pane-notes" aria-labelledby="brushup-tab-notes" hidden>
           <button class="add" data-act="add-note" disabled>Select an element to add a note</button>
@@ -604,6 +626,7 @@ export function createPanel(hooks: PanelHooks) {
     { sel: '.info', title: 'Change the style', body: 'The fields for the selected element appear here: size, colour, spacing, width. Every change is written straight into your source file.' },
     { sel: null, title: 'Edit text in place', body: 'Double-click text to retype it. If the text comes from data Brushup can’t edit, it pins a note for Claude instead.' },
     { sel: '[data-tab=notes]', title: 'Leave notes for Claude', body: 'Press N on a selected section or component to pin a note. Claude reads your notes and picks them up from your project.' },
+    { sel: '[data-tab=changes]', title: 'Review what changed', body: 'The Changes tab shows the git diff of your project, with the files Brushup edited marked. Check it, copy it, then commit when you like it.' },
     { sel: '.actions', title: 'Undo anything', body: 'Undo and redo every edit, or select the parent element. Every change is a small edit to your files, so git shows it too.' },
     { sel: '.seg', title: 'Preview', body: 'Switch to Preview to use the page normally, with no selection getting in the way. Switch back to Edit to keep tweaking.' },
   ];
@@ -668,19 +691,21 @@ export function createPanel(hooks: PanelHooks) {
     slide($<HTMLElement>('.tabs .ink'), root.querySelector<HTMLElement>('[data-tab][aria-selected=true]'));
     slide($<HTMLElement>('.seg .thumb'), root.querySelector<HTMLElement>('[data-mode][aria-pressed=true]'));
   };
-  const showTab = (tab: 'style' | 'notes') => {
+  const showTab = (tab: 'style' | 'notes' | 'changes') => {
     root.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach((b) => (b.setAttribute('aria-selected', String(b.dataset.tab === tab)), (b.tabIndex = b.dataset.tab === tab ? 0 : -1)));
     root.querySelectorAll<HTMLElement>('[data-pane]').forEach((p) => (p.hidden = p.dataset.pane !== tab));
     moveInk();
+    if (tab === 'changes') hooks.onChangesRefresh();
   };
   requestAnimationFrame(moveInk);
   document.fonts?.ready.then(moveInk);
-  root.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab as 'style' | 'notes')));
+  root.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab as 'style' | 'notes' | 'changes')));
   // Arrow keys move between tabs (the tablist pattern); only the active tab is in the Tab order.
   $<HTMLElement>('.tabs').addEventListener('keydown', (e: KeyboardEvent) => {
-    const order = ['style', 'notes'] as const;
+    const order = ['style', 'notes', 'changes'] as const;
     const at = order.findIndex((t) => root.querySelector<HTMLElement>(`[data-tab=${t}]`)!.getAttribute('aria-selected') === 'true');
-    const to = e.key === 'ArrowRight' ? (at + 1) % 2 : e.key === 'ArrowLeft' ? (at + 1) % 2 : e.key === 'Home' ? 0 : e.key === 'End' ? 1 : -1;
+    const n = order.length;
+    const to = e.key === 'ArrowRight' ? (at + 1) % n : e.key === 'ArrowLeft' ? (at + n - 1) % n : e.key === 'Home' ? 0 : e.key === 'End' ? n - 1 : -1;
     if (to < 0) return;
     e.preventDefault();
     showTab(order[to]);
@@ -816,6 +841,87 @@ export function createPanel(hooks: PanelHooks) {
     window.setTimeout(place, 0);
   };
 
+  /* ----- changes (git diff) ----- */
+  const chSum = $<HTMLElement>('.chsum');
+  const chList = $<HTMLElement>('.chlist');
+  const chCopy = $<HTMLButtonElement>('[data-act=changes-copy]');
+  let chText = '';
+  root.querySelector('[data-act=changes-refresh]')!.addEventListener('click', () => {
+    chSum.textContent = 'Loading…';
+    hooks.onChangesRefresh();
+  });
+  chCopy.addEventListener('click', () => {
+    void navigator.clipboard?.writeText(chText).then(
+      () => ((chCopy.textContent = 'Copied'), setTimeout(() => (chCopy.textContent = 'Copy diff'), 1400)),
+      () => ((chCopy.textContent = 'Copy failed'), setTimeout(() => (chCopy.textContent = 'Copy diff'), 1400)),
+    );
+  });
+  const setChanges = (view: ChangesView | null) => {
+    chList.textContent = '';
+    chText = '';
+    chCopy.disabled = true;
+    const note = (text: string) => {
+      const p = document.createElement('p');
+      p.className = 'chnote';
+      p.textContent = text;
+      chList.append(p);
+    };
+    if (!view) return void (chSum.textContent = 'Could not load the changes');
+    if (!view.repo) return (chSum.textContent = 'No git repository'), note(view.reason);
+    const mine = view.files.filter((f) => f.byBrushup);
+    const other = view.files.length - mine.length;
+    chSum.textContent = view.files.length ? `${view.files.length} changed` : 'No changes';
+    chSum.title = `Compared with the last commit on ${view.branch}`;
+    if (!view.files.length) return note('Nothing differs from the last commit yet. Edits you make on the canvas show up here.');
+    for (const f of view.files) {
+      const d = document.createElement('details');
+      d.className = 'chfile';
+      const sum = document.createElement('summary');
+      const st = document.createElement('span');
+      st.className = 'chst';
+      st.textContent = f.status;
+      const nm = document.createElement('span');
+      nm.className = 'chnm';
+      nm.textContent = f.file; // text only: file names and diffs are the project's data
+      nm.title = f.file;
+      const add = document.createElement('span');
+      add.className = 'chadd';
+      add.textContent = f.additions ? `+${f.additions}` : '';
+      const del = document.createElement('span');
+      del.className = 'chdel';
+      del.textContent = f.deletions ? `−${f.deletions}` : '';
+      sum.append(st, nm, add, del);
+      if (f.byBrushup) {
+        const by = document.createElement('span');
+        by.className = 'chby';
+        by.textContent = 'Brushup';
+        sum.append(by);
+      }
+      d.append(sum);
+      const pre = document.createElement('pre');
+      if (!f.diff) {
+        const line = document.createElement('span');
+        line.className = 'chh';
+        line.textContent = f.status === '?' ? 'New file, not tracked by git yet.' : 'No diff shown (binary, or too large).';
+        pre.append(line);
+      }
+      for (const raw of f.diff.split('\n')) {
+        if (!raw || /^(diff --git|index |--- |\+\+\+ |new file|deleted file|similarity|rename )/.test(raw)) continue;
+        const line = document.createElement('span');
+        line.className = raw.startsWith('@@') ? 'chh' : raw[0] === '+' ? 'cha' : raw[0] === '-' ? 'chd' : '';
+        line.textContent = raw;
+        pre.append(line);
+      }
+      d.append(pre);
+      if (f.byBrushup && mine.length === 1) d.open = true;
+      chList.append(d);
+    }
+    if (view.truncated) note('Some diffs were too large to show.');
+    if (mine.length && other) note(`${other} other file${other === 1 ? '' : 's'} changed outside Brushup. They're listed here too, so a commit of everything would include them.`);
+    chText = view.files.map((f) => f.diff).filter(Boolean).join('\n');
+    chCopy.disabled = !chText;
+  };
+
   const api = {
     host,
     root,
@@ -935,6 +1041,9 @@ export function createPanel(hooks: PanelHooks) {
       field('text').value = existing?.text ?? '';
       field('text').focus();
     },
+    /** Fill the Changes tab. */
+    setChanges,
+    changesOpen: () => !root.querySelector<HTMLElement>('[data-pane=changes]')!.hidden,
     setNotes(notes: NoteView[], elsewhere: number) {
       const open = notes.filter((n) => !n.done).length;
       countEl.hidden = open === 0;
@@ -969,6 +1078,12 @@ export function createPanel(hooks: PanelHooks) {
           warn.className = 'warn';
           warn.textContent = 'Element not found on this page right now.';
           item.append(warn);
+        }
+        if (n.reply) {
+          const reply = document.createElement('p');
+          reply.className = 'reply';
+          reply.textContent = `Claude: ${n.reply}`;
+          item.append(reply);
         }
         const acts = document.createElement('div');
         acts.className = 'acts';
