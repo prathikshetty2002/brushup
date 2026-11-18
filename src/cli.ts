@@ -13,9 +13,9 @@ if (args[0] === 'init') {
   const r = await initProject(root, { mcp, wire });
   console.log(`CLAUDE.md: ${r.claudeMd}   .gitignore: ${r.gitignore === 'absent' ? 'no .gitignore found' : r.gitignore}${r.mcp ? `   .mcp.json: ${r.mcp}` : ''}`);
   if (r.wire?.next) {
-    console.log(`next.config: ${r.wire.next.config}   app/layout: ${r.wire.next.layout}`);
+    console.log(`next.config: ${r.wire.next.config}   root layout / _document: ${r.wire.next.layout}`);
     if (r.wire.next.config === 'manual') console.log('Could not edit the Next config safely. Wrap your export:  export default withBrushup(nextConfig);  with  import { withBrushup } from "brushup/next";');
-    if (r.wire.next.layout === 'manual') console.log('Could not edit the root layout. Add  <BrushupScript />  inside <body>  with  import { BrushupScript } from "brushup/next/script";');
+    if (r.wire.next.layout === 'manual') console.log('Could not edit the root layout or _document. Add  <BrushupScript />  inside <body>  with  import { BrushupScript } from "brushup/next/script";');
   }
   if (r.wire?.vite) {
     console.log(`vite.config: ${r.wire.vite}`);

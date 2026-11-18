@@ -70,7 +70,8 @@ describe('wireViteConfig', () => {
   it('handles an empty array, is idempotent, and skips what it cannot place', () => {
     expect(wireViteConfig(`export default { plugins: [] };\n`)).toContain('plugins: [brushup()]');
     expect(wireViteConfig(`import brushup from "brushup/vite";\nexport default {};\n`)).toBe('unchanged');
-    expect(wireViteConfig(`export default defineConfig({});\n`)).toBeNull();
+    expect(wireViteConfig(`export default defineConfig({});\n`)).toContain('plugins: [brushup()]');
+    expect(wireViteConfig(`export default defineConfig({ plugins: makePlugins() });\n`)).toBeNull();
     expect(wireViteConfig(`module.exports = { plugins: [] };\n`)).toBeNull();
   });
 });
@@ -98,8 +99,61 @@ describe('wireViteConfig finds the top-level plugins only', () => {
     expect(wireViteConfig(`const config = { plugins: [react()] };\nexport default config;\n`)).toContain('[react(), brushup()]');
   });
 
-  it('gives up when the exported config has no plugins array of its own', () => {
-    expect(wireViteConfig(`export default defineConfig({ test: { plugins: [a()] } });\n`)).toBeNull();
+  it('adds a plugins key when the config has none, and leaves nested plugins alone', () => {
+    const out = wireViteConfig(`export default defineConfig({\n  server: { port: 3000 },\n  test: { plugins: [a()] },\n});\n`) as string;
+    expect(out).toContain('  plugins: [brushup()],\n  server: { port: 3000 }');
+    expect(out).toContain('test: { plugins: [a()] }');
+    expect(wireViteConfig(`export default defineConfig({ server: {} });\n`)).toContain('plugins: [brushup()], server: {}');
+  });
+});
+
+describe('Next.js Pages Router', () => {
+  let dir: string;
+  beforeEach(async () => void (dir = await mkdtemp(path.join(os.tmpdir(), 'brushup-pages-'))));
+  afterEach(() => rm(dir, { recursive: true, force: true }));
+  const cfg = `const nextConfig = {};\nexport default nextConfig;\n`;
+
+  it('wires an existing _document', async () => {
+    await mkdir(path.join(dir, 'pages'));
+    await writeFile(path.join(dir, 'next.config.mjs'), cfg);
+    await writeFile(path.join(dir, 'pages/_document.tsx'), `import { Html, Head, Main, NextScript } from "next/document";\nexport default function D() {\n  return (\n    <Html>\n      <Head />\n      <body>\n        <Main />\n        <NextScript />\n      </body>\n    </Html>\n  );\n}\n`);
+    expect((await wireProject(dir)).next).toEqual({ config: 'updated', layout: 'updated' });
+    expect(await readFile(path.join(dir, 'pages/_document.tsx'), 'utf8')).toContain('        <BrushupScript />\n      </body>');
+    expect((await wireProject(dir)).next).toEqual({ config: 'unchanged', layout: 'unchanged' });
+  });
+
+  it('creates the standard _document when the project has only a pages folder', async () => {
+    await mkdir(path.join(dir, 'src/pages'), { recursive: true });
+    await writeFile(path.join(dir, 'next.config.js'), `module.exports = {};\n`);
+    await writeFile(path.join(dir, 'tsconfig.json'), '{}');
+    expect((await wireProject(dir)).next).toEqual({ config: 'updated', layout: 'created' });
+    const doc = await readFile(path.join(dir, 'src/pages/_document.tsx'), 'utf8');
+    expect(doc).toContain('import { BrushupScript } from "brushup/next/script"');
+    expect(doc).toContain('<NextScript />\n        <BrushupScript />');
+    expect((await wireProject(dir)).next?.layout).toBe('unchanged');
+  });
+
+  it('writes plain JavaScript without a tsconfig, and gives up with neither router folder', async () => {
+    await mkdir(path.join(dir, 'pages'));
+    await writeFile(path.join(dir, 'next.config.js'), `module.exports = {};\n`);
+    await wireProject(dir);
+    expect(await readFile(path.join(dir, 'pages/_document.js'), 'utf8')).toContain('BrushupScript');
+    const bare = await mkdtemp(path.join(os.tmpdir(), 'brushup-bare-'));
+    await writeFile(path.join(bare, 'next.config.js'), `module.exports = {};\n`);
+    expect((await wireProject(bare)).next?.layout).toBe('manual');
+    await rm(bare, { recursive: true, force: true });
+  });
+
+  it('wires the App Router layout and a _document when a project has both', async () => {
+    await mkdir(path.join(dir, 'app'));
+    await mkdir(path.join(dir, 'pages'));
+    await writeFile(path.join(dir, 'next.config.mjs'), cfg);
+    const layout = `export default function L({ children }) {\n  return <html><body>\n    {children}\n  </body></html>;\n}\n`;
+    await writeFile(path.join(dir, 'app/layout.tsx'), layout);
+    await writeFile(path.join(dir, 'pages/_document.tsx'), layout);
+    await wireProject(dir);
+    expect(await readFile(path.join(dir, 'app/layout.tsx'), 'utf8')).toContain('BrushupScript');
+    expect(await readFile(path.join(dir, 'pages/_document.tsx'), 'utf8')).toContain('BrushupScript');
   });
 });
 
