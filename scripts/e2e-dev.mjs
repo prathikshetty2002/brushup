@@ -1,7 +1,7 @@
 // The part of Brushup most likely to differ between operating systems: dev-server mode. Builds a tiny Vite or
 // Next.js app in a temp folder, installs the packed Brushup into it, runs `brushup init`, starts the dev server, opens
 // the page in a real browser, edits through the panel and checks the change lands in the source file.
-//   node scripts/e2e-dev.mjs vite|next chromium|firefox|webkit [path/to/brushup-*.tgz]
+//   node scripts/e2e-dev.mjs vite|next chromium|firefox|webkit [path/to/brushup-*.tgz | brushup@x.y.z]
 // BRUSHUP_CHROME=/path/to/chrome uses an installed Chrome for `chromium`.
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
@@ -13,8 +13,10 @@ const [framework = 'vite', browserName = 'chromium', tarballArg] = process.argv.
 if (!['vite', 'next'].includes(framework) || !{ chromium, firefox, webkit }[browserName]) throw new Error('Usage: node scripts/e2e-dev.mjs vite|next chromium|firefox|webkit [tarball]');
 const win = process.platform === 'win32';
 const label = `${framework}/${browserName}/${process.platform}`;
-const tarball = path.resolve(tarballArg ?? readdirSync('.').find((f) => /^brushup-.*\.tgz$/.test(f)) ?? '');
-if (!existsSync(tarball)) throw new Error('Pack Brushup first (npm pack) or pass the tarball path');
+// A tarball path, or an npm spec such as brushup@0.1.2 to check what was actually published.
+const given = tarballArg ?? readdirSync('.').find((f) => /^brushup-.*\.tgz$/.test(f)) ?? '';
+const tarball = existsSync(path.resolve(given)) ? path.resolve(given) : given;
+if (!tarball) throw new Error('Pack Brushup first (npm pack) or pass a tarball path or an npm spec');
 
 // The long, real spelling of the temp folder: Windows hands out 8.3 short names (RUNNER~1) that Vite itself mishandles
 // (it serves its own /@vite/client as the HTML page), which has nothing to do with Brushup.
