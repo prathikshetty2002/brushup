@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { EditError, type Edit } from '../src/core/edit-types';
 import { instrument } from '../src/core/jsx';
@@ -329,5 +330,44 @@ describe('variant warnings', () => {
     const plain = code.replace(' md:ml-8', ' md:w-1/2');
     expect(run(plain, e(plain), { tailwind: true }).warning).toBeUndefined();
     expect(run(dyn.replace('md:ml-8', 'md:p-2'), e(dyn), { tailwind: true }).warning).toBeUndefined();
+  });
+});
+
+describe('CSS modules', () => {
+  const sheet = (name: string) => path.resolve(path.dirname(FILE), name);
+  const code = `import styles from './card.module.css';\nexport default function C() {\n  return <div className={styles.card}>x</div>;\n}\n`;
+  const css = '.card {\n  margin-left: 4px;\n  color: red;\n}\n.other { margin-left: 9px; }\n';
+  const edit = (props: Record<string, string>): Edit => ({ kind: 'style', id: idOf(code, 'div'), tag: 'div', props, scope: 'rule' });
+  const run = (e: Edit, extra: Record<string, string> = {}, c = code) => applyJsxEdit({ [FILE]: c, [sheet('card.module.css')]: css, ...extra }, FILE, e, { tailwind: false });
+
+  it('edits the module rule for a class taken from the module (rule scope)', () => {
+    const out = run(edit({ 'margin-left': '12px' }));
+    expect(out.files[sheet('card.module.css')]).toBe('.card {\n  margin-left: 12px;\n  color: red;\n}\n.other { margin-left: 9px; }\n');
+    expect(out.files[FILE]).toBe(code);
+    expect(out.target).toBe('rule');
+  });
+
+  it('only looks in the module the class comes from, not a global stylesheet with the same class name', () => {
+    const out = run(edit({ 'margin-left': '12px' }), { [sheet('global.css')]: '.card { margin-left: 1px; }\n' });
+    expect(out.files[sheet('global.css')]).toBe('.card { margin-left: 1px; }\n');
+    expect(out.files[sheet('card.module.css')]).toContain('margin-left: 12px');
+  });
+
+  it('understands styles["card"] and a module class among several in a call', () => {
+    expect(run(edit({ 'margin-left': '2px' }), {}, code.replace('styles.card', "styles['card']")).files[sheet('card.module.css')]).toContain('margin-left: 2px');
+    expect(run(edit({ 'margin-left': '3px' }), {}, code.replace('styles.card', "clsx(styles.nope, styles.card, on && 'x')")).files[sheet('card.module.css')]).toContain('margin-left: 3px');
+  });
+
+  it('falls back to an inline style when the module has no rule that sets the property', () => {
+    const out = run(edit({ 'margin-top': '5px' }));
+    expect(out.target).toBe('inline');
+    expect(out.files[FILE]).toContain('style={{ marginTop: 5 }}');
+    expect(out.files[sheet('card.module.css')]).toBe(css);
+  });
+
+  it('without rule scope the element keeps its module class and gets an inline style', () => {
+    const out = run({ ...edit({ 'margin-left': '12px' }), scope: 'auto' } as Edit);
+    expect(out.files[FILE]).toContain('style={{ marginLeft: 12 }}');
+    expect(out.files[sheet('card.module.css')]).toBe(css);
   });
 });

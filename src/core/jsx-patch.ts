@@ -1,4 +1,5 @@
 import type * as t from '@babel/types';
+import path from 'node:path';
 import { EditError, StaleElement, type Edit, type Ident, type Target, type TextEdit } from './edit-types';
 import type { Files } from './patch';
 import { readRules, splice } from './css-patch';
@@ -208,7 +209,35 @@ function classNameRange(attr: t.JSXAttribute): { start: number; end: number } | 
 /* ---------- shared CSS rule ---------- */
 
 /** What can be known about an element from its JSX alone (no ancestors, no runtime). */
-function staticIdentity(el: t.JSXElement): SourceElement {
+/** `import styles from './card.module.css'` -> { styles: '/abs/card.module.css' }. */
+function moduleImports(code: string, file: string): Map<string, string> {
+  const out = new Map<string, string>();
+  try {
+    for (const node of parseSource(code, file).program.body) {
+      if (node.type !== 'ImportDeclaration' || !/\.module\.css$/.test(node.source.value)) continue;
+      const def = node.specifiers.find((x) => x.type === 'ImportDefaultSpecifier' || x.type === 'ImportNamespaceSpecifier');
+      if (def) out.set(def.local.name, path.resolve(path.dirname(file), node.source.value));
+    }
+  } catch {
+    /* an unparsable file has no modules to find */
+  }
+  return out;
+}
+
+/** The class names a `className` expression takes from CSS modules (`styles.card`, `styles['card']`), and which files they live in. */
+function moduleClasses(el: t.JSXElement, modules: Map<string, string>): { names: string[]; files: string[] } {
+  const names: string[] = [];
+  const files = new Set<string>();
+  const attr = attrNamed(el, 'className');
+  walk(attr?.value, (n) => {
+    if (n.type !== 'MemberExpression' || n.object.type !== 'Identifier' || !modules.has(n.object.name)) return;
+    const name = !n.computed && n.property.type === 'Identifier' ? n.property.name : n.computed && n.property.type === 'StringLiteral' ? n.property.value : null;
+    if (name) (names.push(name), files.add(modules.get(n.object.name)!));
+  });
+  return { names, files: [...files] };
+}
+
+function staticIdentity(el: t.JSXElement, modules = new Map<string, string>()): { identity: SourceElement; moduleFiles: string[] } {
   const literal = (name: string) => {
     const a = attrNamed(el, name);
     const v = a?.value?.type === 'JSXExpressionContainer' ? a.value.expression : a?.value;
@@ -216,14 +245,18 @@ function staticIdentity(el: t.JSXElement): SourceElement {
   };
   const flat = (n: t.JSXOpeningElement['name']): string => (n.type === 'JSXIdentifier' ? n.name : n.type === 'JSXMemberExpression' ? `${flat(n.object)}.${n.property.name}` : '');
   const tag = flat(el.openingElement.name);
-  const cls = literal('className');
-  return { tag, attrs: { id: literal('id'), class: cls }, classes: cls.split(/\s+/).filter(Boolean), parent: null } as unknown as SourceElement;
+  const fromModules = moduleClasses(el, modules);
+  const cls = [literal('className'), ...fromModules.names].filter(Boolean).join(' ');
+  const identity = { tag, attrs: { id: literal('id'), class: cls }, classes: cls.split(/\s+/).filter(Boolean), parent: null } as unknown as SourceElement;
+  return { identity, moduleFiles: fromModules.files };
 }
 
 function patchRule(files: Files, code: string, file: string, edit: Edit, prop: string, value: string): Files | null {
-  const identity = staticIdentity(located(code, file, edit).el);
+  const { identity, moduleFiles } = staticIdentity(located(code, file, edit).el, moduleImports(code, file));
   let best: { file: string; start: number; end: number; weight: number; value: string } | null = null;
-  for (const cssFile of Object.keys(files).filter((f) => f.endsWith('.css')).sort()) {
+  // An element styled from a CSS module can only be styled by that module's rules; otherwise any stylesheet may apply.
+  const sheets = Object.keys(files).filter((f) => f.endsWith('.css') && (!moduleFiles.length || moduleFiles.includes(f)));
+  for (const cssFile of sheets.sort()) {
     for (const rule of readRules(files[cssFile])) {
       const decl = rule.decls.filter((d) => d.prop === prop).pop();
       if (!decl) continue;
@@ -247,7 +280,7 @@ export function describeElement(code: string, file: string, id: string, tag: str
       .join('')
       .trim()
       .slice(0, 120);
-    return { tag, component: parseSrc(id)?.name, classes: staticIdentity(el).classes, text };
+    return { tag, component: parseSrc(id)?.name, classes: staticIdentity(el).identity.classes, text };
   } catch {
     return null;
   }

@@ -144,6 +144,7 @@ Everything except `brushup_update_note` is read-only. Claude still changes your 
 Source files are the single source of truth; the canvas holds no state of its own.
 
 **JSX (Vite and Next.js)**
+- **CSS Modules:** an element whose `className` uses a module class (`styles.card`, `styles['card']`, `clsx(styles.card, …)`) can have the module's own rule edited: tick "Edit the shared CSS rule" in the Style panel and the matching `.card { … }` in the `.module.css` file is changed (every use of that class changes). Without it, the element gets an inline style as before.
 - Tailwind projects get Tailwind's own utilities: values on the default spacing scale become plain classes (`ml-10`, `-mt-4`, `w-64`, `gap-3`, and any half-step such as `ml-9.5` on Tailwind 4), and everything else an arbitrary value (`ml-[38px]`, `text-[40px]`). Each edit replaces the utility it conflicts with. Plain classes are only written when the page's root font size is 16px and assume the default spacing scale; with a customised scale, values still work but may not be what you'd have typed; variants like `md:ml-8` are left alone, and the canvas warns when one would still win (or, for a computed `className` that falls back to inline style, would be overridden). Replacing a named size such as `text-5xl` also pins its line-height so spacing doesn't change. Other projects get `style={{ marginLeft: 38 }}`.
 - **shadcn/ui and other component libraries:** the build tags both host elements (`data-brushup-src`) and component usages (`data-brushup-use="file:line:col#Button"`), and the tag reaches the DOM through the component's `{...props}`. Edits go to the **usage site** (`<Button className="h-[40px]">`), so tweaking one button doesn't change every button; the component's own `cn()`/tailwind-merge resolves the conflict. Text written in the usage (`<Button>Save</Button>`) is edited there.
 - Fragments, `Suspense`, context providers and other components that take no props are never tagged.
@@ -181,7 +182,7 @@ What it does not protect against: **other users or processes on the same machine
 ## Not yet
 
 - Vue, Svelte, Astro, Remix, SvelteKit (the instrumenter is JSX-only; Vite plugin works for Remix/React Router but is untested).
-- CSS Modules and CSS-in-JS class resolution.
+- CSS-in-JS (styled-components, Emotion, vanilla-extract): their class names are generated at runtime, so there is no rule to find; elements styled that way get an inline style.
 - Resize handles on a flex item that sets `flex-basis` write `flex-basis` (a width would be ignored). When the page still refuses a size (a `max-width`, a `min-width`, `flex-grow`, a grid track, an inline element), the readout says why while you drag and the status says it again after saving; the class is still written.
 - MCP: no screenshot tool, no write tools for source (by design), and `brushup_inspect` answers one element at a time.
 - Tested on Linux only; Next.js tested on 16.4 + Turbopack (the webpack path is wired up but not exercised).
