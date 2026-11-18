@@ -114,7 +114,7 @@ const CSS = `
   border: 1px solid var(--line); border-radius: 4px; box-shadow: var(--shadow); scrollbar-width: thin; scrollbar-color: var(--raise-2) transparent; }
 .panel.left { right: auto; left: 14px; }
 header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; position: sticky; top: 0; z-index: 1; background: var(--bg); border-bottom: 1px solid var(--line); }
-.logo { width: 16px; height: 16px; flex: none; display: block; }
+.logo { width: 24px; height: 24px; flex: none; display: block; }
 header { cursor: grab; } header:active { cursor: grabbing; } header button { cursor: pointer; }
 header strong { font: italic 400 17px/1 var(--serif); letter-spacing: -.01em; }
 .status { flex: 1; min-width: 0; font-size: 11px; color: var(--muted); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -283,7 +283,7 @@ export function createPanel(hooks: PanelHooks) {
     <div class="tip" hidden></div>
     <aside class="panel" role="region" aria-label="Brushup design panel">
       <header>
-        <svg class="logo" viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="3" fill="var(--accent)"/><path d="M8 5.5v13M8 5.5h4.4a3.2 3.2 0 010 6.4H8m4.6 0a3.2 3.2 0 010 6.6H8" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="square" stroke-linejoin="round"/></svg>
+        <svg class="logo" viewBox="0 0 256 256" aria-hidden="true"><path d="M12 132L226 116L244 126L226 140L244 154L224 188L12 204Z" fill="var(--accent)"/><path d="M122.01 222.46Q111.19 222.46 105.53 219.88Q99.87 217.29 96.18 214.1L70.6 220.74H54.36L88.56 59.36Q89.54 54.44 90.28 50.75Q91.02 47.06 91.02 44.36Q91.02 39.44 88.31 37.47Q85.61 35.5 79.7 35.5H72.57L73.06 33.04H137.76L128.41 76.34Q126.93 83.47 124.1 94.54Q121.28 105.61 117.83 118.16H118.82Q122.26 109.79 127.92 102.29Q133.58 94.79 142.06 90.23Q150.55 85.68 162.36 85.68Q172.44 85.68 180.93 90.23Q189.42 94.79 194.58 104.75Q199.75 114.71 199.75 130.95Q199.75 140.05 197.54 151.98Q195.32 163.91 190.16 176.21Q184.99 188.51 176.13 198.97Q167.28 209.42 153.99 215.94Q140.71 222.46 122.01 222.46ZM112.42 219.02Q121.03 219.02 128.04 212.74Q135.05 206.47 140.46 196.01Q145.88 185.56 149.57 173.01Q153.26 160.47 155.22 147.68Q157.19 134.88 157.19 124.06Q157.19 107.58 153.62 101.31Q150.06 95.03 143.91 95.03Q137.51 95.03 132.1 100.81Q126.69 106.59 122.51 115.57Q118.32 124.55 116.11 134.39L99.14 213.11Q101.1 215.33 104.55 217.17Q107.99 219.02 112.42 219.02Z" fill="var(--text)"/></svg>
         <strong>Brushup</strong><span class="sp"></span>
         <div class="seg"><span class="thumb"></span><button data-mode="edit">Edit</button><button data-mode="preview">Preview</button></div>
       </header>

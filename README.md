@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/lockup-horizontal-reversed.svg">
+    <img src="brand/lockup-horizontal.svg" alt="Brushup" width="340">
+  </picture>
+</p>
+
 # Brushup
 
 A visual canvas that runs next to your coding agent.

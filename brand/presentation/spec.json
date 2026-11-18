@@ -1,0 +1,35 @@
+{
+  "brand": "Brushup",
+  "tagline": "Touch up the UI your agent drafted",
+  "brief": "A visual canvas that lets developers fix small UI details on the page itself and writes each edit back to their source. It should feel crafted and calm, not generic dev-tool or AI-looking.",
+  "adjectives": ["crafted", "calm", "precise", "editorial"],
+  "criteria": "Success: distinct from the usual dev-tool marks, readable at 16 px, works in one colour, matches the Ivory and serif UI.",
+  "industry": "software",
+  "nav": ["Guide", "Docs", "GitHub"],
+  "brand_color": "#c73a19",
+  "tile_color": "#1d1b17",
+  "greyscale": false,
+  "final": true,
+  "designer": "Brushup",
+  "concepts": [
+    {
+      "name": "Italic b",
+      "symbol": "../symbol.svg",
+      "lockup": "../lockup-horizontal.svg",
+      "stacked": "../lockup-stacked.svg",
+      "symbol_on_tile": "../symbol-small-reversed.svg",
+      "symbol_on_dark": "../symbol-small-reversed.svg",
+      "lockup_on_dark": "../lockup-horizontal-reversed.svg",
+      "stacked_on_dark": "../lockup-stacked-reversed.svg",
+      "idea": "A serif italic b over a loaded-brush swipe: the letter finished by hand.",
+      "rationale": [
+        "Editorial letterform and wordmark match the Ivory interface",
+        "One vermilion swipe is the whole brand: the touch-up",
+        "Heavier small-size cut keeps it readable as a 16 px favicon",
+        "Works in one colour as a solid letter on a hollow ribbon"
+      ]
+    }
+  ],
+  "recommendation": "Italic b: the final mark.",
+  "next_steps": ["Use brand/icons for the favicon and app icon", "Follow GUIDELINES.md for spacing and colour"]
+}
