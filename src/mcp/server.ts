@@ -3,6 +3,7 @@ import path from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
+import { VERSION } from '../version';
 import { getNotes, getRecentEdits, getSelection, inspect, updateNote, type ToolContext, type ToolResult } from './tools';
 
 /** `--root`, `BRUSHUP_ROOT`, else the nearest folder at or above the working directory that has a `.brushup/`. */
@@ -26,7 +27,7 @@ const asContent = (result: ToolResult) => ({
 });
 
 export function createServer(ctx: ToolContext) {
-  const server = new McpServer({ name: 'brushup', version: '0.1.0' });
+  const server = new McpServer({ name: 'brushup', version: VERSION });
   const readOnly = { readOnlyHint: true, destructiveHint: false, openWorldHint: false } as const;
 
   server.registerTool(

@@ -2,8 +2,14 @@ import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import { initProject } from './init';
 import { startServer } from './server/index';
+import { VERSION } from './version';
 
 const args = process.argv.slice(2);
+
+if (args[0] === '--version' || args[0] === '-v') {
+  console.log(VERSION);
+  process.exit(0);
+}
 
 if (args[0] === 'init') {
   const rest = args.slice(1);

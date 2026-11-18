@@ -183,14 +183,15 @@ async function main() {
   await page.keyboard.press('Enter');
   await sleep(2000);
 
-  await say('7', 'Draw a box from empty space to select several elements, then resize them together from any edge');
-  const first = (await page.locator('[data-slot="card"]').nth(0).boundingBox())!;
-  const last = (await page.locator('[data-slot="card"]').nth(2).boundingBox())!;
-  await dragFrom([140, first.y - 16], last.x + last.width + 18 - 140, first.height + 32, 1300);
-  await sleep(1600);
-  const west = await center('[data-kind="resize-w"]');
-  await dragFrom(west, -36, 0, 900);
-  await sleep(2200);
+  await say('7', 'Draw a box from empty space to select several elements, then move them together');
+  const title = (await page.locator('h1').first().boundingBox())!;
+  const lede = (await page.locator('main p').first().boundingBox())!;
+  await dragFrom([120, title.y - 8], title.x + title.width + 40 - 120, lede.y + lede.height + 8 - (title.y - 8), 1300);
+  await sleep(1500);
+  for (let i = 0; i < 3; i++) { await page.keyboard.press('Shift+ArrowDown'); await sleep(260); }
+  await sleep(2000);
+  await page.keyboard.press('Control+z');
+  await sleep(900);
   await page.keyboard.press('Escape');
   await sleep(500);
 

@@ -29,6 +29,8 @@ check(`npm install of ${path.basename(tarball)}`, install.status === 0, install.
 
 const usage = run('node', [pkg('cli.js')]);
 check('brushup prints usage', /Usage: brushup/.test(usage.stdout + usage.stderr));
+const version = run('node', [pkg('cli.js'), '--version']);
+check('brushup --version matches the installed package', version.stdout.trim() === JSON.parse(readFileSync(path.join(dir, 'node_modules', 'brushup', 'package.json'), 'utf8')).version, version.stdout);
 
 const init = run('node', [pkg('cli.js'), 'init', '.', '--mcp']);
 check('brushup init writes CLAUDE.md and .mcp.json', init.status === 0 && existsSync(path.join(dir, 'CLAUDE.md')) && existsSync(path.join(dir, '.mcp.json')), init.stderr);
