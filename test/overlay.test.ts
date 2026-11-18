@@ -774,10 +774,10 @@ describe('the A11y tab', () => {
     faint();
     el('a2').title = '<img src=x onerror=alert(1)>';
     q('[data-tab=a11y]').click();
-    expect(q('.a11ysum').textContent).toBe('1 accessibility issue');
+    expect(q('.a11ysum').textContent).toBe('1 issue');
     expect(q('.a11yitem b').textContent).toMatch(/Text is hard to read/);
     expect(q('.a11yitem .rule').textContent).toBe('Contrast');
-    expect(q('[data-tab=a11y]').textContent).toContain('Accessibility');
+    expect(q('[data-tab=a11y]').textContent).toContain('Checks');
     expect(q('[data-a11y-count]').textContent).toBe('1');
     expect(o.root.querySelector('.a11yitem img')).toBeNull();
     const learn = q('.a11yitem .learn') as HTMLAnchorElement;
@@ -789,9 +789,10 @@ describe('the A11y tab', () => {
 
   it('says so when the page is clean, and never claims it is a pass', () => {
     q('[data-tab=a11y]').click();
-    expect(q('.a11ysum').textContent).toBe('No accessibility issues found');
+    expect(q('.a11ysum').textContent).toBe('No issues found');
     expect(q('.a11ynote').hidden).toBe(false);
     expect(q('.a11ynote').textContent).toMatch(/doesn't mean the page is accessible/);
+    expect(q('.a11ynote').textContent).toMatch(/Design checks are guidelines/);
   });
 
   it('Apply writes the fix as a normal style edit on the element', async () => {
@@ -822,9 +823,39 @@ describe('the A11y tab', () => {
     expect(o.all('note-save')).toHaveLength(1);
   });
 
+  it('also runs the design checks, with a filter, and Apply and Send to Claude work on them too', async () => {
+    faint();
+    el('a3').setAttribute('style', 'padding-top:15px;margin-bottom:16px');
+    layout(el('a3'), { x: 0, y: 0, width: 100, height: 40 });
+    q('[data-tab=a11y]').click();
+    const filters = [...o.root.querySelectorAll('.a11yfilter button')].map((b) => b.textContent);
+    expect(filters).toEqual(['All 2', 'Accessibility 1', 'Design 1']);
+    expect(q('.a11ysum').textContent).toBe('2 issues');
+    (o.root.querySelector('[data-filter=design]') as HTMLButtonElement).click();
+    expect(q('.a11ysum').textContent).toBe('1 design issue');
+    expect(o.root.querySelectorAll('.a11yitem')).toHaveLength(1);
+    expect(q('.a11yitem .rule').textContent).toBe('Design · Spacing');
+    expect(q('.a11yitem .learn')).toBeNull(); // design guidelines have no standard to link to
+    (q('.a11yitem .apply') as HTMLButtonElement).click();
+    await settle();
+    expect(o.last('edit').edit).toMatchObject({ kind: 'style', id: 'a3', props: { 'padding-top': '16px' } });
+    (o.root.querySelectorAll('.a11yitem .acts button')[2] as HTMLButtonElement).click();
+    await settle();
+    expect(o.last('note-save').note).toMatchObject({ label: 'Design', text: expect.stringMatching(/^Design: Spacing is off the 4px grid/) });
+    (o.root.querySelector('[data-filter=accessibility]') as HTMLButtonElement).click();
+    expect(q('.a11ysum').textContent).toBe('1 accessibility issue');
+    (o.root.querySelector('[data-filter=all]') as HTMLButtonElement).click();
+    expect(q('.a11ysum').textContent).toBe('2 issues');
+  });
+
+  it('lists both groups under What\'s checked', () => {
+    expect([...o.root.querySelectorAll('.a11ywhat h4')].map((h) => h.textContent)).toEqual(['Accessibility', 'Design']);
+    expect(o.root.querySelectorAll('.a11ywhat li').length).toBe(15 + 11);
+  });
+
   it('does not scan the overlay itself', () => {
     q('[data-tab=a11y]').click();
-    expect(q('.a11ysum').textContent).toBe('No accessibility issues found'); // the panel has icon-only buttons with labels, and none are reported
+    expect(q('.a11ysum').textContent).toBe('No issues found'); // the panel has icon-only buttons with labels, and none are reported
   });
 });
 

@@ -1,4 +1,5 @@
 import { RULES } from './a11y';
+import { DESIGN_RULES } from './design';
 import { HANDLE_KINDS, SIDES, type HandleKind, type Sides } from './handles-math';
 
 export type Mode = 'edit' | 'preview';
@@ -27,6 +28,7 @@ export type ChangesView =
 /** One accessibility problem as the A11y tab lists it. */
 export interface A11yView {
   id: string;
+  category: 'accessibility' | 'design';
   rule: string;
   title: string;
   detail: string;
@@ -208,6 +210,9 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .a11yitem { border: 1px solid var(--line); border-radius: 3px; padding: 8px 9px; margin-bottom: 6px; background: var(--bg); }
 .a11yitem .rule { display: inline-block; margin-bottom: 4px; padding: 1px 6px; border-radius: 2px; background: var(--raise); color: var(--muted); font: 600 10px var(--mono); text-transform: uppercase; letter-spacing: .04em; }
 .a11yitem b { display: block; color: var(--text); font-weight: 600; font-size: 12px; line-height: 1.4; } .a11yitem p { margin: 3px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.a11yfilter { display: flex; gap: 4px; margin: 0 0 8px; } .a11yfilter button { padding: 3px 9px; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); font-size: 11px; } .a11yfilter button[aria-pressed=true] { background: var(--raise-2); color: var(--text); border-color: var(--fieldline); }
+.a11yitem .rule.design { color: var(--pad); }
+.a11ywhat h4 { margin: 8px 0 2px; font: 600 10px var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--faint); }
 .a11yitem .learn { display: inline-block; margin-top: 6px; color: var(--accent); font-size: 11px; text-decoration: underline; text-underline-offset: 2px; }
 .a11ywhat { margin: 8px 0; font-size: 11px; color: var(--muted); } .a11ywhat summary { cursor: pointer; } .a11ywhat ul { margin: 6px 0 0; padding-left: 16px; line-height: 1.5; } .a11ywhat li { margin-bottom: 3px; } .a11ywhat b { color: var(--text); font-weight: 600; }
 .a11yitem .acts { display: flex; gap: 6px; margin-top: 7px; flex-wrap: wrap; } .a11yitem .acts button { padding: 3px 8px; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); font-size: 11px; } .a11yitem .acts button:hover { color: var(--text); }
@@ -358,7 +363,7 @@ export function createPanel(hooks: PanelHooks) {
           <button role="tab" id="brushup-tab-style" aria-controls="brushup-pane-style" data-tab="style" aria-selected="true" tabindex="0">Style</button>
           <button role="tab" id="brushup-tab-notes" aria-controls="brushup-pane-notes" data-tab="notes" aria-selected="false" tabindex="-1">Notes<span class="count" hidden></span></button>
           <button role="tab" id="brushup-tab-changes" aria-controls="brushup-pane-changes" data-tab="changes" aria-selected="false" tabindex="-1">Changes</button>
-          <button role="tab" id="brushup-tab-a11y" aria-controls="brushup-pane-a11y" data-tab="a11y" aria-selected="false" tabindex="-1" >Accessibility<span class="count" data-a11y-count hidden></span></button>
+          <button role="tab" id="brushup-tab-a11y" aria-controls="brushup-pane-a11y" data-tab="a11y" aria-selected="false" tabindex="-1" >Checks<span class="count" data-a11y-count hidden></span></button>
         </div>
         <div data-pane="style" role="tabpanel" id="brushup-pane-style" aria-labelledby="brushup-tab-style">
           <div class="info">Click an element to select it.</div>
@@ -372,9 +377,10 @@ export function createPanel(hooks: PanelHooks) {
         </div>
         <div data-pane="a11y" role="tabpanel" id="brushup-pane-a11y" aria-labelledby="brushup-tab-a11y" hidden>
           <div class="chbar"><span class="a11ysum">Open this tab to check the page</span><span class="sp"></span><button class="ghost" data-act="a11y-scan">Check again</button></div>
+          <div class="a11yfilter" role="group" aria-label="Show checks"><button data-filter="all" aria-pressed="true">All</button><button data-filter="accessibility" aria-pressed="false">Accessibility</button><button data-filter="design" aria-pressed="false">Design</button></div>
           <div class="a11ylist"></div>
-          <details class="a11ywhat"><summary>What's checked</summary><ul></ul></details>
-          <p class="chnote a11ynote" hidden>These checks catch some accessibility problems, not all of them. A clean result doesn't mean the page is accessible: also try it with only a keyboard, and with a screen reader.</p>
+          <details class="a11ywhat"><summary>What's checked</summary><div></div></details>
+          <p class="chnote a11ynote" hidden>These checks catch some problems, not all of them. A clean accessibility result doesn't mean the page is accessible: also try it with only a keyboard, and with a screen reader. Design checks are guidelines, so a deliberate choice can be right: ignore any that don't fit.</p>
         </div>
         <div data-pane="notes" role="tabpanel" id="brushup-pane-notes" aria-labelledby="brushup-tab-notes" hidden>
           <button class="add" data-act="add-note" disabled>Select an element to add a note</button>
@@ -879,29 +885,47 @@ export function createPanel(hooks: PanelHooks) {
   const a11yList = $<HTMLElement>('.a11ylist');
   const a11yCount = $<HTMLElement>('[data-a11y-count]');
   const a11yNote = $<HTMLElement>('.a11ynote');
-  for (const r of RULES) {
-    const li = document.createElement('li');
-    const b = document.createElement('b');
-    b.textContent = `${r.label}: `;
-    li.append(b, r.what);
-    $<HTMLElement>('.a11ywhat ul').append(li);
+  const whatEl = $<HTMLElement>('.a11ywhat div');
+  for (const [heading, rules] of [['Accessibility', RULES], ['Design', DESIGN_RULES]] as const) {
+    const h = document.createElement('h4');
+    h.textContent = heading;
+    const ul = document.createElement('ul');
+    for (const r of rules) {
+      const li = document.createElement('li');
+      const b = document.createElement('b');
+      b.textContent = `${r.label}: `;
+      li.append(b, r.what);
+      ul.append(li);
+    }
+    whatEl.append(h, ul);
   }
+  let a11yAll: A11yView[] = [];
+  let a11yFilter: 'all' | 'accessibility' | 'design' = 'all';
+  const filterBtns = [...root.querySelectorAll<HTMLButtonElement>('.a11yfilter button')];
   root.querySelector('[data-act=a11y-scan]')!.addEventListener('click', () => {
     a11ySum.textContent = 'Checking…';
     hooks.onA11yScan();
   });
-  const setA11y = (issues: A11yView[]) => {
+  const renderA11y = () => {
+    const issues = a11yAll.filter((i) => a11yFilter === 'all' || i.category === a11yFilter);
+    const n = (c: string) => a11yAll.filter((i) => i.category === c).length;
+    filterBtns.forEach((b) => {
+      const f = b.dataset.filter!;
+      b.setAttribute('aria-pressed', String(f === a11yFilter));
+      b.textContent = `${{ all: 'All', accessibility: 'Accessibility', design: 'Design' }[f]} ${f === 'all' ? a11yAll.length : n(f)}`;
+    });
     a11yList.textContent = '';
-    a11yCount.hidden = issues.length === 0;
-    a11yCount.textContent = String(issues.length);
-    a11ySum.textContent = issues.length ? `${issues.length} accessibility issue${issues.length === 1 ? '' : 's'}` : 'No accessibility issues found';
+    a11yCount.hidden = a11yAll.length === 0;
+    a11yCount.textContent = String(a11yAll.length);
+    const what = a11yFilter === 'all' ? '' : `${a11yFilter} `;
+    a11ySum.textContent = issues.length ? `${issues.length} ${what}issue${issues.length === 1 ? '' : 's'}` : `No ${what}issues found`;
     a11yNote.hidden = false;
     for (const issue of issues) {
       const item = document.createElement('div');
       item.className = 'a11yitem';
       const rule = document.createElement('span');
-      rule.className = 'rule';
-      rule.textContent = RULES.find((r) => r.rule === issue.rule)?.label ?? issue.rule;
+      rule.className = `rule${issue.category === 'design' ? ' design' : ''}`;
+      rule.textContent = `${issue.category === 'design' ? 'Design · ' : ''}${[...RULES, ...DESIGN_RULES].find((r) => r.rule === issue.rule)?.label ?? issue.rule}`;
       const title = document.createElement('b');
       title.textContent = issue.title; // text only: this comes from the page being inspected
       const detail = document.createElement('p');
@@ -931,6 +955,16 @@ export function createPanel(hooks: PanelHooks) {
       a11yList.append(item);
     }
   };
+  const setA11y = (issues: A11yView[]) => {
+    a11yAll = issues;
+    renderA11y();
+  };
+  filterBtns.forEach((b) =>
+    b.addEventListener('click', () => {
+      a11yFilter = b.dataset.filter as typeof a11yFilter;
+      renderA11y();
+    }),
+  );
 
   /* ----- changes (git diff) ----- */
   const chSum = $<HTMLElement>('.chsum');

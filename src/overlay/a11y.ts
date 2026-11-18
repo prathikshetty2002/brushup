@@ -4,6 +4,8 @@
  * result is never a pass. Each issue may carry a fix Brushup can write as a style edit.
  */
 
+import type { DesignRule } from './design';
+
 export type A11yRule =
   | 'contrast'
   | 'target-size'
@@ -44,7 +46,8 @@ export const RULES: { rule: A11yRule; label: string; what: string; learn?: strin
 
 export interface A11yIssue {
   id: string;
-  rule: A11yRule;
+  /** An accessibility rule, or a design rule (scanned by `design.ts`, which shares this shape). */
+  rule: A11yRule | DesignRule;
   el: HTMLElement;
   title: string;
   detail: string;

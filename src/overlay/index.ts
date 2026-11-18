@@ -4,6 +4,7 @@ import { moveBase, moveProps, type MoveBase } from './drag';
 import { explainSize, handleLabel, handleProps, sizeProps, type BoxStart, type HandleKind, type SizeStyle } from './handles-math';
 import { morphPage, refreshStylesheets } from './morph';
 import { RULES, scanPage, type A11yIssue } from './a11y';
+import { DESIGN_RULES, scanDesign } from './design';
 import { createPanel, type HandleInfo, type Mode, type NoteDraft, type NoteKind, type NoteView, type ChangesView, type A11yView } from './panel';
 
 interface Boot {
@@ -352,9 +353,10 @@ async function noteForTextChange(el: HTMLElement, wanted: string, was: string, w
 
 let a11yIssues = new Map<string, A11yIssue>();
 function scanA11y() {
-  const found = scanPage(document, (el) => el === panel.host || panel.host.contains(el) || el.closest('#brushup-root') !== null);
+  const ignore = (el: Element) => el === panel.host || panel.host.contains(el) || el.closest('#brushup-root') !== null;
+  const found = [...scanPage(document, ignore), ...scanDesign(document, ignore)];
   a11yIssues = new Map(found.map((i) => [i.id, i]));
-  const views: A11yView[] = found.map((i) => ({ id: i.id, rule: i.rule, title: i.title, detail: i.detail, fix: i.fix?.label, learn: RULES.find((r) => r.rule === i.rule)?.learn }));
+  const views: A11yView[] = found.map((i) => ({ id: i.id, category: DESIGN_RULES.some((r) => r.rule === i.rule) ? ('design' as const) : ('accessibility' as const), rule: i.rule, title: i.title, detail: i.detail, fix: i.fix?.label, learn: RULES.find((r) => r.rule === i.rule)?.learn }));
   panel.setA11y(views);
 }
 /** The nearest element Brushup tagged, which is the one whose source it can edit. */
@@ -383,9 +385,10 @@ async function noteA11y(id: string) {
   const issue = a11yIssues.get(id);
   if (!issue) return;
   const target = editableFor(issue.el) ?? issue.el;
-  const text = `Accessibility: ${issue.title}. ${issue.detail}`.slice(0, 3900);
+  const design = DESIGN_RULES.some((r) => r.rule === issue.rule);
+  const text = `${design ? 'Design' : 'Accessibility'}: ${issue.title}. ${issue.detail}`.slice(0, 3900);
   if (notes.some((n) => n.status === 'open' && n.text === text)) return panel.setStatus('There is already a note for this', 'warn');
-  await saveNote({ kind: suggestKind(target), label: 'Accessibility', text }, null, 'open', target);
+  await saveNote({ kind: suggestKind(target), label: design ? 'Design' : 'Accessibility', text }, null, 'open', target);
 }
 
 /* ---------- questions from agents (MCP) ---------- */
