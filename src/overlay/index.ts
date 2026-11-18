@@ -3,7 +3,7 @@ import type { Note } from '../server/notes';
 import { moveBase, moveProps, type MoveBase } from './drag';
 import { explainSize, handleLabel, handleProps, sizeProps, type BoxStart, type HandleKind, type SizeStyle } from './handles-math';
 import { morphPage, refreshStylesheets } from './morph';
-import { scanPage, type A11yIssue } from './a11y';
+import { RULES, scanPage, type A11yIssue } from './a11y';
 import { createPanel, type HandleInfo, type Mode, type NoteDraft, type NoteKind, type NoteView, type ChangesView, type A11yView } from './panel';
 
 interface Boot {
@@ -354,7 +354,7 @@ let a11yIssues = new Map<string, A11yIssue>();
 function scanA11y() {
   const found = scanPage(document, (el) => el === panel.host || panel.host.contains(el) || el.closest('#brushup-root') !== null);
   a11yIssues = new Map(found.map((i) => [i.id, i]));
-  const views: A11yView[] = found.map((i) => ({ id: i.id, rule: i.rule, title: i.title, detail: i.detail, fix: i.fix?.label }));
+  const views: A11yView[] = found.map((i) => ({ id: i.id, rule: i.rule, title: i.title, detail: i.detail, fix: i.fix?.label, learn: RULES.find((r) => r.rule === i.rule)?.learn }));
   panel.setA11y(views);
 }
 /** The nearest element Brushup tagged, which is the one whose source it can edit. */

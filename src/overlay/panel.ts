@@ -1,3 +1,4 @@
+import { RULES } from './a11y';
 import { HANDLE_KINDS, SIDES, type HandleKind, type Sides } from './handles-math';
 
 export type Mode = 'edit' | 'preview';
@@ -31,6 +32,8 @@ export interface A11yView {
   detail: string;
   /** Label of the one-click fix, when there is one. */
   fix?: string;
+  /** Where the standard explains why it matters. */
+  learn?: string;
 }
 
 export interface NoteDraft {
@@ -205,6 +208,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .a11yitem { border: 1px solid var(--line); border-radius: 3px; padding: 8px 9px; margin-bottom: 6px; background: var(--bg); }
 .a11yitem .rule { display: inline-block; margin-bottom: 4px; padding: 1px 6px; border-radius: 2px; background: var(--raise); color: var(--muted); font: 600 10px var(--mono); text-transform: uppercase; letter-spacing: .04em; }
 .a11yitem b { display: block; color: var(--text); font-weight: 600; font-size: 12px; line-height: 1.4; } .a11yitem p { margin: 3px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.a11yitem .learn { display: inline-block; margin-top: 6px; color: var(--accent); font-size: 11px; text-decoration: underline; text-underline-offset: 2px; }
+.a11ywhat { margin: 8px 0; font-size: 11px; color: var(--muted); } .a11ywhat summary { cursor: pointer; } .a11ywhat ul { margin: 6px 0 0; padding-left: 16px; line-height: 1.5; } .a11ywhat li { margin-bottom: 3px; } .a11ywhat b { color: var(--text); font-weight: 600; }
 .a11yitem .acts { display: flex; gap: 6px; margin-top: 7px; flex-wrap: wrap; } .a11yitem .acts button { padding: 3px 8px; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); font-size: 11px; } .a11yitem .acts button:hover { color: var(--text); }
 .a11yitem .acts .apply { background: var(--accent); color: var(--on-accent); border-color: transparent; font-weight: 600; } .a11yitem .acts .apply:hover { color: var(--on-accent); filter: brightness(1.08); }
 .hint { margin: 12px 0 0; color: var(--faint); font-size: 10.5px; line-height: 2; }
@@ -368,6 +373,7 @@ export function createPanel(hooks: PanelHooks) {
         <div data-pane="a11y" role="tabpanel" id="brushup-pane-a11y" aria-labelledby="brushup-tab-a11y" hidden>
           <div class="chbar"><span class="a11ysum">Open this tab to check the page</span><span class="sp"></span><button class="ghost" data-act="a11y-scan">Check again</button></div>
           <div class="a11ylist"></div>
+          <details class="a11ywhat"><summary>What's checked</summary><ul></ul></details>
           <p class="chnote a11ynote" hidden>These checks catch some accessibility problems, not all of them. A clean result doesn't mean the page is accessible: also try it with only a keyboard, and with a screen reader.</p>
         </div>
         <div data-pane="notes" role="tabpanel" id="brushup-pane-notes" aria-labelledby="brushup-tab-notes" hidden>
@@ -873,6 +879,13 @@ export function createPanel(hooks: PanelHooks) {
   const a11yList = $<HTMLElement>('.a11ylist');
   const a11yCount = $<HTMLElement>('[data-a11y-count]');
   const a11yNote = $<HTMLElement>('.a11ynote');
+  for (const r of RULES) {
+    const li = document.createElement('li');
+    const b = document.createElement('b');
+    b.textContent = `${r.label}: `;
+    li.append(b, r.what);
+    $<HTMLElement>('.a11ywhat ul').append(li);
+  }
   root.querySelector('[data-act=a11y-scan]')!.addEventListener('click', () => {
     a11ySum.textContent = 'Checking…';
     hooks.onA11yScan();
@@ -888,7 +901,7 @@ export function createPanel(hooks: PanelHooks) {
       item.className = 'a11yitem';
       const rule = document.createElement('span');
       rule.className = 'rule';
-      rule.textContent = ({ contrast: 'Contrast', 'target-size': 'Tap size', 'image-alt': 'Image', name: 'Name', 'heading-order': 'Headings' } as Record<string, string>)[issue.rule] ?? issue.rule;
+      rule.textContent = RULES.find((r) => r.rule === issue.rule)?.label ?? issue.rule;
       const title = document.createElement('b');
       title.textContent = issue.title; // text only: this comes from the page being inspected
       const detail = document.createElement('p');
@@ -906,6 +919,15 @@ export function createPanel(hooks: PanelHooks) {
       act('Locate', () => hooks.onA11yLocate(issue.id));
       act('Send to Claude', () => hooks.onA11yNote(issue.id));
       item.append(rule, title, detail, acts);
+      if (issue.learn?.startsWith('https://www.w3.org/')) {
+        const learn = document.createElement('a');
+        learn.className = 'learn';
+        learn.href = issue.learn; // always one of our own W3C links, never anything from the page
+        learn.target = '_blank';
+        learn.rel = 'noopener noreferrer';
+        learn.textContent = 'Learn more ↗';
+        item.append(learn);
+      }
       a11yList.append(item);
     }
   };

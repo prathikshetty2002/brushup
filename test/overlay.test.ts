@@ -755,6 +755,15 @@ describe('the Changes tab', () => {
 
 describe('the A11y tab', () => {
   const q = (sel: string) => o.root.querySelector(sel) as HTMLElement;
+  // A proper page, so the tests are about the element and not about a missing <title> or <main>.
+  beforeEach(() => {
+    document.documentElement.lang = 'en';
+    document.title = 'Test';
+    const main = document.createElement('main');
+    main.append(...document.body.childNodes);
+    document.body.append(main);
+    layout(el('a1'), { x: 0, y: 0, width: 100, height: 20 });
+  });
   const faint = () => {
     el('a2').setAttribute('style', 'color:#aaa;background:#fff;font-size:16px');
     layout(el('a2'), { x: 0, y: 0, width: 100, height: 20 });
@@ -771,6 +780,10 @@ describe('the A11y tab', () => {
     expect(q('[data-tab=a11y]').textContent).toContain('Accessibility');
     expect(q('[data-a11y-count]').textContent).toBe('1');
     expect(o.root.querySelector('.a11yitem img')).toBeNull();
+    const learn = q('.a11yitem .learn') as HTMLAnchorElement;
+    expect(learn.href).toBe('https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html');
+    expect(learn.rel).toBe('noopener noreferrer');
+    expect(o.root.querySelectorAll('.a11ywhat li').length).toBeGreaterThanOrEqual(15);
     expect(buttons()).toEqual([expect.stringMatching(/^Change color to #/), 'Locate', 'Send to Claude']);
   });
 

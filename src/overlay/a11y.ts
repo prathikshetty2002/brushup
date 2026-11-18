@@ -4,7 +4,43 @@
  * result is never a pass. Each issue may carry a fix Brushup can write as a style edit.
  */
 
-export type A11yRule = 'contrast' | 'target-size' | 'image-alt' | 'name' | 'heading-order';
+export type A11yRule =
+  | 'contrast'
+  | 'target-size'
+  | 'small-text'
+  | 'image-alt'
+  | 'name'
+  | 'link-text'
+  | 'heading-order'
+  | 'keyboard'
+  | 'tab-order'
+  | 'language'
+  | 'page-title'
+  | 'zoom'
+  | 'duplicate-id'
+  | 'autoplay'
+  | 'page-structure';
+
+const WCAG = 'https://www.w3.org/WAI/WCAG22/Understanding/';
+
+/** Every check, in the order the tab lists them: what it looks for, and where the standard explains why. */
+export const RULES: { rule: A11yRule; label: string; what: string; learn?: string }[] = [
+  { rule: 'contrast', label: 'Contrast', what: 'Text that is hard to read against its background (4.5:1, or 3:1 for large text)', learn: `${WCAG}contrast-minimum.html` },
+  { rule: 'target-size', label: 'Tap size', what: 'Buttons, links and inputs smaller than 24×24px', learn: `${WCAG}target-size-minimum.html` },
+  { rule: 'small-text', label: 'Small text', what: 'Text under 12px, which many people cannot read comfortably' },
+  { rule: 'image-alt', label: 'Image', what: 'Images with no alt attribute', learn: `${WCAG}non-text-content.html` },
+  { rule: 'name', label: 'Name', what: 'Buttons, links and inputs a screen reader cannot name', learn: `${WCAG}name-role-value.html` },
+  { rule: 'link-text', label: 'Link text', what: 'Links that only say “click here” or “read more”', learn: `${WCAG}link-purpose-in-context.html` },
+  { rule: 'heading-order', label: 'Headings', what: 'Headings that skip a level or are empty', learn: `${WCAG}info-and-relationships.html` },
+  { rule: 'keyboard', label: 'Keyboard', what: 'Things that look clickable, or have a button role, but a keyboard cannot reach', learn: `${WCAG}keyboard.html` },
+  { rule: 'tab-order', label: 'Tab order', what: 'A custom tab order (tabindex above 0) that jumps around the page', learn: `${WCAG}focus-order.html` },
+  { rule: 'language', label: 'Language', what: 'A page with no language set on <html>', learn: `${WCAG}language-of-page.html` },
+  { rule: 'page-title', label: 'Page title', what: 'A page with no <title>', learn: `${WCAG}page-titled.html` },
+  { rule: 'zoom', label: 'Zoom', what: 'A viewport setting that stops people zooming in', learn: `${WCAG}resize-text.html` },
+  { rule: 'duplicate-id', label: 'Duplicate id', what: 'The same id used twice, which breaks labels and aria references', learn: `${WCAG}name-role-value.html` },
+  { rule: 'autoplay', label: 'Autoplay', what: 'Audio or video that starts playing by itself', learn: `${WCAG}audio-control.html` },
+  { rule: 'page-structure', label: 'Page structure', what: 'No main landmark, or no h1', learn: `${WCAG}info-and-relationships.html` },
+];
 
 export interface A11yIssue {
   id: string;
@@ -20,6 +56,8 @@ type Rgba = { r: number; g: number; b: number; a: number };
 
 const MAX_ISSUES = 60;
 const MIN_TARGET = 24; // WCAG 2.2 SC 2.5.8, level AA
+const MIN_TEXT = 12;
+const VAGUE_LINKS = new Set(['click here', 'here', 'read more', 'more', 'learn more', 'link', 'this', 'this link', 'details', 'more info', 'more details', 'view more', 'see more']);
 
 /* ---------- colour ---------- */
 
@@ -230,6 +268,96 @@ export function scanPage(doc: Document, ignore: (el: Element) => boolean = () =>
     if (!Number.isFinite(level)) continue;
     if (last && level > last + 1) add({ rule: 'heading-order', el: h, title: `Heading jumps from level ${last} to ${level}`, detail: `${describe(h)} follows an h${last}. People using a screen reader move around by heading level, so a skipped level looks like missing content.` });
     last = level;
+  }
+
+  // Text that is too small to read comfortably (a legibility rule, not a WCAG failure).
+  for (const el of doc.body.querySelectorAll<HTMLElement>('*')) {
+    if (issues.length >= MAX_ISSUES) break;
+    if (!hasOwnText(el) || skip(el) || el.matches('script, style, noscript, option') || !shown(el)) continue;
+    const size = parseFloat(getComputedStyle(el).fontSize);
+    if (!Number.isFinite(size) || size >= MIN_TEXT) continue;
+    add({
+      rule: 'small-text',
+      el,
+      title: `Text is very small: ${Math.round(size * 10) / 10}px`,
+      detail: `${describe(el)} is under ${MIN_TEXT}px. Small text is hard to read on a phone and for anyone with low vision.`,
+      fix: { label: `Make it ${MIN_TEXT}px`, props: { 'font-size': `${MIN_TEXT}px` } },
+    });
+  }
+
+  // Links that say nothing about where they go.
+  for (const a of doc.body.querySelectorAll<HTMLAnchorElement>('a[href]')) {
+    if (issues.length >= MAX_ISSUES) break;
+    if (skip(a) || !shown(a) || a.hasAttribute('aria-label') || a.hasAttribute('aria-labelledby') || a.hasAttribute('title')) continue;
+    const words = (a.textContent ?? '').toLowerCase().replace(/[\s→»›>.…!]+/g, ' ').trim();
+    if (!VAGUE_LINKS.has(words)) continue;
+    add({ rule: 'link-text', el: a, title: `Link only says “${words}”`, detail: `Screen reader users often browse a list of all the links on a page, where “${words}” means nothing. Say what the link is for, or add an aria-label such as “Read more about pricing”.` });
+  }
+
+  // Empty headings.
+  for (const h of doc.body.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6')) {
+    if (issues.length >= MAX_ISSUES) break;
+    if (skip(h) || !shown(h) || accessibleName(h)) continue;
+    add({ rule: 'heading-order', el: h, title: 'Heading is empty', detail: `${describe(h)} has no text, so a screen reader announces a heading with nothing in it.` });
+  }
+
+  // Keyboard: roles that promise a control, and things that look clickable but aren't focusable.
+  const NATIVE = 'a[href], button, input, select, textarea, summary, label, area[href], [contenteditable=""], [contenteditable=true]';
+  const FOCUSABLE = `${NATIVE}, [tabindex]`;
+  for (const el of doc.body.querySelectorAll<HTMLElement>('[role=button], [role=link], [role=checkbox], [role=tab], [role=switch], [role=menuitem], [role=option]')) {
+    if (issues.length >= MAX_ISSUES) break;
+    if (skip(el) || !shown(el) || el.matches(FOCUSABLE) || el.getAttribute('aria-disabled') === 'true') continue;
+    add({ rule: 'keyboard', el, title: 'Has a button role but a keyboard can’t reach it', detail: `${describe(el)} says it is a ${el.getAttribute('role')} but has no tabindex, so people who don’t use a mouse can’t tab to it or press it. Use a real <button>, or add tabindex="0" and key handlers.` });
+  }
+  for (const el of doc.body.querySelectorAll<HTMLElement>('div, span, li, p, img, svg, h1, h2, h3, h4, h5, h6, td, section, article')) {
+    if (issues.length >= MAX_ISSUES) break;
+    if (skip(el) || el.closest(`${FOCUSABLE}, [role]`) || !shown(el)) continue;
+    const parent = el.parentElement;
+    if (getComputedStyle(el).cursor !== 'pointer' || (parent && getComputedStyle(parent).cursor === 'pointer')) continue; // cursor is inherited: only the element that sets it
+    add({ rule: 'keyboard', el, title: 'Looks clickable but a keyboard can’t use it', detail: `${describe(el)} shows a pointer cursor, which suggests a click handler, but it isn't a button or link and can't be focused. Make it a <button> (or <a>) so keyboard and screen reader users can use it too. Ignore this if it is only decoration.` });
+  }
+
+  // A custom tab order.
+  for (const el of doc.body.querySelectorAll<HTMLElement>('[tabindex]')) {
+    if (issues.length >= MAX_ISSUES) break;
+    const n = parseInt(el.getAttribute('tabindex') ?? '', 10);
+    if (skip(el) || !(n > 0)) continue;
+    add({ rule: 'tab-order', el, title: `Custom tab order (tabindex ${n})`, detail: `${describe(el)} jumps ahead in the tab order, which makes the focus path hard to predict. Use tabindex="0" and put the element in the right place in the page instead.` });
+  }
+
+  // Media that starts by itself.
+  for (const el of doc.body.querySelectorAll<HTMLMediaElement>('audio[autoplay], video[autoplay]')) {
+    if (issues.length >= MAX_ISSUES) break;
+    if (skip(el) || (el instanceof HTMLVideoElement && (el.muted || el.hasAttribute('muted')))) continue;
+    add({ rule: 'autoplay', el, title: 'Media starts playing on its own', detail: `${describe(el)} autoplays with sound. Sound that starts by itself talks over a screen reader and can't be stopped easily. Mute it, or remove autoplay.` });
+  }
+
+  // Duplicate ids.
+  const seenIds = new Map<string, Element>();
+  const reported = new Set<string>();
+  for (const el of doc.body.querySelectorAll('[id]')) {
+    if (issues.length >= MAX_ISSUES) break;
+    const id = el.id;
+    if (!id) continue;
+    if (!seenIds.has(id)) seenIds.set(id, el);
+    else if (!reported.has(id) && !skip(el)) {
+      reported.add(id);
+      add({ rule: 'duplicate-id', el: el as HTMLElement, title: `The id “${id}” is used more than once`, detail: `${describe(el)} shares its id with ${describe(seenIds.get(id)!)}. Labels, aria references and links by id only ever find the first one.` });
+    }
+  }
+
+  // Page-level checks.
+  const root = doc.documentElement;
+  if (!root.getAttribute('lang')?.trim()) add({ rule: 'language', el: root, title: 'The page language isn’t set', detail: 'Add lang="en" (or your language) to the <html> tag so screen readers pronounce the text correctly and browsers translate it properly.' });
+  if (!doc.title.trim()) add({ rule: 'page-title', el: root, title: 'The page has no title', detail: 'A <title> is the first thing a screen reader reads and what shows in browser tabs and history. Add one that says what this page is.' });
+  const viewport = doc.querySelector('meta[name=viewport]')?.getAttribute('content') ?? '';
+  const maxScale = /maximum-scale\s*=\s*([\d.]+)/i.exec(viewport);
+  if (/user-scalable\s*=\s*(no|0)/i.test(viewport) || (maxScale && parseFloat(maxScale[1]) < 2)) {
+    add({ rule: 'zoom', el: root, title: 'Zooming is turned off', detail: `The viewport setting “${viewport}” stops people from pinching to zoom. Many people with low vision rely on zoom. Remove user-scalable=no and any low maximum-scale.` });
+  }
+  if (doc.body && !doc.querySelector('main, [role=main]')) add({ rule: 'page-structure', el: doc.body, title: 'The page has no main landmark', detail: 'Wrap the main content in <main> so screen reader users can jump straight to it past the navigation.' });
+  if (doc.body && ![...doc.querySelectorAll('h1, [role=heading][aria-level="1"]')].some((h) => !skip(h) && shown(h))) {
+    add({ rule: 'page-structure', el: doc.body, title: 'The page has no h1', detail: 'An h1 tells screen reader users what the page is about. Add one heading that names the page.' });
   }
   return issues;
 }
