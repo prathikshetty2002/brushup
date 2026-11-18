@@ -10,13 +10,14 @@
     "typecheck": "tsc --noEmit",
     "demo": "tsx demo/record.ts",
     "demo:claude": "tsx demo/record-claude.ts",
-    "prepublishOnly": "npm run typecheck && npm test && npm run build"
+    "prepublishOnly": "npm run typecheck && npm test && npm run build && npm run check:cjs",
+    "check:cjs": "node scripts/check-cjs-deps.mjs"
   },
   "dependencies": {
     "@babel/parser": "^7.29.14",
     "@modelcontextprotocol/sdk": "^1.32.2",
     "chokidar": "^4.0.3",
-    "magic-string": "^1.4.5",
+    "magic-string": "^0.30.21",
     "parse5": "^7.3.0",
     "postcss": "^8.5.33",
     "ws": "^8.23.0",

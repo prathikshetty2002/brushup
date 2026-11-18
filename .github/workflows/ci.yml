@@ -22,6 +22,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - run: npm run check:cjs
       - name: Package contents are what we expect
         run: |
           npm pack --dry-run 2>&1 | tee pack.txt
