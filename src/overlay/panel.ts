@@ -112,7 +112,7 @@ const CSS = `
 .guide { position: fixed; pointer-events: none; background: var(--accent); z-index: 3; opacity: .85; }
 .sel2 { position: fixed; pointer-events: none; outline: 1.5px solid rgba(var(--accent-rgb),.7); }
 
-.panel { position: fixed; top: 14px; right: 14px; width: 272px; max-height: calc(100vh - 28px); overflow: auto; pointer-events: auto; color: var(--text); background: var(--bg);
+.panel { position: fixed; z-index: 4; top: 14px; right: 14px; width: 272px; max-height: calc(100vh - 28px); overflow: auto; pointer-events: auto; color: var(--text); background: var(--bg);
   border: 1px solid var(--line); border-radius: 4px; box-shadow: var(--shadow); scrollbar-width: thin; scrollbar-color: var(--raise-2) transparent; }
 .panel.left { right: auto; left: 14px; }
 header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; position: sticky; top: 0; z-index: 1; background: var(--bg); border-bottom: 1px solid var(--line); }
