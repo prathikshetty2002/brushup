@@ -217,7 +217,7 @@ describe('resize, padding and margin handles', () => {
   });
 
   it('creates every grip', () => {
-    for (const kind of ['resize-e', 'resize-s', 'resize-se', 'pad-t', 'pad-r', 'pad-b', 'pad-l', 'mar-t', 'mar-r', 'mar-b', 'mar-l']) expect(handle(kind)).toBeTruthy();
+    for (const kind of ['resize-e', 'resize-s', 'resize-se', 'resize-w', 'resize-n', 'resize-nw', 'resize-ne', 'resize-sw', 'pad-t', 'pad-r', 'pad-b', 'pad-l', 'mar-t', 'mar-r', 'mar-b', 'mar-l']) expect(handle(kind)).toBeTruthy();
   });
 
   it('resizes width from the right edge and snaps to the 4px grid', async () => {
@@ -257,6 +257,17 @@ describe('resize, padding and margin handles', () => {
     } finally {
       window.getComputedStyle = real;
     }
+  });
+
+  it('the left edge resizes from that side: width and the element shift change together', async () => {
+    el('a1').style.cssText = 'width: 200px; margin-left: 10px; margin-top: 0px';
+    layout(el('a1'), { x: 50, y: 50, width: 200, height: 100 });
+    click(el('a2'));
+    click(el('a1'));
+    o.tick();
+    grab('resize-w', [50, 100], [30, 100])();
+    await settle();
+    expect(o.last('edit').edit.props).toEqual({ width: '220px', 'margin-left': '-10px' });
   });
 
   it('Shift gives 1px precision', async () => {
@@ -854,5 +865,105 @@ describe('edit hints', () => {
     await settle();
     expect(o.last('edit').edit.hints).toMatchObject({ rootPx: 16 });
     document.documentElement.style.fontSize = '';
+  });
+});
+
+describe('rubber-band selection', () => {
+  beforeEach(() => {
+    layout(el('a1'), { x: 10, y: 10, width: 100, height: 20 });
+    layout(el('a2'), { x: 10, y: 40, width: 100, height: 20 });
+    layout(el('a3'), { x: 300, y: 300, width: 100, height: 80 });
+    layout(el('a4'), { x: 310, y: 310, width: 40, height: 20 });
+  });
+  const band = (from: [number, number], to: [number, number], init: Partial<MouseEventInit> = {}) => {
+    pointer('pointerdown', document.body, { clientX: from[0], clientY: from[1], ...init });
+    pointer('pointermove', document.body, { clientX: to[0], clientY: to[1], ...init });
+    return () => pointer('pointerup', document.body, { clientX: to[0], clientY: to[1], ...init });
+  };
+  const box = () => o.root.querySelector('.marquee') as HTMLElement;
+
+  it('drawing a box from empty space selects everything fully inside it', () => {
+    const release = band([0, 0], [150, 100]);
+    expect(box().hidden).toBe(false);
+    expect(box().style.width).toBe('150px');
+    release();
+    expect(box().hidden).toBe(true);
+    expect(info()).toContain('2 elements selected');
+  });
+
+  it('ignores elements the box only touches, and keeps the outermost of nested ones', () => {
+    band([0, 0], [20, 100])(); // cuts through the middle of a1 and a2
+    expect(info()).toBe('Click an element to select it.');
+    band([290, 290], [420, 400])(); // holds both a3 and the a4 inside it
+    expect(o.last('select').selection).toEqual({ id: 'a3', tag: 'div' });
+    expect(info()).not.toContain('elements selected');
+  });
+
+  it('Shift adds to the selection', () => {
+    click(el('a3'));
+    band([0, 0], [150, 100], { shiftKey: true })();
+    expect(info()).toContain('3 elements selected');
+  });
+
+  it('a plain click on empty space still deselects, and an empty box clears the selection', () => {
+    click(el('a1'));
+    click(document.body);
+    expect(info()).toBe('Click an element to select it.');
+    click(el('a1'));
+    band([600, 600], [700, 700])();
+    expect(info()).toBe('Click an element to select it.');
+  });
+
+  it('Alt+drag draws a box even starting on an element, and Alt+click selects it', () => {
+    pointer('pointerdown', el('a1'), { clientX: 0, clientY: 0, altKey: true });
+    pointer('pointermove', el('a1'), { clientX: 150, clientY: 100, altKey: true });
+    pointer('pointerup', el('a1'), { clientX: 150, clientY: 100, altKey: true });
+    expect(info()).toContain('2 elements selected');
+    click(document.body);
+    pointer('pointerdown', el('a2'), { clientX: 20, clientY: 45, altKey: true });
+    pointer('pointerup', el('a2'), { clientX: 20, clientY: 45, altKey: true });
+    expect(o.last('select').selection).toEqual({ id: 'a2', tag: 'p' });
+  });
+});
+
+describe('snapping to neighbours while dragging', () => {
+  beforeEach(() => {
+    layout(el('a1'), { x: 10, y: 10, width: 100, height: 20 });
+    layout(el('a2'), { x: 16, y: 100, width: 80, height: 20 });
+  });
+  const dragBy = (dx: number, dy: number, init: Partial<MouseEventInit> = {}) => {
+    pointer('pointerdown', el('a1'), { clientX: 20, clientY: 15, ...init });
+    pointer('pointermove', el('a1'), { clientX: 20 + dx, clientY: 15 + dy, ...init });
+    return () => pointer('pointerup', el('a1'), { clientX: 20 + dx, clientY: 15 + dy, ...init });
+  };
+  const guides = () => o.root.querySelectorAll('.guide');
+
+  it('pulls the left edge onto a nearby edge and draws a guide', () => {
+    const release = dragBy(7, 0); // a1's left edge lands on 17, a2 starts at 16: pulled back 1px
+    expect(el('a1').style.marginLeft).toBe('6px');
+    expect(guides().length).toBeGreaterThan(0);
+    release();
+    expect(guides()).toHaveLength(0);
+  });
+
+  it('snaps centres too, and does nothing beyond a few pixels', () => {
+    dragBy(20, 0)(); // far from every edge and centre
+    expect(el('a1').style.marginLeft).toBe('20px');
+    // a1's centre is 60+dx and a2's is 56: dx = -6 puts it at 54, which snaps to 56 (dx -4)
+    el('a1').style.marginLeft = '';
+    dragBy(-6, 0)();
+    expect(el('a1').style.marginLeft).toBe('-4px');
+  });
+
+  it('Ctrl or Cmd moves freely', () => {
+    dragBy(7, 0, { ctrlKey: true })();
+    expect(el('a1').style.marginLeft).toBe('7px');
+  });
+
+  it('leaves an axis alone when the drag is not moving along it', () => {
+    const base = parseFloat(getComputedStyle(el('a1')).marginTop) || 0; // jsdom gives an h1 a default margin
+    dragBy(0, 4)(); // a2's top edge is 100 away: nothing in range, and x is untouched
+    expect(el('a1').style.marginLeft).toBe('');
+    expect(el('a1').style.marginTop).toBe(`${Math.round(base + 4)}px`);
   });
 });

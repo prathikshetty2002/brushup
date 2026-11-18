@@ -208,7 +208,7 @@ Remove the two lines from `next.config.ts` and `layout.tsx`, the `brushup` entry
 
 ## 11. Limits today
 
-Tested only on Linux with Chrome. Supported frameworks are Next.js, Vite + React and plain HTML. Not supported yet: Vue, Svelte, Astro, CSS Modules, CSS-in-JS, resizing from the left or top edge, snapping to neighbouring elements, and a screenshot tool (deliberately: `brushup_inspect` gives Claude numbers instead). Full list in the README.
+Tested only on Linux with Chrome. Supported frameworks are Next.js, Vite + React and plain HTML. Not supported yet: Vue, Svelte, Astro, CSS Modules, CSS-in-JS, a screenshot tool (deliberately: `brushup_inspect` gives Claude numbers instead). Full list in the README.
 
 ---
 

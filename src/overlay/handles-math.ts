@@ -1,16 +1,18 @@
 /**
  * The arithmetic behind the drag handles, kept free of the DOM so it can be tested.
  *
- *   resize-e / resize-s / resize-se  change width / height
+ *   resize-{e,s,se,w,n,nw,ne,sw}     change width / height; west and north edges also shift the element
  *   pad-{t,r,b,l}                    padding on one side; dragging inward grows it
  *   mar-{t,r,b,l}                    margin on one side; dragging outward grows it
  */
 export type Side = 't' | 'r' | 'b' | 'l';
-export type HandleKind = 'resize-e' | 'resize-s' | 'resize-se' | `pad-${Side}` | `mar-${Side}`;
+export type ResizeKind = 'resize-e' | 'resize-s' | 'resize-se' | 'resize-w' | 'resize-n' | 'resize-nw' | 'resize-ne' | 'resize-sw';
+export type HandleKind = ResizeKind | `pad-${Side}` | `mar-${Side}`;
 
 export const GRID = 4;
 export const SIDES: Side[] = ['t', 'r', 'b', 'l'];
-export const HANDLE_KINDS: HandleKind[] = ['resize-e', 'resize-s', 'resize-se', ...SIDES.map((s) => `pad-${s}` as const), ...SIDES.map((s) => `mar-${s}` as const)];
+export const RESIZE_KINDS: ResizeKind[] = ['resize-e', 'resize-s', 'resize-se', 'resize-w', 'resize-n', 'resize-nw', 'resize-ne', 'resize-sw'];
+export const HANDLE_KINDS: HandleKind[] = [...RESIZE_KINDS, ...SIDES.map((s) => `pad-${s}` as const), ...SIDES.map((s) => `mar-${s}` as const)];
 
 export type Sides = Record<Side, number>;
 
@@ -20,6 +22,8 @@ export interface BoxStart {
   height: number;
   pad: Sides;
   mar: Sides;
+  /** How the element moves (left/top if positioned, margins otherwise) and where those start: a west or north drag also shifts the element. */
+  move?: { props: [string, string]; start: [number, number] };
 }
 
 const SIDE_NAME: Record<Side, string> = { t: 'top', r: 'right', b: 'bottom', l: 'left' };
@@ -41,8 +45,23 @@ const SPACING_SIGN: Record<'pad' | 'mar', Record<Side, [axis: 'x' | 'y', sign: 1
 export function handleProps(kind: HandleKind, start: BoxStart, dx: number, dy: number, free: boolean): Record<string, string> {
   const out: Record<string, string> = {};
   if (kind.startsWith('resize')) {
-    if (kind === 'resize-e' || kind === 'resize-se') out.width = px(Math.max(0, snap(start.width + dx, free)));
-    if (kind === 'resize-s' || kind === 'resize-se') out.height = px(Math.max(0, snap(start.height + dy, free)));
+    const east = kind === 'resize-e' || kind === 'resize-se' || kind === 'resize-ne';
+    const south = kind === 'resize-s' || kind === 'resize-se' || kind === 'resize-sw';
+    const west = kind === 'resize-w' || kind === 'resize-nw' || kind === 'resize-sw';
+    const north = kind === 'resize-n' || kind === 'resize-nw' || kind === 'resize-ne';
+    if (east) out.width = px(Math.max(0, snap(start.width + dx, free)));
+    if (south) out.height = px(Math.max(0, snap(start.height + dy, free)));
+    // Dragging the left or top edge resizes from that side: the size changes and the element shifts by the same amount.
+    if (west) {
+      const width = Math.max(0, snap(start.width - dx, free));
+      out.width = px(width);
+      if (start.move) out[start.move.props[0]] = px(start.move.start[0] + (start.width - width));
+    }
+    if (north) {
+      const height = Math.max(0, snap(start.height - dy, free));
+      out.height = px(height);
+      if (start.move) out[start.move.props[1]] = px(start.move.start[1] + (start.height - height));
+    }
     return out;
   }
   const [type, side] = kind.split('-') as ['pad' | 'mar', Side];

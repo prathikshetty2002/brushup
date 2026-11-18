@@ -89,3 +89,39 @@ describe('what really sizes an element', () => {
     expect(explainSize('width', 300, plain)).toBeNull();
   });
 });
+
+describe('left and top edge handles resize from that side', () => {
+  const start: BoxStart = { width: 200, height: 100, pad: { t: 0, r: 0, b: 0, l: 0 }, mar: { t: 0, r: 0, b: 0, l: 0 }, move: { props: ['margin-left', 'margin-top'], start: [10, 20] } };
+
+  it('dragging the left edge outward grows the width and shifts the element left by the same amount', () => {
+    expect(handleProps('resize-w', start, -40, 0, false)).toEqual({ width: '240px', 'margin-left': '-30px' });
+  });
+
+  it('dragging the left edge inward shrinks it and shifts it right', () => {
+    expect(handleProps('resize-w', start, 60, 0, false)).toEqual({ width: '140px', 'margin-left': '70px' });
+  });
+
+  it('shifts by what the width really changed, so a snapped width never drifts', () => {
+    // 200 - 3 = 197 snaps to 196: the edge moved 4px, not 3
+    expect(handleProps('resize-w', start, 3, 0, false)).toEqual({ width: '196px', 'margin-left': '14px' });
+    expect(handleProps('resize-w', start, 3, 0, true)).toEqual({ width: '197px', 'margin-left': '13px' });
+  });
+
+  it('works the same on top, and the corners combine both edges', () => {
+    expect(handleProps('resize-n', start, 0, -24, false)).toEqual({ height: '124px', 'margin-top': '-4px' });
+    expect(handleProps('resize-nw', start, -8, -8, false)).toEqual({ width: '208px', 'margin-left': '2px', height: '108px', 'margin-top': '12px' });
+    expect(handleProps('resize-ne', start, 8, -8, false)).toEqual({ width: '208px', height: '108px', 'margin-top': '12px' });
+    expect(handleProps('resize-sw', start, -8, 8, false)).toEqual({ width: '208px', 'margin-left': '2px', height: '108px' });
+  });
+
+  it('moves positioned elements with left and top, and never goes below zero', () => {
+    const abs: BoxStart = { ...start, move: { props: ['left', 'top'], start: [50, 50] } };
+    expect(handleProps('resize-w', abs, -40, 0, false)).toEqual({ width: '240px', left: '10px' });
+    expect(handleProps('resize-w', abs, 500, 0, false)).toEqual({ width: '0px', left: '250px' });
+  });
+
+  it('leaves the east and south handles exactly as before', () => {
+    expect(handleProps('resize-e', start, 30, 0, false)).toEqual({ width: '232px' });
+    expect(handleProps('resize-se', start, 8, 8, false)).toEqual({ width: '208px', height: '108px' });
+  });
+});

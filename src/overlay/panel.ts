@@ -102,12 +102,14 @@ const CSS = `
 .h.pad { background: var(--pad); } .h.mar { background: var(--mar); }
 .h.pad.vert, .h.mar.vert { width: 20px; height: 5px; margin: -2.5px 0 0 -10px; }
 .h.pad.horz, .h.mar.horz { width: 5px; height: 20px; margin: -10px 0 0 -2.5px; }
-.h.vert { cursor: ns-resize; } .h.horz { cursor: ew-resize; } .h.se { cursor: nwse-resize; }
+.h.vert { cursor: ns-resize; } .h.horz { cursor: ew-resize; } .h.se { cursor: nwse-resize; } .h.ne { cursor: nesw-resize; }
 .band { position: fixed; pointer-events: none; box-sizing: border-box; border-style: solid; border-color: transparent; }
 .band[hidden] { display: none; }
 .band.mar { border-color: color-mix(in srgb, var(--mar) 28%, transparent); } .band.pad { border-color: color-mix(in srgb, var(--pad) 28%, transparent); }
 .tip { position: fixed; pointer-events: none; background: #1d1b17; color: #f6f4ee; padding: 2px 8px; border-radius: 2px; font: 500 11px/1.4 var(--mono); white-space: nowrap; z-index: 5; }
 .tip[hidden] { display: none; }
+.marquee { position: fixed; pointer-events: none; border: 1px solid var(--accent); background: rgba(var(--accent-rgb),.08); z-index: 3; } .marquee[hidden] { display: none; }
+.guide { position: fixed; pointer-events: none; background: var(--accent); z-index: 3; opacity: .85; }
 .sel2 { position: fixed; pointer-events: none; outline: 1.5px solid rgba(var(--accent-rgb),.7); }
 
 .panel { position: fixed; top: 14px; right: 14px; width: 272px; max-height: calc(100vh - 28px); overflow: auto; pointer-events: auto; color: var(--text); background: var(--bg);
@@ -281,6 +283,8 @@ export function createPanel(hooks: PanelHooks) {
     <div class="band pad" hidden></div>
     <div class="handles"></div>
     <div class="tip" hidden></div>
+    <div class="marquee" hidden></div>
+    <div class="guides"></div>
     <aside class="panel" role="region" aria-label="Brushup design panel">
       <header>
         <svg class="logo" viewBox="0 0 256 256" aria-hidden="true"><path d="M12 132L226 116L244 126L226 140L244 154L224 188L12 204Z" fill="var(--accent)"/><path d="M122.01 222.46Q111.19 222.46 105.53 219.88Q99.87 217.29 96.18 214.1L70.6 220.74H54.36L88.56 59.36Q89.54 54.44 90.28 50.75Q91.02 47.06 91.02 44.36Q91.02 39.44 88.31 37.47Q85.61 35.5 79.7 35.5H72.57L73.06 33.04H137.76L128.41 76.34Q126.93 83.47 124.1 94.54Q121.28 105.61 117.83 118.16H118.82Q122.26 109.79 127.92 102.29Q133.58 94.79 142.06 90.23Q150.55 85.68 162.36 85.68Q172.44 85.68 180.93 90.23Q189.42 94.79 194.58 104.75Q199.75 114.71 199.75 130.95Q199.75 140.05 197.54 151.98Q195.32 163.91 190.16 176.21Q184.99 188.51 176.13 198.97Q167.28 209.42 153.99 215.94Q140.71 222.46 122.01 222.46ZM112.42 219.02Q121.03 219.02 128.04 212.74Q135.05 206.47 140.46 196.01Q145.88 185.56 149.57 173.01Q153.26 160.47 155.22 147.68Q157.19 134.88 157.19 124.06Q157.19 107.58 153.62 101.31Q150.06 95.03 143.91 95.03Q137.51 95.03 132.1 100.81Q126.69 106.59 122.51 115.57Q118.32 124.55 116.11 134.39L99.14 213.11Q101.1 215.33 104.55 217.17Q107.99 219.02 112.42 219.02Z" fill="var(--text)"/></svg>
@@ -329,6 +333,8 @@ export function createPanel(hooks: PanelHooks) {
   const bandPad = $<HTMLDivElement>('.band.pad');
   const handlesEl = $<HTMLDivElement>('.handles');
   const tipEl = $<HTMLDivElement>('.tip');
+  const marqueeEl = $<HTMLDivElement>('.marquee');
+  const guidesEl = $<HTMLDivElement>('.guides');
   const panel = $<HTMLElement>('.panel');
   const statusEl = $<HTMLSpanElement>('.status');
   const toastEl = $<HTMLDivElement>('.toast');
@@ -642,10 +648,11 @@ export function createPanel(hooks: PanelHooks) {
     el = document.createElement('div');
     const type = kind.startsWith('resize') ? 'resize' : kind.slice(0, 3);
     const side = kind.slice(-1);
-    const orient = kind === 'resize-e' ? 'horz' : kind === 'resize-s' ? 'vert' : kind === 'resize-se' ? 'se' : side === 't' || side === 'b' ? 'vert' : 'horz';
+    const orient =
+      kind === 'resize-e' || kind === 'resize-w' ? 'horz' : kind === 'resize-s' || kind === 'resize-n' ? 'vert' : kind === 'resize-se' || kind === 'resize-nw' ? 'se' : kind === 'resize-ne' || kind === 'resize-sw' ? 'ne' : side === 't' || side === 'b' ? 'vert' : 'horz';
     el.className = `h ${type} ${orient}`;
     el.dataset.kind = kind;
-    el.title = kind.startsWith('resize') ? 'Drag to resize (Shift = free)' : kind.startsWith('pad') ? 'Padding: drag inward to grow' : 'Margin: drag outward to grow';
+    el.title = kind.startsWith('resize') ? 'Drag to resize (Shift = free); the left and top edges also move the element' : kind.startsWith('pad') ? 'Padding: drag inward to grow' : 'Margin: drag outward to grow';
     el.addEventListener('pointerenter', () => (hoverHandle = kind));
     el.addEventListener('pointerleave', () => (hoverHandle = hoverHandle === kind ? null : hoverHandle));
     el.addEventListener('pointerdown', (e) => {
@@ -898,7 +905,9 @@ export function createPanel(hooks: PanelHooks) {
       const roomy = visible && Math.min(r!.width, r!.height) >= 48;
       for (const kind of HANDLE_KINDS) {
         const el = handleEl(kind);
-        const show = visible && (kind.startsWith('pad') ? roomy : true);
+        // The extra edge and corner grips would crowd a tiny element, so they wait until it has some room.
+        const extra = ['resize-w', 'resize-n', 'resize-nw', 'resize-ne', 'resize-sw'].includes(kind);
+        const show = visible && (kind.startsWith('pad') ? roomy : extra ? Math.min(r!.width, r!.height) >= 24 : true);
         el.hidden = !show;
         if (!show) continue;
         const cx = r!.left + r!.width / 2;
@@ -908,6 +917,11 @@ export function createPanel(hooks: PanelHooks) {
           'resize-e': [r!.right, cy],
           'resize-s': [cx, r!.bottom],
           'resize-se': [r!.right, r!.bottom],
+          'resize-w': [r!.left, cy],
+          'resize-n': [cx, r!.top],
+          'resize-nw': [r!.left, r!.top],
+          'resize-ne': [r!.right, r!.top],
+          'resize-sw': [r!.left, r!.bottom],
           'pad-t': [cx, r!.top + OFFSET],
           'pad-b': [cx, r!.bottom - OFFSET],
           'pad-l': [r!.left + OFFSET, cy],
@@ -931,6 +945,21 @@ export function createPanel(hooks: PanelHooks) {
       band(bandPad, visible && !!shown?.startsWith('pad'), info && { left: r!.left + border!.l, top: r!.top + border!.t, width: r!.width - border!.l - border!.r, height: r!.height - border!.t - border!.b, widths: pad! });
     },
     /** A small label near the cursor while dragging; null hides it. */
+    /** The rubber-band box while dragging out a selection (null hides it). */
+    setMarquee(box: { left: number; top: number; width: number; height: number } | null) {
+      marqueeEl.hidden = !box;
+      if (box) Object.assign(marqueeEl.style, { left: `${box.left}px`, top: `${box.top}px`, width: `${box.width}px`, height: `${box.height}px` });
+    },
+    /** Alignment lines while dragging: each is a 1px horizontal or vertical segment in viewport coordinates. */
+    setGuides(lines: { x1: number; y1: number; x2: number; y2: number }[]) {
+      while (guidesEl.children.length > lines.length) guidesEl.lastElementChild!.remove();
+      while (guidesEl.children.length < lines.length) guidesEl.append(Object.assign(document.createElement('div'), { className: 'guide' }));
+      lines.forEach((l, i) => {
+        const g = guidesEl.children[i] as HTMLElement;
+        const vertical = l.x1 === l.x2;
+        Object.assign(g.style, { left: `${Math.min(l.x1, l.x2)}px`, top: `${Math.min(l.y1, l.y2)}px`, width: vertical ? '1px' : `${Math.abs(l.x2 - l.x1)}px`, height: vertical ? `${Math.abs(l.y2 - l.y1)}px` : '1px' });
+      });
+    },
     setTip(text: string | null, x = 0, y = 0) {
       tipEl.hidden = text === null;
       if (text === null) return;

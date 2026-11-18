@@ -224,6 +224,11 @@ function select(el: HTMLElement | null, add = false) {
     if (i >= 0) sels.splice(i, 1);
     else sels.push(makeSel(el));
   } else sels = [makeSel(el)];
+  announceSelection();
+}
+
+/** Show the selection in the panel and tell the server (and through it, the agent) which element is selected. */
+function announceSelection() {
   refreshPanel();
   const primary = selected();
   ws?.readyState === WebSocket.OPEN && ws.send(JSON.stringify({ type: 'select', selection: primary ? { id: refOf(primary), tag: tagOf(primary) } : null }));
@@ -541,7 +546,7 @@ function startTextEdit(el: HTMLElement) {
 /* ---------- pointer: select, drag to move ---------- */
 
 /** Moving the selection: every selected element moves by the same amount. */
-let drag: { items: { el: HTMLElement; base: MoveBase; last: Record<string, string> }[]; x: number; y: number; moved: boolean; collapseTo: HTMLElement | null } | null = null;
+let drag: { items: { el: HTMLElement; base: MoveBase; last: Record<string, string> }[]; x: number; y: number; moved: boolean; collapseTo: HTMLElement | null; box: Box; targets: Box[] } | null = null;
 /** Dragging a resize / padding / margin handle on the primary element. */
 let hdrag: { kind: HandleKind; x: number; y: number; start: BoxStart; last: Record<string, string>; moved: boolean; size: SizeStyle; blocked: string | null } | null = null;
 
@@ -565,6 +570,58 @@ function sizeStyleOf(el: HTMLElement): SizeStyle {
     parentFlexDirection: ps?.flexDirection ?? '',
   };
 }
+/** Rubber-band selection: dragging out a box from empty space (or Alt+drag anywhere) selects what it fully contains. */
+let marquee: { x: number; y: number; rect: { left: number; top: number; width: number; height: number } | null; add: boolean; click: () => void } | null = null;
+
+/** Every tagged element fully inside `box`, keeping only the outermost where one contains another. */
+function insideBox(box: { left: number; top: number; width: number; height: number }): HTMLElement[] {
+  const inside = [...document.querySelectorAll<HTMLElement>(TAGGED)].filter((e) => {
+    if (e === document.body || e === document.documentElement) return false;
+    const r = e.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && r.left >= box.left - 1 && r.top >= box.top - 1 && r.right <= box.left + box.width + 1 && r.bottom <= box.top + box.height + 1;
+  });
+  return inside.filter((e) => !inside.some((o) => o !== e && o.contains(e)));
+}
+
+type Box = { left: number; top: number; right: number; bottom: number };
+
+/** Edges and centres of other elements the dragged selection can line up with, read once when the drag starts. */
+function snapTargets(moving: HTMLElement[]): Box[] {
+  const out: Box[] = [];
+  for (const e of document.querySelectorAll<HTMLElement>(TAGGED)) {
+    if (e === document.body || e === document.documentElement || moving.some((m) => m === e || m.contains(e) || e.contains(m))) continue;
+    const r = e.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0 || r.right < 0 || r.bottom < 0 || r.left > innerWidth || r.top > innerHeight) continue;
+    out.push({ left: r.left, top: r.top, right: r.right, bottom: r.bottom });
+    if (out.length >= 400) break;
+  }
+  return out;
+}
+
+const SNAP = 5;
+
+/**
+ * How far to nudge a drag so the moving box lines up with a neighbour's edge or centre (within SNAP px), and the
+ * guide lines to draw. Each axis snaps to the closest alignment found; an axis that isn't moving is left alone.
+ */
+function snapDrag(moving: Box, dx: number, dy: number, targets: Box[]) {
+  const box = { left: moving.left + dx, right: moving.right + dx, top: moving.top + dy, bottom: moving.bottom + dy };
+  const xs = [box.left, (box.left + box.right) / 2, box.right];
+  const ys = [box.top, (box.top + box.bottom) / 2, box.bottom];
+  let bestX: { d: number; at: number; t: Box } | null = null;
+  let bestY: { d: number; at: number; t: Box } | null = null;
+  for (const t of targets) {
+    for (const x of xs) for (const tx of [t.left, (t.left + t.right) / 2, t.right]) if (Math.abs(tx - x) <= SNAP && (!bestX || Math.abs(tx - x) < Math.abs(bestX.d))) bestX = { d: tx - x, at: tx, t };
+    for (const y of ys) for (const ty of [t.top, (t.top + t.bottom) / 2, t.bottom]) if (Math.abs(ty - y) <= SNAP && (!bestY || Math.abs(ty - y) < Math.abs(bestY.d))) bestY = { d: ty - y, at: ty, t };
+  }
+  const sx = dx !== 0 && bestX ? bestX.d : 0;
+  const sy = dy !== 0 && bestY ? bestY.d : 0;
+  const lines: { x1: number; y1: number; x2: number; y2: number }[] = [];
+  if (dx !== 0 && bestX) lines.push({ x1: bestX.at, x2: bestX.at, y1: Math.min(box.top + sy, bestX.t.top), y2: Math.max(box.bottom + sy, bestX.t.bottom) });
+  if (dy !== 0 && bestY) lines.push({ y1: bestY.at, y2: bestY.at, x1: Math.min(box.left + sx, bestY.t.left), x2: Math.max(box.right + sx, bestY.t.right) });
+  return { dx: dx + sx, dy: dy + sy, lines };
+}
+
 const pageTarget = (e: Event) => ((e.target as Element | null)?.closest?.(TAGGED) as HTMLElement | null) ?? null;
 const px = (v: string) => parseFloat(v) || 0;
 
@@ -578,14 +635,21 @@ window.addEventListener(
     const el = pageTarget(e);
     e.preventDefault();
     e.stopPropagation();
-    if (!el) return select(null);
+    // Empty space (or Alt anywhere) starts a rubber band; if it turns out to be a plain click, do what a click did before.
+    if (!el || el === document.body || el === document.documentElement || e.altKey) {
+      const shift = e.shiftKey;
+      marquee = { x: e.clientX, y: e.clientY, rect: null, add: shift, click: () => (el ? select(el, shift) : select(null)) };
+      return;
+    }
     if (e.shiftKey) return select(el, true); // Shift+click adds to / removes from the selection
     // Pressing on something already in a multi-selection keeps it, so the whole group can be dragged;
     // a click without a drag then narrows the selection to that element.
     const inGroup = sels.length > 1 && sels.some((s) => s.el === el);
     if (!inGroup) select(el);
     const items = movable().map((m) => ({ el: m, base: moveBase(m), last: {} }));
-    if (items.length) drag = { items, x: e.clientX, y: e.clientY, moved: false, collapseTo: inGroup ? el : null };
+    const rects = items.map((i) => i.el.getBoundingClientRect());
+    const box = { left: Math.min(...rects.map((r) => r.left)), top: Math.min(...rects.map((r) => r.top)), right: Math.max(...rects.map((r) => r.right)), bottom: Math.max(...rects.map((r) => r.bottom)) };
+    if (items.length) drag = { items, x: e.clientX, y: e.clientY, moved: false, collapseTo: inGroup ? el : null, box, targets: snapTargets(items.map((i) => i.el)) };
     else if (inGroup) select(el);
   },
   true,
@@ -616,6 +680,13 @@ window.addEventListener(
       panel.setTip(handleLabel(hdrag.last) + (hdrag.blocked ? ` · not applied: ${hdrag.blocked}` : ''), e.clientX, e.clientY);
       return;
     }
+    if (marquee) {
+      if (!marquee.rect && Math.hypot(e.clientX - marquee.x, e.clientY - marquee.y) < 4) return;
+      if (!marquee.rect) panel.setGhost(true);
+      marquee.rect = { left: Math.min(marquee.x, e.clientX), top: Math.min(marquee.y, e.clientY), width: Math.abs(e.clientX - marquee.x), height: Math.abs(e.clientY - marquee.y) };
+      panel.setMarquee(marquee.rect);
+      return;
+    }
     if (!active() || isOurs(e)) return;
     if (!drag) return void (state.hovered = pageTarget(e));
     let dx = e.clientX - drag.x;
@@ -624,6 +695,14 @@ window.addEventListener(
     if (!drag.moved) panel.setGhost(true);
     drag.moved = true;
     if (e.shiftKey) Math.abs(dx) > Math.abs(dy) ? (dy = 0) : (dx = 0);
+    // Line up with neighbouring edges and centres (hold Ctrl or Cmd to move freely).
+    if (e.ctrlKey || e.metaKey) panel.setGuides([]);
+    else {
+      const snapped = snapDrag(drag.box, dx, dy, drag.targets);
+      dx = snapped.dx;
+      dy = snapped.dy;
+      panel.setGuides(snapped.lines);
+    }
     for (const item of drag.items) {
       item.last = moveProps(item.base, dx, dy);
       for (const [p, v] of Object.entries(item.last)) item.el.style.setProperty(p, v);
@@ -635,6 +714,17 @@ window.addEventListener(
 
 const endDrag = () => {
   panel.setGhost(false);
+  panel.setGuides([]);
+  if (marquee) {
+    const m = marquee;
+    marquee = null;
+    panel.setMarquee(null);
+    if (!m.rect) return m.click();
+    const found = insideBox(m.rect);
+    if (!found.length) return m.add ? undefined : select(null);
+    sels = m.add ? [...sels.filter((x) => !found.includes(x.el)), ...found.map(makeSel)] : found.map(makeSel);
+    return announceSelection();
+  }
   if (hdrag) {
     const h = hdrag;
     hdrag = null;
@@ -754,6 +844,7 @@ const panel = createPanel({
       height: px(cs.height),
       pad: { t: px(cs.paddingTop), r: px(cs.paddingRight), b: px(cs.paddingBottom), l: px(cs.paddingLeft) },
       mar: { t: px(cs.marginTop), r: px(cs.marginRight), b: px(cs.marginBottom), l: px(cs.marginLeft) },
+      move: moveBase(el),
     };
     hdrag = { kind, x: e.clientX, y: e.clientY, start, last: {}, moved: false, size: sizeStyleOf(el), blocked: null };
   },

@@ -85,9 +85,10 @@ npx brushup page.html          # http://127.0.0.1:4321
 | Colour | A swatch plus a **hex box** (`#abc`, `#aabbcc`, `#aabbcc80`) in the Style panel |
 | Open in editor | In dev modes the selected element's `file:line` is a link that opens your editor at that line (VS Code by default; `localStorage['brushup:editor'] = 'cursor' \| 'windsurf' \| 'zed' \| 'vscode-insiders'`), with a button that copies the path |
 | Scrub a value | **Drag a field's label** sideways in the Style panel (Shift = ×10): the page previews it live and the drop saves it. **↑/↓** in a field steps it (Shift ×10, Alt ×0.1) |
+| Rubber-band | Drag a box from empty space (or **Alt+drag** from anywhere) to select everything it fully contains; **Shift** adds to the selection |
 | Select several | **Shift+click** to add or remove. Moves, nudges, handle drags and Style-panel changes apply to all of them as **one undo step** |
-| Move | Drag (Shift locks to one axis) or arrow keys (Shift = 10px) |
-| Resize | Drag the blue squares on the right edge, bottom edge or corner (width / height) |
+| Move | Drag (Shift locks to one axis) or arrow keys (Shift = 10px). The element **snaps to the edges and centres of its neighbours** within 5px, with guide lines; hold **Ctrl/Cmd** to move freely |
+| Resize | Drag the squares on any edge or corner. The left and top edges (and the corners that include them) also shift the element, by the same amount, with `left`/`top` or margins |
 | Padding | Drag the **green** grips just inside each edge inward to grow it (hidden on elements smaller than 48px) |
 | Margin | Drag the **orange** grips just outside each edge outward to grow it |
 | Snap | Handle drags snap to the 4px grid (Tailwind's spacing step); hold **Shift** for 1px precision. A label shows the value as you drag, and hovering a padding/margin grip shades the area |
@@ -181,7 +182,6 @@ What it does not protect against: **other users or processes on the same machine
 
 - Vue, Svelte, Astro, Remix, SvelteKit (the instrumenter is JSX-only; Vite plugin works for Remix/React Router but is untested).
 - CSS Modules and CSS-in-JS class resolution.
-- Resizing from the left/top edges (it needs the element's position to change too), snapping to neighbouring elements, and rubber-band selection.
 - Resize handles on a flex item that sets `flex-basis` write `flex-basis` (a width would be ignored). When the page still refuses a size (a `max-width`, a `min-width`, `flex-grow`, a grid track, an inline element), the readout says why while you drag and the status says it again after saving; the class is still written.
 - MCP: no screenshot tool, no write tools for source (by design), and `brushup_inspect` answers one element at a time.
 - Tested on Linux only; Next.js tested on 16.4 + Turbopack (the webpack path is wired up but not exercised).
