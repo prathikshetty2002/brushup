@@ -23,6 +23,16 @@ export type ChangesView =
   | { repo: false; reason: string }
   | { repo: true; branch: string; truncated: boolean; files: { file: string; status: string; additions: number; deletions: number; diff: string; byBrushup: boolean }[] };
 
+/** One accessibility problem as the A11y tab lists it. */
+export interface A11yView {
+  id: string;
+  rule: string;
+  title: string;
+  detail: string;
+  /** Label of the one-click fix, when there is one. */
+  fix?: string;
+}
+
 export interface NoteDraft {
   kind: NoteKind;
   label: string;
@@ -45,6 +55,11 @@ export interface PanelHooks {
   onNoteLocate(id: string): void;
   /** The Changes tab was opened or refreshed: fetch the diff and call `setChanges`. */
   onChangesRefresh(): void;
+  /** The A11y tab was opened or rescanned: scan the page and call `setA11y`. */
+  onA11yScan(): void;
+  onA11yLocate(id: string): void;
+  onA11yFix(id: string): void;
+  onA11yNote(id: string): void;
   onHandleDown(kind: HandleKind, e: PointerEvent): void;
 }
 
@@ -187,6 +202,11 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .chfile pre .cha { background: rgba(76, 194, 168, .14); } .chfile pre .chd { background: rgba(240, 115, 92, .14); } .chfile pre .chh { color: var(--faint); }
 .chnote { margin: 8px 0; padding: 7px 9px; border-left: 2px solid var(--warn); background: var(--raise); color: var(--muted); font-size: 11px; line-height: 1.5; }
 .note .reply { margin: 6px 0 0; padding: 5px 8px; border-left: 2px solid var(--ok); background: var(--raise); color: var(--muted); font-size: 11px; line-height: 1.5; }
+.a11yitem { border: 1px solid var(--line); border-radius: 3px; padding: 8px 9px; margin-bottom: 6px; background: var(--bg); }
+.a11yitem .rule { display: inline-block; margin-bottom: 4px; padding: 1px 6px; border-radius: 2px; background: var(--raise); color: var(--muted); font: 600 10px var(--mono); text-transform: uppercase; letter-spacing: .04em; }
+.a11yitem b { display: block; color: var(--text); font-weight: 600; font-size: 12px; line-height: 1.4; } .a11yitem p { margin: 3px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.a11yitem .acts { display: flex; gap: 6px; margin-top: 7px; flex-wrap: wrap; } .a11yitem .acts button { padding: 3px 8px; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); font-size: 11px; } .a11yitem .acts button:hover { color: var(--text); }
+.a11yitem .acts .apply { background: var(--accent); color: var(--on-accent); border-color: transparent; font-weight: 600; } .a11yitem .acts .apply:hover { color: var(--on-accent); filter: brightness(1.08); }
 .hint { margin: 12px 0 0; color: var(--faint); font-size: 10.5px; line-height: 2; }
 kbd { white-space: nowrap; font: 500 11px/1 var(--mono); padding: 2px 5px; border-radius: 2px; border: 1px solid var(--line); color: var(--muted); margin: 0 1px; }
 .add { width: 100%; border: 1px dashed var(--accent); border-radius: 2px; color: var(--accent); padding: 8px; font-weight: 500; }
@@ -333,6 +353,7 @@ export function createPanel(hooks: PanelHooks) {
           <button role="tab" id="brushup-tab-style" aria-controls="brushup-pane-style" data-tab="style" aria-selected="true" tabindex="0">Style</button>
           <button role="tab" id="brushup-tab-notes" aria-controls="brushup-pane-notes" data-tab="notes" aria-selected="false" tabindex="-1">Notes<span class="count" hidden></span></button>
           <button role="tab" id="brushup-tab-changes" aria-controls="brushup-pane-changes" data-tab="changes" aria-selected="false" tabindex="-1">Changes</button>
+          <button role="tab" id="brushup-tab-a11y" aria-controls="brushup-pane-a11y" data-tab="a11y" aria-selected="false" tabindex="-1" title="Accessibility" aria-label="Accessibility">A11y<span class="count" data-a11y-count hidden></span></button>
         </div>
         <div data-pane="style" role="tabpanel" id="brushup-pane-style" aria-labelledby="brushup-tab-style">
           <div class="info">Click an element to select it.</div>
@@ -343,6 +364,11 @@ export function createPanel(hooks: PanelHooks) {
         <div data-pane="changes" role="tabpanel" id="brushup-pane-changes" aria-labelledby="brushup-tab-changes" hidden>
           <div class="chbar"><span class="chsum">Not loaded yet</span><span class="sp"></span><button class="ghost" data-act="changes-refresh">Refresh</button><button class="ghost" data-act="changes-copy" disabled>Copy diff</button></div>
           <div class="chlist"></div>
+        </div>
+        <div data-pane="a11y" role="tabpanel" id="brushup-pane-a11y" aria-labelledby="brushup-tab-a11y" hidden>
+          <div class="chbar"><span class="a11ysum">Not scanned yet</span><span class="sp"></span><button class="ghost" data-act="a11y-scan">Rescan</button></div>
+          <div class="a11ylist"></div>
+          <p class="chnote a11ynote" hidden>Automated checks find some problems, not all. A clean result isn't a pass: try the page with a keyboard and a screen reader too.</p>
         </div>
         <div data-pane="notes" role="tabpanel" id="brushup-pane-notes" aria-labelledby="brushup-tab-notes" hidden>
           <button class="add" data-act="add-note" disabled>Select an element to add a note</button>
@@ -691,18 +717,19 @@ export function createPanel(hooks: PanelHooks) {
     slide($<HTMLElement>('.tabs .ink'), root.querySelector<HTMLElement>('[data-tab][aria-selected=true]'));
     slide($<HTMLElement>('.seg .thumb'), root.querySelector<HTMLElement>('[data-mode][aria-pressed=true]'));
   };
-  const showTab = (tab: 'style' | 'notes' | 'changes') => {
+  const showTab = (tab: 'style' | 'notes' | 'changes' | 'a11y') => {
     root.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach((b) => (b.setAttribute('aria-selected', String(b.dataset.tab === tab)), (b.tabIndex = b.dataset.tab === tab ? 0 : -1)));
     root.querySelectorAll<HTMLElement>('[data-pane]').forEach((p) => (p.hidden = p.dataset.pane !== tab));
     moveInk();
     if (tab === 'changes') hooks.onChangesRefresh();
+    if (tab === 'a11y') hooks.onA11yScan();
   };
   requestAnimationFrame(moveInk);
   document.fonts?.ready.then(moveInk);
-  root.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab as 'style' | 'notes' | 'changes')));
+  root.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab as 'style' | 'notes' | 'changes' | 'a11y')));
   // Arrow keys move between tabs (the tablist pattern); only the active tab is in the Tab order.
   $<HTMLElement>('.tabs').addEventListener('keydown', (e: KeyboardEvent) => {
-    const order = ['style', 'notes', 'changes'] as const;
+    const order = ['style', 'notes', 'changes', 'a11y'] as const;
     const at = order.findIndex((t) => root.querySelector<HTMLElement>(`[data-tab=${t}]`)!.getAttribute('aria-selected') === 'true');
     const n = order.length;
     const to = e.key === 'ArrowRight' ? (at + 1) % n : e.key === 'ArrowLeft' ? (at + n - 1) % n : e.key === 'Home' ? 0 : e.key === 'End' ? n - 1 : -1;
@@ -839,6 +866,48 @@ export function createPanel(hooks: PanelHooks) {
       panel.style.top = `${above >= below ? 14 : innerHeight - 14 - Math.min(room, p.height)}px`;
     };
     window.setTimeout(place, 0);
+  };
+
+  /* ----- accessibility ----- */
+  const a11ySum = $<HTMLElement>('.a11ysum');
+  const a11yList = $<HTMLElement>('.a11ylist');
+  const a11yCount = $<HTMLElement>('[data-a11y-count]');
+  const a11yNote = $<HTMLElement>('.a11ynote');
+  root.querySelector('[data-act=a11y-scan]')!.addEventListener('click', () => {
+    a11ySum.textContent = 'Scanning…';
+    hooks.onA11yScan();
+  });
+  const setA11y = (issues: A11yView[]) => {
+    a11yList.textContent = '';
+    a11yCount.hidden = issues.length === 0;
+    a11yCount.textContent = String(issues.length);
+    a11ySum.textContent = issues.length ? `${issues.length} issue${issues.length === 1 ? '' : 's'} found` : 'No issues found';
+    a11yNote.hidden = false;
+    for (const issue of issues) {
+      const item = document.createElement('div');
+      item.className = 'a11yitem';
+      const rule = document.createElement('span');
+      rule.className = 'rule';
+      rule.textContent = issue.rule.replace('-', ' ');
+      const title = document.createElement('b');
+      title.textContent = issue.title; // text only: this comes from the page being inspected
+      const detail = document.createElement('p');
+      detail.textContent = issue.detail;
+      const acts = document.createElement('div');
+      acts.className = 'acts';
+      const act = (label: string, fn: () => void, cls = '') => {
+        const b = document.createElement('button');
+        b.textContent = label;
+        if (cls) b.className = cls;
+        b.addEventListener('click', fn);
+        acts.append(b);
+      };
+      if (issue.fix) act(issue.fix, () => hooks.onA11yFix(issue.id), 'apply');
+      act('Locate', () => hooks.onA11yLocate(issue.id));
+      act('Send to Claude', () => hooks.onA11yNote(issue.id));
+      item.append(rule, title, detail, acts);
+      a11yList.append(item);
+    }
   };
 
   /* ----- changes (git diff) ----- */
@@ -1041,6 +1110,9 @@ export function createPanel(hooks: PanelHooks) {
       field('text').value = existing?.text ?? '';
       field('text').focus();
     },
+    /** Fill the A11y tab. */
+    setA11y,
+    a11yOpen: () => !root.querySelector<HTMLElement>('[data-pane=a11y]')!.hidden,
     /** Fill the Changes tab. */
     setChanges,
     changesOpen: () => !root.querySelector<HTMLElement>('[data-pane=changes]')!.hidden,

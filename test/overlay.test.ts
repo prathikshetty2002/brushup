@@ -753,6 +753,66 @@ describe('the Changes tab', () => {
   });
 });
 
+describe('the A11y tab', () => {
+  const q = (sel: string) => o.root.querySelector(sel) as HTMLElement;
+  const faint = () => {
+    el('a2').setAttribute('style', 'color:#aaa;background:#fff;font-size:16px');
+    layout(el('a2'), { x: 0, y: 0, width: 100, height: 20 });
+  };
+  const buttons = () => [...o.root.querySelectorAll('.a11yitem .acts button')].map((b) => b.textContent);
+
+  it('scans when opened and lists what it found, as text, with a count on the tab', () => {
+    faint();
+    el('a2').title = '<img src=x onerror=alert(1)>';
+    q('[data-tab=a11y]').click();
+    expect(q('.a11ysum').textContent).toBe('1 issue found');
+    expect(q('.a11yitem b').textContent).toMatch(/Low contrast/);
+    expect(q('[data-a11y-count]').textContent).toBe('1');
+    expect(o.root.querySelector('.a11yitem img')).toBeNull();
+    expect(buttons()).toEqual([expect.stringMatching(/^Use #/), 'Locate', 'Send to Claude']);
+  });
+
+  it('says so when the page is clean, and never claims it is a pass', () => {
+    q('[data-tab=a11y]').click();
+    expect(q('.a11ysum').textContent).toBe('No issues found');
+    expect(q('.a11ynote').hidden).toBe(false);
+    expect(q('.a11ynote').textContent).toMatch(/isn't a pass/);
+  });
+
+  it('Apply writes the fix as a normal style edit on the element', async () => {
+    faint();
+    q('[data-tab=a11y]').click();
+    (q('.a11yitem .apply') as HTMLButtonElement).click();
+    await settle();
+    expect(o.last('edit').edit).toMatchObject({ kind: 'style', id: 'a2', props: { color: expect.stringMatching(/^#[0-9a-f]{6}$/) } });
+  });
+
+  it('Locate selects the element, and Send to Claude pins a note once', async () => {
+    faint();
+    q('[data-tab=a11y]').click();
+    el('a2').scrollIntoView = () => {};
+    (o.root.querySelectorAll('.a11yitem .acts button')[1] as HTMLButtonElement).click();
+    expect(o.last('select').selection).toEqual({ id: 'a2', tag: 'p' });
+    (o.root.querySelectorAll('.a11yitem .acts button')[2] as HTMLButtonElement).click();
+    await settle();
+    const saved = o.last('note-save').note;
+    expect(saved.label).toBe('Accessibility');
+    expect(saved.text).toMatch(/^Accessibility: Low contrast/);
+    o.reply({ ok: true });
+    await settle();
+    o.receive({ type: 'notes', notes: [{ ...saved, id: 'n1', status: 'open', createdAt: '', updatedAt: '' }] });
+    o.tick();
+    (o.root.querySelectorAll('.a11yitem .acts button')[2] as HTMLButtonElement).click();
+    await settle();
+    expect(o.all('note-save')).toHaveLength(1);
+  });
+
+  it('does not scan the overlay itself', () => {
+    q('[data-tab=a11y]').click();
+    expect(q('.a11ysum').textContent).toBe('No issues found'); // the panel has icon-only buttons with labels, and none are reported
+  });
+});
+
 describe('panel position', () => {
   const panelEl = () => o.root.querySelector('.panel') as HTMLElement;
   const header = () => o.root.querySelector('header') as HTMLElement;

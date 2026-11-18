@@ -3,7 +3,8 @@ import type { Note } from '../server/notes';
 import { moveBase, moveProps, type MoveBase } from './drag';
 import { explainSize, handleLabel, handleProps, sizeProps, type BoxStart, type HandleKind, type SizeStyle } from './handles-math';
 import { morphPage, refreshStylesheets } from './morph';
-import { createPanel, type HandleInfo, type Mode, type NoteDraft, type NoteKind, type NoteView, type ChangesView } from './panel';
+import { scanPage, type A11yIssue } from './a11y';
+import { createPanel, type HandleInfo, type Mode, type NoteDraft, type NoteKind, type NoteView, type ChangesView, type A11yView } from './panel';
 
 interface Boot {
   /** 'static': Brushup serves one HTML page. 'dev': a framework dev server serves the app. */
@@ -100,6 +101,7 @@ function connect() {
       state.hash = msg.hash;
       void reload(!!msg.css);
       if (panel.changesOpen()) refreshChanges();
+      if (panel.a11yOpen()) setTimeout(scanA11y, 400);
     } else if (msg.type === 'hmr') {
       freshListeners.forEach((f) => f());
       if (previews.size) settleSoon(250); // the dev server is hot-updating the page; our temporary previews can go once it lands
@@ -344,6 +346,46 @@ async function noteForTextChange(el: HTMLElement, wanted: string, was: string, w
   if (notes.some((n) => n.status === 'open' && n.text === text)) return panel.setStatus('There is already a note for this change', 'warn');
   await saveNote({ kind: suggestKind(el), label: 'Text change', text }, null, 'open', el);
   panel.setStatus("Couldn't change the source, so a note for Claude was pinned instead", 'warn');
+}
+
+/* ---------- accessibility ---------- */
+
+let a11yIssues = new Map<string, A11yIssue>();
+function scanA11y() {
+  const found = scanPage(document, (el) => el === panel.host || panel.host.contains(el) || el.closest('#brushup-root') !== null);
+  a11yIssues = new Map(found.map((i) => [i.id, i]));
+  const views: A11yView[] = found.map((i) => ({ id: i.id, rule: i.rule, title: i.title, detail: i.detail, fix: i.fix?.label }));
+  panel.setA11y(views);
+}
+/** The nearest element Brushup tagged, which is the one whose source it can edit. */
+const editableFor = (el: HTMLElement) => el.closest<HTMLElement>(TAGGED);
+
+function locateA11y(id: string) {
+  const issue = a11yIssues.get(id);
+  if (!issue) return;
+  issue.el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  const target = editableFor(issue.el);
+  if (target) select(target);
+  else panel.setStatus("Brushup can't tell which source this element comes from", 'warn');
+}
+
+async function fixA11y(id: string) {
+  const issue = a11yIssues.get(id);
+  if (!issue?.fix) return;
+  const target = editableFor(issue.el);
+  if (!target) return panel.setStatus("Brushup can't tell where this is written, so use Send to Claude instead", 'warn');
+  select(target);
+  await commitStyle(target, issue.fix.props);
+  setTimeout(scanA11y, 700); // let the page settle, then show what is left
+}
+
+async function noteA11y(id: string) {
+  const issue = a11yIssues.get(id);
+  if (!issue) return;
+  const target = editableFor(issue.el) ?? issue.el;
+  const text = `Accessibility: ${issue.title}. ${issue.detail}`.slice(0, 3900);
+  if (notes.some((n) => n.status === 'open' && n.text === text)) return panel.setStatus('There is already a note for this', 'warn');
+  await saveNote({ kind: suggestKind(target), label: 'Accessibility', text }, null, 'open', target);
 }
 
 /* ---------- questions from agents (MCP) ---------- */
@@ -855,6 +897,10 @@ const panel = createPanel({
   },
   onNoteLocate: locateNote,
   onChangesRefresh: refreshChanges,
+  onA11yScan: scanA11y,
+  onA11yLocate: locateA11y,
+  onA11yFix: (id) => void fixA11y(id),
+  onA11yNote: (id) => void noteA11y(id),
   onHandleDown(kind, e) {
     const el = selected();
     if (!el) return;
