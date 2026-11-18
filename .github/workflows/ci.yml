@@ -10,8 +10,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 20.9 is the oldest Node the package claims to support (it is also Next 16's minimum).
-        node: ['20.9', '22', '24']
+        # The dev tooling (vitest, jsdom, TypeScript 7) needs Node 22+; the shipped package is checked on 20.9 below.
+        node: ['22', '24']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -27,9 +27,26 @@ jobs:
           npm pack --dry-run 2>&1 | tee pack.txt
           grep -q "dist/overlay.js" pack.txt
           ! grep -q "src/" pack.txt
-      - name: Built CLI and MCP server start
-        run: |
-          mkdir -p /tmp/proj
-          node dist/cli.js init /tmp/proj --mcp
-          test -f /tmp/proj/.mcp.json
-          node -e "require('./dist/next.cjs'); require('./dist/vite.cjs'); console.log('CommonJS entry points load')"
+      - name: Pack the tarball
+        if: matrix.node == '24'
+        run: npm pack
+      - name: Keep the tarball for the Node 20 check
+        if: matrix.node == '24'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tarball
+          path: brushup-*.tgz
+
+  # The oldest Node the package claims (it is also Next 16's minimum): install the packed tarball and use it.
+  node-20:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.9'
+      - uses: actions/download-artifact@v4
+        with:
+          name: tarball
+      - run: node scripts/smoke.mjs brushup-*.tgz
