@@ -813,6 +813,22 @@ describe('panel stays off the selection', () => {
     expect(panelEl().style.maxHeight).toBe('');
   });
 
+  it('collapses to its header when no band is tall enough, and the chevron expands it', async () => {
+    panelEl().getBoundingClientRect = () => rect(750, 1010);
+    layout(el('a2'), { x: 10, y: 20, width: 1000, height: innerHeight - 40 });
+    click(el('a2'));
+    await frame();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(panelEl().classList.contains('mini')).toBe(true);
+    (o.root.querySelector('[data-act=mini]') as HTMLButtonElement).click();
+    expect(panelEl().classList.contains('mini')).toBe(false);
+    layout(el('a1'), { x: 100, y: 100, width: 200, height: 60 });
+    click(el('a1'));
+    await frame();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(panelEl().classList.contains('mini')).toBe(false);
+  });
+
   it('stays put when the selection is clear of it, or when the other side is no better', async () => {
     panelEl().getBoundingClientRect = () => rect(750, 1010);
     layout(el('a1'), { x: 100, y: 100, width: 200, height: 60 });

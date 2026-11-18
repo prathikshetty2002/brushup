@@ -169,6 +169,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .tour .foot { display: flex; align-items: center; gap: 8px; margin-top: 12px; } .tour .foot .n { flex: 1; color: var(--faint); font: 500 11px var(--mono); }
 .tour button { padding: 5px 11px; border-radius: 3px; } .tour .next { background: var(--accent); color: var(--on-accent); } .tour .skip { color: var(--muted); }
 .tour[hidden], .tour-ring[hidden] { display: none; }
+.panel.mini .body { display: none; } .panel.mini header { border-bottom: 0; } .panel.mini [data-act=mini] svg { transform: rotate(180deg); }
 .hint { margin: 12px 0 0; color: var(--faint); font-size: 10.5px; line-height: 2; }
 kbd { white-space: nowrap; font: 500 11px/1 var(--mono); padding: 2px 5px; border-radius: 2px; border: 1px solid var(--line); color: var(--muted); margin: 0 1px; }
 .add { width: 100%; border: 1px dashed var(--accent); border-radius: 2px; color: var(--accent); padding: 8px; font-weight: 500; }
@@ -299,6 +300,7 @@ export function createPanel(hooks: PanelHooks) {
       <header>
         <svg class="logo" viewBox="0 0 256 256" aria-hidden="true"><path d="M12 132L226 116L244 126L226 140L244 154L224 188L12 204Z" fill="var(--accent)"/><path d="M122.01 222.46Q111.19 222.46 105.53 219.88Q99.87 217.29 96.18 214.1L70.6 220.74H54.36L88.56 59.36Q89.54 54.44 90.28 50.75Q91.02 47.06 91.02 44.36Q91.02 39.44 88.31 37.47Q85.61 35.5 79.7 35.5H72.57L73.06 33.04H137.76L128.41 76.34Q126.93 83.47 124.1 94.54Q121.28 105.61 117.83 118.16H118.82Q122.26 109.79 127.92 102.29Q133.58 94.79 142.06 90.23Q150.55 85.68 162.36 85.68Q172.44 85.68 180.93 90.23Q189.42 94.79 194.58 104.75Q199.75 114.71 199.75 130.95Q199.75 140.05 197.54 151.98Q195.32 163.91 190.16 176.21Q184.99 188.51 176.13 198.97Q167.28 209.42 153.99 215.94Q140.71 222.46 122.01 222.46ZM112.42 219.02Q121.03 219.02 128.04 212.74Q135.05 206.47 140.46 196.01Q145.88 185.56 149.57 173.01Q153.26 160.47 155.22 147.68Q157.19 134.88 157.19 124.06Q157.19 107.58 153.62 101.31Q150.06 95.03 143.91 95.03Q137.51 95.03 132.1 100.81Q126.69 106.59 122.51 115.57Q118.32 124.55 116.11 134.39L99.14 213.11Q101.1 215.33 104.55 217.17Q107.99 219.02 112.42 219.02Z" fill="var(--text)"/></svg>
         <strong>Brushup</strong><span class="sp"></span>
+        <button class="iconbtn" data-act="mini" title="Collapse or expand the panel" aria-label="Collapse or expand the panel" aria-expanded="true"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
         <div class="seg"><span class="thumb"></span><button data-mode="edit">Edit</button><button data-mode="preview">Preview</button></div>
       </header>
       <div class="body">
@@ -752,6 +754,15 @@ export function createPanel(hooks: PanelHooks) {
   const overlap = (a: { left: number; right: number; top: number; bottom: number }, b: { left: number; right: number; top: number; bottom: number }) =>
     Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) * Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
 
+  const setMini = (on: boolean) => {
+    panel.classList.toggle('mini', on);
+    root.querySelector('[data-act=mini]')?.setAttribute('aria-expanded', String(!on));
+  };
+  root.querySelector('[data-act=mini]')!.addEventListener('click', () => {
+    panel.style.top = panel.style.maxHeight = '';
+    setMini(!panel.classList.contains('mini'));
+  });
+
   /**
    * Keep a newly selected element clear of the panel: hop to the other side if that covers less of it and,
    * when neither side is clear (a full-width element), shrink into the free band above or below it.
@@ -761,6 +772,7 @@ export function createPanel(hooks: PanelHooks) {
     if (!el || panel.style.right === 'auto' || panel.classList.contains('preview')) return;
     const place = () => {
       panel.style.top = panel.style.maxHeight = '';
+      setMini(false);
       const r = el.getBoundingClientRect();
       const pad = 14; // room for the handles and the tag around the element
       const box = { left: r.left - pad, right: r.right + pad, top: r.top - pad, bottom: r.bottom + pad };
@@ -788,7 +800,16 @@ export function createPanel(hooks: PanelHooks) {
       const above = box.top - 28;
       const below = innerHeight - box.bottom - 28;
       const room = Math.max(above, below);
-      if (room < 220) return;
+      if (room < 220) {
+        // No band tall enough: shrink to just the header, in whichever top or bottom corner covers less.
+        setMini(true);
+        const h = panel.getBoundingClientRect().height;
+        const side = panel.classList.contains('left') ? 14 : innerWidth - 14 - p.width;
+        const at = (top: number) => overlap(box, { left: side, right: side + p.width, top, bottom: top + h });
+        const bottom = innerHeight - 14 - h;
+        panel.style.top = `${at(bottom) < at(14) ? bottom : 14}px`;
+        return;
+      }
       panel.style.maxHeight = `${room}px`;
       panel.style.top = `${above >= below ? 14 : innerHeight - 14 - Math.min(room, p.height)}px`;
     };
