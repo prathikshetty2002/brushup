@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 20.9 is the oldest Node the package claims to support (it is also Next 16's minimum).
+        node: ['20.9', '22', '24']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Package contents are what we expect
+        run: |
+          npm pack --dry-run 2>&1 | tee pack.txt
+          grep -q "dist/overlay.js" pack.txt
+          ! grep -q "src/" pack.txt
+      - name: Built CLI and MCP server start
+        run: |
+          mkdir -p /tmp/proj
+          node dist/cli.js init /tmp/proj --mcp
+          test -f /tmp/proj/.mcp.json
+          node -e "require('./dist/next.cjs'); require('./dist/vite.cjs'); console.log('CommonJS entry points load')"

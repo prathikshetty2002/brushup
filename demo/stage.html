@@ -1,0 +1,87 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Ascend demo stage</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 1600px; height: 900px; overflow: hidden; background: #0b0d12; color: #e6e8ec; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; }
+  #cap { position: absolute; left: 24px; right: 24px; top: 18px; height: 62px; display: flex; align-items: center; font-size: 27px; font-weight: 600; letter-spacing: -0.01em; opacity: 0; transform: translateY(6px); transition: opacity .35s, transform .35s; }
+  #cap.in { opacity: 1; transform: none; }
+  #cap b { color: #60a5fa; font-weight: 700; margin-right: 10px; }
+  #appwrap { position: absolute; left: 24px; top: 96px; width: 1096px; height: 780px; border-radius: 12px; overflow: hidden; border: 1px solid #2c303a; background: #fff; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+  #app { width: 100%; height: 100%; border: 0; background: #fff; }
+  #badge { position: absolute; left: 12px; bottom: 12px; background: rgba(15,17,21,.86); color: #cbd5e1; font-size: 12px; padding: 4px 10px; border-radius: 999px; border: 1px solid #2c303a; pointer-events: none; }
+  #src { position: absolute; left: 1136px; top: 96px; width: 440px; height: 780px; border-radius: 12px; border: 1px solid #2c303a; background: #11141a; display: flex; flex-direction: column; overflow: hidden; }
+  #srchead { padding: 12px 16px; border-bottom: 1px solid #2c303a; font-size: 13px; color: #8b93a1; display: flex; justify-content: space-between; }
+  #srchead strong { color: #e6e8ec; font: 600 14px ui-monospace, 'SF Mono', Menlo, monospace; }
+  #srcbody { flex: 1; overflow: hidden; padding: 10px 0; font: 13px/1.55 ui-monospace, 'SF Mono', Menlo, monospace; }
+  .ln { display: flex; padding: 0 14px 0 0; white-space: pre-wrap; word-break: break-all; }
+  .ln .n { width: 44px; flex: none; text-align: right; padding-right: 12px; color: #4b5563; user-select: none; }
+  .ln .g { width: 16px; flex: none; }
+  .ln.add { background: rgba(74,222,128,.13); color: #bbf7d0; } .ln.add .g { color: #4ade80; }
+  .ln.del { background: rgba(248,113,113,.13); color: #fecaca; } .ln.del .g { color: #f87171; }
+  .ln.same { color: #94a3b8; }
+  .ln.gap { color: #4b5563; padding-left: 60px; }
+  .empty { padding: 36px 28px; color: #6b7280; font: 14px/1.6 system-ui, sans-serif; }
+  #card { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 40%, #151a26, #0b0d12 70%); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; opacity: 0; pointer-events: none; transition: opacity .5s; z-index: 50; }
+  #card.on { opacity: 1; }
+  #card h1 { font-size: 84px; margin: 0 0 18px; letter-spacing: -0.04em; }
+  #card h1 i { font-style: normal; color: #60a5fa; }
+  #card p { font-size: 28px; color: #9ca3af; margin: 0 0 8px; max-width: 1100px; line-height: 1.4; }
+  #card ul { list-style: none; padding: 0; margin: 26px 0 0; font-size: 24px; color: #cbd5e1; line-height: 1.9; text-align: left; }
+  #card li::before { content: '✓'; color: #4ade80; margin-right: 14px; font-weight: 700; }
+  body.carded #cursor { opacity: 0; }
+  #cursor { transition: opacity .3s; position: absolute; left: 0; top: 0; width: 28px; height: 28px; pointer-events: none; z-index: 100; transform: translate(-100px,-100px); filter: drop-shadow(0 2px 3px rgba(0,0,0,.5)); }
+  .ripple { position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; border: 3px solid #60a5fa; pointer-events: none; z-index: 99; animation: rip .55s ease-out forwards; }
+  @keyframes rip { to { transform: scale(4); opacity: 0; } }
+</style>
+</head>
+<body>
+  <div id="cap"></div>
+  <div id="appwrap"><iframe id="app"></iframe><div id="badge"></div></div>
+  <div id="src">
+    <div id="srchead"><span>Source changes</span><strong id="srcname"></strong></div>
+    <div id="srcbody"></div>
+  </div>
+  <div id="card"></div>
+  <svg id="cursor" viewBox="0 0 24 24"><path d="M3 2l7.5 19 2.7-7.8L21 10.5z" fill="#fff" stroke="#111" stroke-width="1.5" stroke-linejoin="round"/></svg>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  window.setCaption = (step, text) => {
+    const c = $('cap');
+    c.classList.remove('in'); void c.offsetWidth;
+    c.innerHTML = step ? `<b>${esc(step)}</b>${esc(text)}` : esc(text);
+    c.classList.add('in');
+  };
+  window.setApp = (url, label) => { $('app').src = url; $('badge').textContent = label; };
+  window.showCard = (html) => { const c = $('card'); c.innerHTML = html; c.classList.add('on'); document.body.classList.add('carded'); };
+  window.hideCard = () => { $('card').classList.remove('on'); document.body.classList.remove('carded'); };
+  window.moveCursor = (x, y) => { $('cursor').style.transform = `translate(${x - 4}px, ${y - 3}px)`; };
+  window.ripple = (x, y) => {
+    const r = document.createElement('div'); r.className = 'ripple'; r.style.left = x + 'px'; r.style.top = y + 'px';
+    document.body.appendChild(r); setTimeout(() => r.remove(), 700);
+  };
+
+  let last = '';
+  async function poll() {
+    try {
+      const s = await (await fetch('/api/source')).json();
+      const key = JSON.stringify(s);
+      if (key === last) return;
+      last = key;
+      $('srcname').textContent = s.name || '';
+      $('srcbody').innerHTML = s.lines.length
+        ? s.lines.map((l) => l.kind === 'gap'
+            ? `<div class="ln gap">⋯</div>`
+            : `<div class="ln ${l.kind}"><span class="n">${l.n ?? ''}</span><span class="g">${l.kind === 'add' ? '+' : l.kind === 'del' ? '−' : ' '}</span><span>${esc(l.text)}</span></div>`).join('')
+        : `<div class="empty">No source changes yet.<br>Edits you make on the canvas will appear here as they are written to disk.</div>`;
+    } catch {}
+  }
+  setInterval(poll, 200);
+  poll();
+</script>
+</body>
+</html>

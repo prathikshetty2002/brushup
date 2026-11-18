@@ -1,0 +1,782 @@
+// @vitest-environment jsdom
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { normalizeHex } from '../src/overlay/panel';
+import { click, key, layout, loadOverlay, pointer, settle, type Overlay } from './overlay-harness';
+
+let o: Overlay;
+const el = (id: string) => document.querySelector(`[data-ascend-id="${id}"]`) as HTMLElement;
+const info = () => o.root.querySelector('[data-pane=style] .info')!.textContent!;
+const status = () => o.root.querySelector('.status')!.textContent!;
+const handle = (kind: string) => o.root.querySelector(`[data-kind="${kind}"]`)!;
+const ok = async (hash = 'h1', extra: object = {}) => (await settle(), o.reply({ ok: true, hash, ...extra }), await settle());
+
+beforeEach(async () => {
+  document.body.innerHTML = `
+    <h1 data-ascend-id="a1">Hello</h1>
+    <p data-ascend-id="a2" class="lede">World</p>
+    <div data-ascend-id="a3"><span data-ascend-id="a4">x</span></div>`;
+  o = await loadOverlay({ mode: 'static' });
+});
+afterEach(() => o.destroy());
+
+describe('selection', () => {
+  it('selects a tagged element, tells the server, and shows it in the panel', () => {
+    click(el('a1'));
+    expect(o.last('select').selection).toEqual({ id: 'a1', tag: 'h1' });
+    expect(info()).toContain('<h1>');
+  });
+
+  it('clicking empty space deselects', () => {
+    click(el('a1'));
+    click(document.body);
+    expect(o.last('select').selection).toBeNull();
+  });
+
+  it('Shift+click adds to the selection and Escape clears it', () => {
+    click(el('a1'));
+    click(el('a2'), { shiftKey: true });
+    expect(info()).toContain('2 elements selected');
+    key('Escape');
+    expect(o.last('select').selection).toBeNull();
+  });
+
+  it('Shift+click on a selected element removes it', () => {
+    click(el('a1'));
+    click(el('a2'), { shiftKey: true });
+    click(el('a2'), { shiftKey: true });
+    expect(info()).not.toContain('selected');
+  });
+});
+
+describe('keyboard nudge and edit sending', () => {
+  it('nudges the selection by 10px with Shift+Arrow, previewing instantly', () => {
+    click(el('a1'));
+    key('ArrowRight', { shiftKey: true });
+    return settle().then(() => {
+      const m = o.last('edit');
+      expect(m.edit).toMatchObject({ kind: 'style', id: 'a1', tag: 'h1', props: { 'margin-left': '10px' } });
+      expect(m.hash).toBe('h0');
+      expect(el('a1').style.marginLeft).toBe('10px');
+    });
+  });
+
+  it('only writes the axis that moved', async () => {
+    click(el('a3')); // a <div>: no default browser margin to build on
+    key('ArrowDown');
+    await settle();
+    expect(o.last('edit').edit.props).toEqual({ 'margin-top': '1px' });
+  });
+
+  it('sends several selected elements as one batch', async () => {
+    click(el('a1'));
+    click(el('a2'), { shiftKey: true });
+    key('ArrowDown');
+    await settle();
+    const m = o.last('edits');
+    expect(m.edits.map((e: any) => e.id)).toEqual(['a1', 'a2']);
+    expect(o.all('edit')).toHaveLength(0);
+  });
+
+  it('rolls the preview back and shows the reason when the server refuses', async () => {
+    click(el('a1'));
+    key('ArrowRight');
+    await settle();
+    expect(el('a1').style.marginLeft).toBe('1px');
+    o.reply({ ok: false, error: 'No rule can be edited here' });
+    await settle();
+    expect(el('a1').style.marginLeft).toBe('');
+    expect(status()).toBe('No rule can be edited here');
+  });
+
+  it('edits are sent one at a time, each based on the hash the last one produced', async () => {
+    click(el('a1'));
+    key('ArrowRight');
+    key('ArrowRight');
+    await settle();
+    expect(o.all('edit')).toHaveLength(1); // the second waits for the first
+    await ok('h1');
+    expect(o.all('edit')).toHaveLength(2);
+    expect(o.last('edit').hash).toBe('h1');
+  });
+
+  it('a field in the Style tab edits the selection', async () => {
+    click(el('a1'));
+    const input = o.root.querySelector('input[data-prop="font-size"]') as HTMLInputElement;
+    input.value = '20';
+    input.dispatchEvent(new Event('change'));
+    await settle();
+    expect(o.last('edit').edit).toMatchObject({ props: { 'font-size': '20px' }, scope: 'auto' });
+  });
+
+  it('dragging a field label scrubs the value with a live preview and saves on release', async () => {
+    click(el('a1'));
+    const input = o.root.querySelector('input[data-prop="font-size"]') as HTMLInputElement;
+    const label = input.previousElementSibling as HTMLElement;
+    const start = parseFloat(input.value);
+    pointer('pointerdown', label, { clientX: 100, clientY: 5 });
+    pointer('pointermove', label, { clientX: 120, clientY: 5 });
+    expect(parseFloat(input.value)).toBe(start + 10); // 20px across = 10 steps
+    expect(el('a1').style.fontSize).toBe(`${start + 10}px`); // previewed on the page
+    expect(o.all('edit')).toHaveLength(0); // nothing written yet
+    pointer('pointerup', label, { clientX: 120, clientY: 5 });
+    await settle();
+    expect(o.last('edit').edit).toMatchObject({ props: { 'font-size': `${start + 10}px` } });
+  });
+
+  it('Shift multiplies a scrub by ten and a click on the label saves nothing', async () => {
+    click(el('a1'));
+    const input = o.root.querySelector('input[data-prop="font-size"]') as HTMLInputElement;
+    const label = input.previousElementSibling as HTMLElement;
+    const start = parseFloat(input.value);
+    pointer('pointerdown', label, { clientX: 0, clientY: 0 });
+    pointer('pointermove', label, { clientX: 10, clientY: 0, shiftKey: true });
+    expect(parseFloat(input.value)).toBe(start + 50);
+    pointer('pointerup', label, { clientX: 10, clientY: 0 });
+    await ok();
+    pointer('pointerdown', label, { clientX: 0, clientY: 0 });
+    pointer('pointerup', label, { clientX: 0, clientY: 0 });
+    await settle();
+    expect(o.all('edit')).toHaveLength(1);
+  });
+
+  it('arrow keys in a number field step it and save once typing pauses', async () => {
+    click(el('a1'));
+    const input = o.root.querySelector('input[data-prop="font-size"]') as HTMLInputElement;
+    const start = parseFloat(input.value);
+    key('ArrowUp', { shiftKey: true }, input);
+    key('ArrowUp', {}, input);
+    expect(parseFloat(input.value)).toBe(start + 11);
+    await new Promise((r) => setTimeout(r, 420));
+    expect(o.all('edit')).toHaveLength(1);
+    expect(o.last('edit').edit).toMatchObject({ props: { 'font-size': `${start + 11}px` } });
+  });
+
+  it('Ctrl+Z and Ctrl+Shift+Z ask the server to undo and redo', async () => {
+    key('z', { ctrlKey: true });
+    await settle();
+    expect(o.last('undo')).toBeTruthy();
+    await ok();
+    key('z', { ctrlKey: true, shiftKey: true });
+    await settle();
+    expect(o.last('redo')).toBeTruthy();
+  });
+});
+
+describe('dragging to move', () => {
+  it('moves by the distance dragged, using margins for flow elements', async () => {
+    pointer('pointerdown', el('a1'), { clientX: 10, clientY: 10 });
+    pointer('pointermove', el('a1'), { clientX: 30, clientY: 10 });
+    expect(el('a1').style.marginLeft).toBe('20px'); // live preview
+    pointer('pointerup', el('a1'), { clientX: 30, clientY: 10 });
+    await settle();
+    expect(o.last('edit').edit.props).toEqual({ 'margin-left': '20px' });
+  });
+
+  it('ignores a tiny wobble (under 4px) so a click is not a move', async () => {
+    pointer('pointerdown', el('a1'), { clientX: 10, clientY: 10 });
+    pointer('pointermove', el('a1'), { clientX: 12, clientY: 11 });
+    pointer('pointerup', el('a1'), { clientX: 12, clientY: 11 });
+    await settle();
+    expect(o.all('edit')).toHaveLength(0);
+  });
+
+  it('Shift locks the drag to the dominant axis', async () => {
+    pointer('pointerdown', el('a1'), { clientX: 0, clientY: 0 });
+    pointer('pointermove', el('a1'), { clientX: 30, clientY: 6, shiftKey: true });
+    pointer('pointerup', el('a1'), { clientX: 30, clientY: 6 });
+    await settle();
+    expect(o.last('edit').edit.props).toEqual({ 'margin-left': '30px' });
+  });
+
+  it('dragging an element of a multi-selection moves them all, and a plain click collapses the group', async () => {
+    click(el('a1'));
+    click(el('a2'), { shiftKey: true });
+    pointer('pointerdown', el('a1'), { clientX: 0, clientY: 0 });
+    pointer('pointermove', el('a1'), { clientX: 8, clientY: 0 });
+    pointer('pointerup', el('a1'), { clientX: 8, clientY: 0 });
+    await settle();
+    expect(o.last('edits').edits).toHaveLength(2);
+    await ok();
+    click(el('a1')); // click, no drag: narrow to just that element
+    expect(info()).not.toContain('selected');
+  });
+});
+
+describe('resize, padding and margin handles', () => {
+  const grab = (kind: string, from: [number, number], to: [number, number], init: Partial<MouseEventInit> = {}) => {
+    const g = handle(kind);
+    pointer('pointerdown', g, { clientX: from[0], clientY: from[1] });
+    pointer('pointermove', g, { clientX: to[0], clientY: to[1], ...init });
+    return () => pointer('pointerup', g, { clientX: to[0], clientY: to[1] });
+  };
+  beforeEach(() => {
+    el('a1').style.cssText = 'width: 200px; padding-left: 16px; margin-top: 0px';
+    layout(el('a1'), { x: 50, y: 50, width: 200, height: 100 });
+    click(el('a1'));
+    o.tick();
+  });
+
+  it('creates every grip', () => {
+    for (const kind of ['resize-e', 'resize-s', 'resize-se', 'pad-t', 'pad-r', 'pad-b', 'pad-l', 'mar-t', 'mar-r', 'mar-b', 'mar-l']) expect(handle(kind)).toBeTruthy();
+  });
+
+  it('resizes width from the right edge and snaps to the 4px grid', async () => {
+    const release = grab('resize-e', [250, 100], [280, 100]);
+    expect(o.root.querySelector('.tip')!.textContent).toBe('width 232px'); // 200 + 30 = 230 -> 232
+    release();
+    await settle();
+    expect(o.last('edit').edit.props).toEqual({ width: '232px' });
+  });
+
+  it('Shift gives 1px precision', async () => {
+    grab('resize-e', [250, 100], [280, 100], { shiftKey: true })();
+    await settle();
+    expect(o.last('edit').edit.props).toEqual({ width: '230px' });
+  });
+
+  it('the corner grip changes width and height together', async () => {
+    grab('resize-se', [250, 150], [262, 164])();
+    await settle();
+    expect(Object.keys(o.last('edit').edit.props).sort()).toEqual(['height', 'width']);
+  });
+
+  it('padding grows when dragged inward', async () => {
+    grab('pad-l', [66, 100], [74, 100])();
+    await settle();
+    expect(o.last('edit').edit.props).toEqual({ 'padding-left': '24px' });
+  });
+
+  it('margin grows when dragged outward', async () => {
+    grab('mar-t', [150, 36], [150, 20])();
+    await settle();
+    expect(o.last('edit').edit.props).toEqual({ 'margin-top': '16px' });
+  });
+
+  it('with several elements selected the same value is applied to all, as one batch', async () => {
+    click(el('a2'), { shiftKey: true });
+    layout(el('a2'), { x: 50, y: 200, width: 200, height: 100 });
+    o.tick();
+    grab('resize-e', [250, 250], [280, 250])();
+    await settle();
+    const m = o.last('edits');
+    expect(m.edits.map((e: any) => [e.id, e.props.width])).toEqual([['a1', expect.any(String)], ['a2', expect.any(String)]]);
+  });
+
+  it('a drag that never moves changes nothing', async () => {
+    const g = handle('resize-e');
+    pointer('pointerdown', g, { clientX: 250, clientY: 100 });
+    pointer('pointerup', g, { clientX: 250, clientY: 100 });
+    await settle();
+    expect(o.all('edit')).toHaveLength(0);
+  });
+});
+
+describe('inline text editing', () => {
+  it('commits on Enter with the new text', async () => {
+    pointer('dblclick', el('a2'));
+    expect(el('a2').getAttribute('contenteditable')).toBe('plaintext-only');
+    el('a2').textContent = 'Changed';
+    key('Enter', {}, el('a2'));
+    await settle();
+    expect(o.last('edit').edit).toMatchObject({ kind: 'text', id: 'a2', text: 'Changed' });
+    expect(el('a2').hasAttribute('contenteditable')).toBe(false);
+  });
+
+  it('Escape cancels and restores the original text', async () => {
+    pointer('dblclick', el('a2'));
+    el('a2').textContent = 'Oops';
+    key('Escape', {}, el('a2'));
+    await settle();
+    expect(el('a2').textContent).toBe('World');
+    expect(o.all('edit')).toHaveLength(0);
+  });
+
+  it('lets spaces be typed into a <button> label (Space would otherwise press the button)', () => {
+    document.body.insertAdjacentHTML('beforeend', '<button data-ascend-id="b1">Get</button>');
+    const b = el('b1');
+    let pressed = 0;
+    b.addEventListener('click', () => pressed++);
+    pointer('dblclick', b);
+    getSelection()!.collapse(b.firstChild, 3); // caret after "Get"
+    const down = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+    b.dispatchEvent(down);
+    const up = new KeyboardEvent('keyup', { key: ' ', bubbles: true, cancelable: true });
+    b.dispatchEvent(up);
+    expect(down.defaultPrevented).toBe(true);
+    expect(up.defaultPrevented).toBe(true); // so the browser does not "click" the button on key release
+    expect(b.textContent).toBe('Get ');
+    expect(pressed).toBe(0);
+  });
+
+  it('does not interfere with Space in an ordinary text element', () => {
+    pointer('dblclick', el('a2'));
+    const down = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+    el('a2').dispatchEvent(down);
+    expect(down.defaultPrevented).toBe(false); // the browser types the space itself
+  });
+
+  it('refuses an element that contains other elements', () => {
+    pointer('dblclick', el('a3'));
+    expect(status()).toContain('contains other elements');
+    expect(el('a3').hasAttribute('contenteditable')).toBe(false);
+  });
+
+  it('restores the text if the server cannot write it', async () => {
+    pointer('dblclick', el('a2'));
+    el('a2').textContent = 'Changed';
+    key('Enter', {}, el('a2'));
+    await settle();
+    o.reply({ ok: false, error: 'comes from an expression' });
+    await settle();
+    expect(el('a2').textContent).toBe('World');
+  });
+});
+
+describe('notes', () => {
+  const note = (over: object = {}) => ({
+    id: 'n1', kind: 'section', label: 'Hero', text: 'More space please', status: 'open', createdAt: '', updatedAt: '',
+    anchor: { tag: 'h1', classes: [], text: 'Hello', index: 0, page: '/' }, ...over,
+  });
+
+  it('lists notes from the server, counts the open ones, and pins them on the page', () => {
+    o.receive({ type: 'notes', notes: [note(), note({ id: 'n2', status: 'done', label: 'Done one' })] });
+    o.tick();
+    expect(o.root.querySelectorAll('.notes-list .note')).toHaveLength(2);
+    expect(o.root.querySelector('.tabs .count')!.textContent).toBe('1');
+    const pins = [...o.root.querySelectorAll('.pin')];
+    expect(pins.map((p) => p.textContent)).toEqual(['1', '2']);
+    expect(pins[1].classList.contains('done')).toBe(true);
+  });
+
+  it('flags a note whose element is not on the page', () => {
+    o.receive({ type: 'notes', notes: [note({ anchor: { tag: 'section', classes: ['gone'], text: '', index: 0, page: '/' } })] });
+    expect(o.root.querySelector('.note.missing')).toBeTruthy();
+  });
+
+  it('only shows this page\'s notes and mentions the rest', () => {
+    o.receive({ type: 'notes', notes: [note(), note({ id: 'n3', anchor: { tag: 'h1', classes: [], text: '', index: 0, page: '/other' } })] });
+    expect(o.root.querySelectorAll('.notes-list .note')).toHaveLength(1);
+    expect(o.root.querySelector('.notes-list')!.textContent).toContain('1 note on other pages');
+  });
+
+  it('N opens the composer for the selection; saving sends the note with a fingerprint anchor', async () => {
+    click(el('a1'));
+    key('n');
+    const composer = o.root.querySelector('form.composer') as HTMLFormElement;
+    expect(composer.hidden).toBe(false);
+    expect(o.root.querySelector('form.composer .target')!.textContent).toBe('Note on <h1>');
+    (composer.elements.namedItem('text') as HTMLTextAreaElement).value = 'Make it bigger';
+    (composer.elements.namedItem('label') as HTMLInputElement).value = 'Title';
+    composer.dispatchEvent(new Event('submit', { cancelable: true }));
+    await settle();
+    expect(o.last('note-save').note).toMatchObject({
+      kind: 'element', label: 'Title', text: 'Make it bigger', status: 'open',
+      anchor: { tag: 'h1', text: 'Hello', sid: 'a1', index: 0, page: '/' },
+    });
+  });
+
+  it('suggests "section" for a section-like element', () => {
+    document.body.insertAdjacentHTML('beforeend', '<section data-ascend-id="s1">s</section>');
+    click(el('s1'));
+    key('n');
+    expect((o.root.querySelector('form.composer select[name=kind]') as HTMLSelectElement).value).toBe('section');
+  });
+
+  it('does not save an empty note, and N does nothing with no selection', async () => {
+    key('n');
+    expect((o.root.querySelector('form.composer') as HTMLFormElement).hidden).toBe(true);
+    click(el('a1'));
+    key('n');
+    (o.root.querySelector('form.composer') as HTMLFormElement).dispatchEvent(new Event('submit', { cancelable: true }));
+    await settle();
+    expect(o.all('note-save')).toHaveLength(0);
+  });
+
+  it('Done and Delete send the right messages', async () => {
+    o.receive({ type: 'notes', notes: [note()] });
+    const buttons = [...o.root.querySelectorAll('.note .acts button')] as HTMLButtonElement[];
+    buttons.find((b) => b.textContent === 'Done')!.click();
+    await settle();
+    expect(o.last('note-save').note).toMatchObject({ id: 'n1', status: 'done' });
+    await ok();
+    buttons.find((b) => b.textContent === 'Delete')!.click();
+    await settle();
+    expect(o.last('note-delete').id).toBe('n1');
+  });
+});
+
+describe('questions from the MCP server', () => {
+  const answer = (id: string) => o.all('answer').find((m) => m.id === id)!;
+
+  it('says so when nothing is selected', () => {
+    o.receive({ type: 'ask', id: 'q1', ask: { kind: 'inspect' } });
+    expect(answer('q1')).toMatchObject({ ok: false });
+    expect(answer('q1').error).toContain('Nothing is selected');
+  });
+
+  it('describes the selected element: box, computed styles, overflow and parent', () => {
+    el('a1').style.cssText = 'font-size: 24px; margin-left: 8px';
+    layout(el('a1'), { x: 10, y: 20, width: 300, height: 40 });
+    click(el('a1'));
+    o.receive({ type: 'ask', id: 'q2', ask: { kind: 'inspect' } });
+    const a = answer('q2');
+    expect(a.ok).toBe(true);
+    expect(a.data).toMatchObject({ tag: 'h1', text: 'Hello', page: '/', box: { x: 10, y: 20, width: 300, height: 40 }, parent: { tag: 'body' } });
+    expect(a.data.typography['font-size']).toBe('24px');
+    expect(a.data.spacing['margin-left']).toBe('8px');
+  });
+
+  it('inspects the element a note is pinned to', () => {
+    o.receive({ type: 'notes', notes: [{ id: 'n9', kind: 'element', label: '', text: 'x', status: 'open', createdAt: '', updatedAt: '', anchor: { tag: 'p', classes: ['lede'], text: 'World', index: 0, page: '/' } }] });
+    o.receive({ type: 'ask', id: 'q3', ask: { kind: 'inspect', noteId: 'n9' } });
+    expect(answer('q3').data).toMatchObject({ tag: 'p', text: 'World', classes: ['lede'] });
+  });
+
+  it('explains when a note\'s element is not on this page, and rejects unknown questions', () => {
+    o.receive({ type: 'ask', id: 'q4', ask: { kind: 'inspect', noteId: 'missing' } });
+    expect(answer('q4').error).toContain('not on the page');
+    o.receive({ type: 'ask', id: 'q5', ask: { kind: 'format-disk' } });
+    expect(answer('q5')).toMatchObject({ ok: false, error: 'Unknown question' });
+  });
+
+  it('caps long class lists but reports the total', () => {
+    el('a1').className = Array.from({ length: 30 }, (_, i) => `c${i}`).join(' ');
+    click(el('a1'));
+    o.receive({ type: 'ask', id: 'q6', ask: { kind: 'inspect' } });
+    expect(answer('q6').data.classes).toHaveLength(12);
+    expect(answer('q6').data.classesTotal).toBe(30);
+  });
+});
+
+describe('Preview mode', () => {
+  it('stops selecting and moving so the page can be used normally', () => {
+    (o.root.querySelector('[data-mode=preview]') as HTMLButtonElement).click();
+    const before = o.all('select').length;
+    click(el('a1'));
+    expect(o.all('select')).toHaveLength(before);
+    key('ArrowRight');
+    expect(o.all('edit')).toHaveLength(0);
+  });
+});
+
+describe('dev-server mode references (component usage sites)', () => {
+  beforeEach(async () => {
+    o.destroy();
+    document.body.innerHTML = `
+      <button data-ascend-src="src/ui/button.tsx:5:4" data-ascend-use="src/app/page.tsx:12:6#Button">Go</button>
+      <li data-ascend-src="src/List.tsx:3:2">a</li><li data-ascend-src="src/List.tsx:3:2">b</li>`;
+    o = await loadOverlay({ mode: 'dev' });
+  });
+  const btn = () => document.querySelector('button')!;
+
+  it('addresses the usage site, and says which component and file in the panel', () => {
+    click(btn());
+    expect(o.last('select').selection).toEqual({ id: 'src/app/page.tsx:12:6#Button', tag: 'button' });
+    expect(info()).toContain('<Button> · page.tsx');
+  });
+
+  it('the file in the panel opens in an editor once the server has said where the project is', () => {
+    click(btn());
+    const link = () => o.root.querySelector('a.src') as HTMLAnchorElement;
+    expect(link().textContent).toBe('page.tsx:12');
+    expect(link().getAttribute('href')).toBeNull(); // the project root isn't known yet
+    o.receive({ type: 'info', root: '/home/me/app' });
+    expect(link().getAttribute('href')).toBe('vscode://file/home/me/app/src/app/page.tsx:12:6');
+    localStorage.setItem('ascend:editor', 'cursor');
+    o.receive({ type: 'info', root: '/home/me/app' });
+    expect(link().getAttribute('href')).toBe('cursor://file/home/me/app/src/app/page.tsx:12:6');
+    localStorage.removeItem('ascend:editor');
+  });
+
+  it('encodes characters in the project path that would end a URL path early', () => {
+    click(btn());
+    o.receive({ type: 'info', root: '/home/me/C# apps/50%/app' });
+    expect((o.root.querySelector('a.src') as HTMLAnchorElement).getAttribute('href')).toBe('vscode://file/home/me/C%23%20apps/50%25/app/src/app/page.tsx:12:6');
+  });
+
+  it('the copy button puts file:line on the clipboard', async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    click(btn());
+    (o.root.querySelector('.info .copy') as HTMLButtonElement).click();
+    await settle();
+    expect(writeText).toHaveBeenCalledWith('src/app/page.tsx:12');
+    expect(status()).toBe('Copied src/app/page.tsx:12');
+  });
+
+  it('edits go to the usage site', async () => {
+    click(btn());
+    key('ArrowRight');
+    await settle();
+    expect(o.last('edit').edit.id).toBe('src/app/page.tsx:12:6#Button');
+  });
+
+  it('text edits carry the host element as a fallback', async () => {
+    pointer('dblclick', btn());
+    btn().textContent = 'Start';
+    key('Enter', {}, btn());
+    await settle();
+    expect(o.last('edit').edit).toMatchObject({ kind: 'text', id: 'src/app/page.tsx:12:6#Button', fallback: 'src/ui/button.tsx:5:4' });
+  });
+
+  it('list items from one JSX line are one edit, and the status says how many share it', async () => {
+    const [a, b] = [...document.querySelectorAll('li')];
+    click(a);
+    click(b, { shiftKey: true });
+    key('ArrowDown');
+    await settle();
+    expect(o.all('edits')).toHaveLength(0);
+    expect(o.last('edit').edit.id).toBe('src/List.tsx:3:2');
+    await ok('h1', { target: 'class' });
+    expect(status()).toBe('Saved · Tailwind class · 2 elements share this JSX');
+  });
+
+  it('a note on a component records its usage site', async () => {
+    click(btn());
+    key('n');
+    const composer = o.root.querySelector('form.composer') as HTMLFormElement;
+    (composer.elements.namedItem('text') as HTMLTextAreaElement).value = 'Wider';
+    composer.dispatchEvent(new Event('submit', { cancelable: true }));
+    await settle();
+    expect(o.last('note-save').note).toMatchObject({ kind: 'component', anchor: { use: 'src/app/page.tsx:12:6#Button', src: 'src/ui/button.tsx:5:4' } });
+  });
+
+  it('does not stamp a synthetic id for notes in dev mode (the source tags are the anchor)', async () => {
+    click(btn());
+    key('n');
+    const composer = o.root.querySelector('form.composer') as HTMLFormElement;
+    (composer.elements.namedItem('text') as HTMLTextAreaElement).value = 'x';
+    composer.dispatchEvent(new Event('submit', { cancelable: true }));
+    await settle();
+    expect(o.last('note-save').note.anchor.sid).toBeUndefined();
+  });
+});
+
+describe('ascend_inspect overflow reporting', () => {
+  const ask = (id: string) => (o.receive({ type: 'ask', id, ask: { kind: 'inspect' } }), o.all('answer').find((m) => m.id === id)!.data.overflow);
+  const withScroll = (e: HTMLElement, scrollH: number, clientH: number) => {
+    Object.defineProperty(e, 'scrollHeight', { value: scrollH, configurable: true });
+    Object.defineProperty(e, 'clientHeight', { value: clientH, configurable: true });
+  };
+
+  it('does not call a few pixels of font-metric slack on a visible element "overflow"', () => {
+    withScroll(el('a1'), 99, 96); // a heading whose glyphs are 3px taller than its line-height
+    click(el('a1'));
+    expect(ask('o1')).toMatchObject({ setting: 'visible / visible', clipped: { x: false, y: false }, contentPastBoxPx: { y: 3 } });
+  });
+
+  it('reports content as clipped only when overflow hides it', () => {
+    el('a1').style.overflow = 'hidden';
+    withScroll(el('a1'), 140, 100);
+    click(el('a1'));
+    expect(ask('o2')).toMatchObject({ clipped: { y: true, x: false }, contentPastBoxPx: { y: 40 } });
+  });
+
+  it('a scrollable box counts as clipped too', () => {
+    el('a1').style.overflowY = 'auto';
+    withScroll(el('a1'), 400, 100);
+    click(el('a1'));
+    expect(ask('o3').clipped.y).toBe(true);
+  });
+});
+
+describe('panel position', () => {
+  const panelEl = () => o.root.querySelector('.panel') as HTMLElement;
+  const header = () => o.root.querySelector('header') as HTMLElement;
+
+  it('the header drags the panel, and the dock button snaps it back', () => {
+    pointer('pointerdown', header(), { clientX: 400, clientY: 20 });
+    pointer('pointermove', header(), { clientX: 300, clientY: 90 });
+    pointer('pointerup', header(), { clientX: 300, clientY: 90 });
+    expect(panelEl().style.right).toBe('auto');
+    expect(parseFloat(panelEl().style.left)).toBeGreaterThanOrEqual(8);
+    (o.root.querySelector('[data-act=dock]') as HTMLButtonElement).click();
+    expect(panelEl().style.left).toBe('');
+    expect(panelEl().style.right).toBe('');
+  });
+
+  it('dragging a button in the header does not move the panel', () => {
+    const btn = o.root.querySelector('[data-mode=preview]') as HTMLElement;
+    pointer('pointerdown', btn, { clientX: 5, clientY: 5 });
+    pointer('pointermove', btn, { clientX: 200, clientY: 200 });
+    expect(panelEl().style.right).not.toBe('auto');
+  });
+});
+
+describe('box-model spacing widget', () => {
+  const mini = (prop: string) => o.root.querySelector(`.boxm input[data-prop="${prop}"]`) as HTMLInputElement;
+
+  it('puts all eight margin and padding values on their sides of one box, each labelled', () => {
+    const props = ['top', 'right', 'bottom', 'left'].flatMap((s) => [`margin-${s}`, `padding-${s}`]);
+    for (const prop of props) expect(mini(prop), prop).toBeTruthy();
+    expect(mini('margin-top').getAttribute('aria-label')).toBe('Margin top, pixels');
+    expect(mini('padding-left').getAttribute('aria-label')).toBe('Padding left, pixels');
+    expect(o.root.querySelectorAll('.fields .grid')).toHaveLength(2); // typography and layout keep their rows
+  });
+
+  it('dragging a cell sideways scrubs it with a live preview and saves on release', async () => {
+    click(el('a1'));
+    const input = mini('padding-top');
+    const start = parseFloat(input.value);
+    pointer('pointerdown', input, { clientX: 50, clientY: 5 });
+    pointer('pointermove', input, { clientX: 66, clientY: 5 });
+    expect(parseFloat(input.value)).toBe(start + 8);
+    expect(el('a1').style.paddingTop).toBe(`${start + 8}px`);
+    pointer('pointerup', input, { clientX: 66, clientY: 5 });
+    await settle();
+    expect(o.last('edit').edit).toMatchObject({ props: { 'padding-top': `${start + 8}px` } });
+  });
+
+  it('a plain click on a cell edits the number instead of scrubbing', async () => {
+    click(el('a1'));
+    const input = mini('margin-left');
+    pointer('pointerdown', input, { clientX: 5, clientY: 5 });
+    pointer('pointerup', input, { clientX: 5, clientY: 5 });
+    await settle();
+    expect(o.all('edit')).toHaveLength(0);
+  });
+});
+
+describe('panel stays off the selection', () => {
+  const frame = async () => o.tick();
+  const panelEl = () => o.root.querySelector('.panel') as HTMLElement;
+  const rect = (left: number, right: number) => ({ left, right, top: 14, bottom: 600, width: right - left, height: 586, x: left, y: 14, toJSON() {} }) as DOMRect;
+
+  it('hops to the other side when the new selection sits under it', async () => {
+    panelEl().getBoundingClientRect = () => rect(750, 1010);
+    layout(el('a1'), { x: 600, y: 100, width: 300, height: 60 });
+    click(el('a1'));
+    await frame();
+    expect(panelEl().classList.contains('left')).toBe(true);
+  });
+
+  it('stays put when the selection is clear of it, or when the other side is no better', async () => {
+    panelEl().getBoundingClientRect = () => rect(750, 1010);
+    layout(el('a1'), { x: 100, y: 100, width: 200, height: 60 });
+    click(el('a1'));
+    await frame();
+    expect(panelEl().classList.contains('left')).toBe(false);
+    layout(el('a2'), { x: 10, y: 100, width: 1000, height: 60 }); // spans the page: both sides cover it equally
+    click(el('a2'));
+    await frame();
+    expect(panelEl().classList.contains('left')).toBe(false);
+  });
+
+  it('fades while an element is dragged and comes back after', () => {
+    pointer('pointerdown', el('a1'), { clientX: 10, clientY: 10 });
+    pointer('pointermove', el('a1'), { clientX: 40, clientY: 10 });
+    expect(panelEl().classList.contains('ghost')).toBe(true);
+    pointer('pointerup', el('a1'), { clientX: 40, clientY: 10 });
+    expect(panelEl().classList.contains('ghost')).toBe(false);
+  });
+});
+
+describe('panel fades during a handle drag too', () => {
+  it('fades while a grip is dragged and comes back on release', () => {
+    const panelEl = o.root.querySelector('.panel') as HTMLElement;
+    layout(el('a1'), { x: 100, y: 100, width: 200, height: 100 });
+    click(el('a1'));
+    o.tick();
+    const grip = o.root.querySelector('[data-kind="resize-e"]') as HTMLElement;
+    pointer('pointerdown', grip, { clientX: 300, clientY: 150 });
+    pointer('pointermove', grip, { clientX: 340, clientY: 150 });
+    expect(panelEl.classList.contains('ghost')).toBe(true);
+    pointer('pointerup', grip, { clientX: 340, clientY: 150 });
+    expect(panelEl.classList.contains('ghost')).toBe(false);
+  });
+});
+
+describe('panel accessibility', () => {
+  it('is a labelled region with a proper tablist, tabpanels and arrow-key navigation', () => {
+    expect(o.root.querySelector('.panel')!.getAttribute('role')).toBe('region');
+    const style = o.root.querySelector('[data-tab=style]') as HTMLElement;
+    const notes = o.root.querySelector('[data-tab=notes]') as HTMLElement;
+    expect(style.getAttribute('aria-controls')).toBe(o.root.querySelector('[data-pane=style]')!.id);
+    expect(o.root.querySelector('[data-pane=style]')!.getAttribute('role')).toBe('tabpanel');
+    expect([style.tabIndex, notes.tabIndex]).toEqual([0, -1]);
+    style.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    expect(notes.getAttribute('aria-selected')).toBe('true');
+    expect([style.tabIndex, notes.tabIndex]).toEqual([-1, 0]);
+    expect((o.root.querySelector('[data-pane=notes]') as HTMLElement).hidden).toBe(false);
+  });
+
+  it('every form control has an accessible name', () => {
+    const controls = [...o.root.querySelectorAll('input, select, textarea')] as HTMLInputElement[];
+    const unnamed = controls.filter((c) => !c.getAttribute('aria-label') && !c.closest('label')?.textContent?.trim());
+    expect(unnamed.map((c) => c.name || c.dataset.prop)).toEqual([]);
+  });
+});
+
+describe('toast with undo', () => {
+  const toast = () => o.root.querySelector('.toast') as HTMLElement;
+  const undoBtn = () => o.root.querySelector('.toast .undo') as HTMLButtonElement;
+
+  it('confirms a save with an Undo button that reverts it', async () => {
+    click(el('a1'));
+    key('ArrowRight');
+    await ok('h1');
+    expect(toast().hidden).toBe(false);
+    expect(status()).toContain('Saved');
+    expect(undoBtn().hidden).toBe(false);
+    undoBtn().click();
+    await settle();
+    expect(o.last('undo')).toBeTruthy();
+    expect(toast().hidden).toBe(true);
+  });
+
+  it('errors stay on screen until dismissed', async () => {
+    click(el('a1'));
+    key('ArrowRight');
+    await settle();
+    o.reply({ ok: false, error: 'Nope' });
+    await settle();
+    expect(toast().classList.contains('err')).toBe(true);
+    expect(undoBtn().hidden).toBe(true);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(toast().hidden).toBe(false);
+    (o.root.querySelector('[data-act=toast-x]') as HTMLButtonElement).click();
+    expect(toast().hidden).toBe(true);
+  });
+});
+
+describe('hex colour field', () => {
+  const hexBox = () => o.root.querySelector('input[data-hex="color"]') as HTMLInputElement;
+
+  it('normalises what you type and saves it', async () => {
+    click(el('a1'));
+    hexBox().value = 'D4401F';
+    hexBox().dispatchEvent(new Event('change'));
+    await settle();
+    expect(hexBox().value).toBe('#d4401f');
+    expect((o.root.querySelector('input[data-prop="color"]') as HTMLInputElement).value).toBe('#d4401f');
+    expect(o.last('edit').edit).toMatchObject({ props: { color: '#d4401f' } });
+  });
+
+  it('rejects text that is not a colour without sending anything', async () => {
+    click(el('a1'));
+    hexBox().value = 'nope';
+    hexBox().dispatchEvent(new Event('change'));
+    await settle();
+    expect(hexBox().getAttribute('aria-invalid')).toBe('true');
+    expect(o.all('edit')).toHaveLength(0);
+    expect(status()).toContain('hex colour');
+  });
+
+  it('normalizeHex handles shorthand, alpha and junk', () => {
+    expect(normalizeHex('#abc')).toBe('#aabbcc');
+    expect(normalizeHex('ABCD')).toBe('#aabbccdd');
+    expect(normalizeHex(' #AABBCC80 ')).toBe('#aabbcc80');
+    for (const bad of ['', '#12', '#12345', 'red', '#gggggg', '#1234567']) expect(normalizeHex(bad), bad).toBeNull();
+  });
+});
+
+describe('edit hints', () => {
+  it('tell the server the root font size, so on-scale values can be written as plain utilities', async () => {
+    document.documentElement.style.fontSize = '16px';
+    click(el('a1'));
+    key('ArrowRight');
+    await settle();
+    expect(o.last('edit').edit.hints).toMatchObject({ rootPx: 16 });
+    document.documentElement.style.fontSize = '';
+  });
+});

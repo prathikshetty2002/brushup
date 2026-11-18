@@ -1,0 +1,86 @@
+{
+  "name": "ascend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Visual canvas for editing agent-generated UI. Edits write back to the HTML/CSS; agent edits flow back to the canvas.",
+  "scripts": {
+    "ascend": "tsx src/cli.ts",
+    "build": "node scripts/build.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "demo": "tsx demo/record.ts",
+    "demo:claude": "tsx demo/record-claude.ts"
+  },
+  "dependencies": {
+    "@babel/parser": "^7.29.14",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "chokidar": "^4.0.3",
+    "magic-string": "^1.4.5",
+    "parse5": "^7.3.0",
+    "postcss": "^8.5.33",
+    "ws": "^8.23.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@babel/types": "^7.29.14",
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/ws": "^8.18.2",
+    "esbuild": "^0.28.2",
+    "jsdom": "^31.0.1",
+    "playwright-core": "^1.65.1",
+    "react": "^19.3.1",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0"
+  },
+  "exports": {
+    "./vite": {
+      "types": "./dist/vite.d.ts",
+      "import": "./dist/vite.js",
+      "require": "./dist/vite.cjs",
+      "default": "./dist/vite.js"
+    },
+    "./next": {
+      "types": "./dist/next.d.ts",
+      "import": "./dist/next.js",
+      "require": "./dist/next.cjs",
+      "default": "./dist/next.js"
+    },
+    "./next/script": {
+      "types": "./dist/next-script.d.ts",
+      "default": "./dist/next-script.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "license": "MIT",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "bin": {
+    "ascend": "./dist/cli.js",
+    "ascend-mcp": "./dist/mcp.js"
+  },
+  "peerDependencies": {
+    "next": ">=15.3",
+    "react": ">=18",
+    "vite": ">=5"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "next": {
+      "optional": true
+    },
+    "vite": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=20.9"
+  }
+}
