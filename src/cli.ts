@@ -14,9 +14,10 @@ if (args[0] === '--version' || args[0] === '-v') {
 if (args[0] === 'init') {
   const rest = args.slice(1);
   const mcp = rest.includes('--mcp');
+  const agents = rest.includes('--agents');
   const wire = !rest.includes('--no-wire');
   const root = path.resolve(rest.find((a) => !a.startsWith('--')) ?? '.');
-  const r = await initProject(root, { mcp, wire });
+  const r = await initProject(root, { mcp, wire, agents });
   console.log(`CLAUDE.md: ${r.claudeMd}   .gitignore: ${r.gitignore === 'absent' ? 'no .gitignore found' : r.gitignore}${r.mcp ? `   .mcp.json: ${r.mcp}` : ''}`);
   if (r.wire?.next) {
     console.log(`next.config: ${r.wire.next.config}   root layout / _document: ${r.wire.next.layout}`);
@@ -29,6 +30,12 @@ if (args[0] === 'init') {
   }
   if (r.mcp === 'invalid-json') console.log('.mcp.json is not valid JSON, so it was left alone. Add the server by hand: { "mcpServers": { "brushup": { "command": "npx", "args": ["brushup-mcp"] } } }');
   if (r.mcp) console.log('Claude Code asks you to approve project MCP servers the first time; approve "brushup".');
+  if (r.agents) {
+    console.log(`AGENTS.md: ${r.agents.agentsMd}   .cursor/mcp.json: ${r.agents.cursor}   (Codex, Cursor, Copilot and others read AGENTS.md)`);
+    if (r.agents.cursor === 'invalid-json') console.log('.cursor/mcp.json is not valid JSON, so it was left alone. Add the server by hand: { "mcpServers": { "brushup": { "command": "npx", "args": ["brushup-mcp"] } } }');
+    console.log('Codex keeps MCP servers in your user config, so run this once:   codex mcp add brushup -- npx brushup-mcp');
+    console.log('Gemini CLI: add  "mcpServers": { "brushup": { "command": "npx", "args": ["brushup-mcp"] } }  to .gemini/settings.json');
+  }
   console.log('Claude Code will now read .brushup/notes.md before changing UI. Pin notes on the canvas with N.');
   process.exit(0);
 }
@@ -38,7 +45,7 @@ const port = portFlag >= 0 ? Number(args.splice(portFlag, 2)[1]) : 4321;
 const file = args[0];
 
 if (!file || !Number.isInteger(port)) {
-  console.error('Usage: brushup <page.html> [--port 4321]\n       brushup init [project-folder] [--mcp] [--no-wire]   (set up a project: CLAUDE.md, Next/Vite wiring; --mcp registers the MCP server)');
+  console.error('Usage: brushup <page.html> [--port 4321]\n       brushup init [project-folder] [--mcp] [--agents] [--no-wire]   (set up a project: CLAUDE.md, Next/Vite wiring; --mcp registers the MCP server; --agents also sets up AGENTS.md and Cursor)');
   process.exit(1);
 }
 

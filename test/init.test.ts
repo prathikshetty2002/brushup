@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -60,5 +60,29 @@ describe('brushup init --mcp', () => {
 
   it('is off unless asked for', async () => {
     expect((await initProject(dir)).mcp).toBeUndefined();
+  });
+});
+
+describe('brushup init --agents', () => {
+  it('writes the rules block to AGENTS.md and the server to .cursor/mcp.json, beside what is there', async () => {
+    await writeFile(path.join(dir, 'AGENTS.md'), '# Rules\n\nBe nice.\n');
+    await mkdir(path.join(dir, '.cursor'));
+    await writeFile(path.join(dir, '.cursor', 'mcp.json'), JSON.stringify({ mcpServers: { other: { command: 'x' } } }));
+    const r = await initProject(dir, { agents: true, wire: false });
+    expect(r.agents).toEqual({ agentsMd: 'updated', cursor: 'updated' });
+    const md = await readFile(path.join(dir, 'AGENTS.md'), 'utf8');
+    expect(md.startsWith('# Rules\n\nBe nice.\n')).toBe(true);
+    expect(md).toContain('Brushup design notes');
+    const cfg = JSON.parse(await readFile(path.join(dir, '.cursor', 'mcp.json'), 'utf8'));
+    expect(Object.keys(cfg.mcpServers)).toEqual(['other', 'brushup']);
+  });
+
+  it('is idempotent, creates what is missing, and is off unless asked for', async () => {
+    expect((await initProject(dir, { agents: true, wire: false })).agents).toEqual({ agentsMd: 'created', cursor: 'created' });
+    expect((await initProject(dir, { agents: true, wire: false })).agents).toEqual({ agentsMd: 'unchanged', cursor: 'unchanged' });
+    await rm(path.join(dir, 'AGENTS.md'));
+    await rm(path.join(dir, '.cursor'), { recursive: true });
+    expect((await initProject(dir, { wire: false })).agents).toBeUndefined();
+    await expect(readFile(path.join(dir, 'AGENTS.md'), 'utf8')).rejects.toThrow();
   });
 });

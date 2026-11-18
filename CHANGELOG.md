@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **`brushup init --agents`** sets up other agents too: the Brushup instructions go into `AGENTS.md` (beside anything already there), the MCP server into `.cursor/mcp.json`, and it prints the one command for Codex and the snippet for Gemini CLI. Idempotent, and off unless asked for.
+
 ## 0.1.5
 
 - **The panel stays out of the way of what you select.** It re-checks after its fields have filled in, counts the element's handles and tag as part of the element, and when neither side of the page is clear (a full-width element) it shrinks into the free space above or below it, and when there's no room at all (a tall footer or section in a short window) it collapses to its header bar in the least-blocking corner. A chevron in the header collapses or expands it by hand.

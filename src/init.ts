@@ -35,13 +35,15 @@ export interface InitResult {
   gitignore: 'updated' | 'unchanged' | 'absent';
   /** Only set when `mcp` was requested. */
   mcp?: 'created' | 'updated' | 'unchanged' | 'invalid-json';
+  /** Only set when `agents` was requested: the rules file and MCP entry for other agents. */
+  agents?: { agentsMd: InitResult['claudeMd']; cursor: NonNullable<InitResult['mcp']> };
   /** The Next.js / Vite files hooked up (omitted with `wire: false`). */
   wire?: WireResult;
 }
 
-/** Register the Brushup MCP server in the project's `.mcp.json`, leaving every other server as it was. */
-async function initMcp(root: string): Promise<NonNullable<InitResult['mcp']>> {
-  const file = path.join(root, '.mcp.json');
+/** Register the Brushup MCP server in an `mcpServers` JSON file (`.mcp.json`, `.cursor/mcp.json`), leaving every other server as it was. */
+async function initMcp(file: string): Promise<NonNullable<InitResult['mcp']>> {
+  await mkdir(path.dirname(file), { recursive: true });
   const entry = { command: 'npx', args: ['brushup-mcp'] };
   if (!(await exists(file))) {
     await writeFile(file, JSON.stringify({ mcpServers: { brushup: entry } }, null, 2) + '\n');
@@ -59,28 +61,30 @@ async function initMcp(root: string): Promise<NonNullable<InitResult['mcp']>> {
   return 'updated';
 }
 
-/** Idempotent project setup: CLAUDE.md block, `.brushup/` in .gitignore, optional MCP entry, and the Next/Vite wiring. */
-export async function initProject(root: string, options: { mcp?: boolean; wire?: boolean } = {}): Promise<InitResult> {
+/** Put the Brushup block in an instructions file: create it, replace our block in place, or append. Everything else in the file is left alone. */
+async function upsertBlock(file: string): Promise<InitResult['claudeMd']> {
+  if (!(await exists(file))) {
+    await writeFile(file, CLAUDE_BLOCK);
+    return 'created';
+  }
+  const current = await readFile(file, 'utf8');
+  const start = current.indexOf(START);
+  const end = current.indexOf(END);
+  if (start >= 0 && end > start) {
+    const next = current.slice(0, start) + CLAUDE_BLOCK.trimEnd() + current.slice(end + END.length);
+    if (next === current) return 'unchanged';
+    await writeFile(file, next);
+    return 'updated';
+  }
+  await appendFile(file, (current.endsWith('\n') ? '\n' : '\n\n') + CLAUDE_BLOCK);
+  return 'updated';
+}
+
+/** Idempotent project setup: CLAUDE.md block, optional AGENTS.md and Cursor MCP entry, `.brushup/` in .gitignore, optional MCP entry, and the Next/Vite wiring. */
+export async function initProject(root: string, options: { mcp?: boolean; wire?: boolean; agents?: boolean } = {}): Promise<InitResult> {
   await mkdir(path.join(root, '.brushup'), { recursive: true });
 
-  const claude = path.join(root, 'CLAUDE.md');
-  let claudeMd: InitResult['claudeMd'];
-  if (!(await exists(claude))) {
-    await writeFile(claude, CLAUDE_BLOCK);
-    claudeMd = 'created';
-  } else {
-    const current = await readFile(claude, 'utf8');
-    const start = current.indexOf(START);
-    const end = current.indexOf(END);
-    if (start >= 0 && end > start) {
-      const next = current.slice(0, start) + CLAUDE_BLOCK.trimEnd() + current.slice(end + END.length);
-      claudeMd = next === current ? 'unchanged' : 'updated';
-      if (claudeMd === 'updated') await writeFile(claude, next);
-    } else {
-      await appendFile(claude, (current.endsWith('\n') ? '\n' : '\n\n') + CLAUDE_BLOCK);
-      claudeMd = 'updated';
-    }
-  }
+  const claudeMd = await upsertBlock(path.join(root, 'CLAUDE.md'));
 
   const gitignore = path.join(root, '.gitignore');
   let ignore: InitResult['gitignore'] = 'absent';
@@ -92,5 +96,6 @@ export async function initProject(root: string, options: { mcp?: boolean; wire?:
       ignore = 'updated';
     }
   }
-  return { claudeMd, gitignore: ignore, ...(options.mcp ? { mcp: await initMcp(root) } : {}), ...(options.wire === false ? {} : { wire: await wireProject(root) }) };
+  const agents = options.agents ? { agentsMd: await upsertBlock(path.join(root, 'AGENTS.md')), cursor: await initMcp(path.join(root, '.cursor', 'mcp.json')) } : undefined;
+  return { claudeMd, gitignore: ignore, ...(options.mcp ? { mcp: await initMcp(path.join(root, '.mcp.json')) } : {}), ...(agents ? { agents } : {}), ...(options.wire === false ? {} : { wire: await wireProject(root) }) };
 }

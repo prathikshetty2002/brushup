@@ -124,6 +124,7 @@ The files in `.brushup/` already work with any agent. The MCP server is the fast
 
 ```bash
 npx brushup init --mcp          # writes .mcp.json (other servers untouched); Claude Code asks you to approve it once
+npx brushup init --mcp --agents  # also: the same instructions in AGENTS.md (Codex, Cursor, Copilot…), the server in .cursor/mcp.json, and the exact command for Codex and the snippet for Gemini CLI
 # or, per user:  claude mcp add brushup -- npx brushup-mcp
 ```
 
