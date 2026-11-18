@@ -213,6 +213,15 @@ describe('DevProject decides how far to trust a position', () => {
     expect((await read()).split('\n').find((l) => l.includes('Intruder'))).toContain('marginLeft');
   });
 
+  it('accepts a root that is not spelled the way paths built from it are (forward slashes on Windows, a trailing dot segment)', async () => {
+    await writeFile(file(), page);
+    const tok = tokenAt(await render(), refOf(page, '<p className={on ?'));
+    const project = new DevProject(`${dir}${path.sep}src${path.sep}..`, { style: 'tailwind' });
+    expect(project.root).toBe(path.resolve(dir));
+    await project.edit(edit2(page, '<p className={on ?', tok));
+    expect((await read()).split('\n').find((l) => l.includes('>World<'))).toContain('marginLeft: 8');
+  });
+
   it('keeps the edit log free of the tokens', async () => {
     await writeFile(file(), page);
     const tok = tokenAt(await render(), refOf(page, '<p className={cn'));

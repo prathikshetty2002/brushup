@@ -64,11 +64,14 @@ export class DevProject extends FileSession {
   /** Per file: the hashes of every version we produced in an unbroken run of our own writes, and the latest. */
   private readonly own = new Map<string, { hashes: Set<string>; last: string }>();
 
-  constructor(
-    readonly root: string,
-    options: DevOptions = {},
-  ) {
+  readonly root: string;
+
+  constructor(root: string, options: DevOptions = {}) {
     super();
+    // Vite reports its root with forward slashes (`C:/proj`) on Windows; every path built from it later uses the
+    // platform separator, so compare against one normalised spelling or no edit is accepted.
+    this.root = path.resolve(root);
+    root = this.root;
     const mode = options.style ?? 'auto';
     this.tailwind = mode === 'tailwind' || (mode === 'auto' && dependsOnTailwind(root));
     this.scale = tailwindScale(root);
