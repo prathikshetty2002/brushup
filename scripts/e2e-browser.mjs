@@ -21,6 +21,11 @@ const port = 4400 + Math.floor(Math.random() * 400);
 const server = spawn('node', [path.resolve('dist/cli.js'), file, '--port', String(port)], { stdio: 'ignore' });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failed = 0;
+// A hung browser must fail the run, not hold it for hours.
+setTimeout(() => {
+  console.error(`FAIL [${name}] timed out after 150s`);
+  process.exit(2);
+}, 150_000).unref();
 const check = (label, ok, detail = '') => {
   console.log(`${ok ? 'ok  ' : 'FAIL'} [${name}] ${label}${ok || !detail ? '' : `: ${detail}`}`);
   if (!ok) failed++;

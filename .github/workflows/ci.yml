@@ -42,6 +42,7 @@ jobs:
   # The canvas in real browsers: select, edit in the panel, drag, edit text and undo, checking each lands in the file.
   browsers:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -54,8 +55,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      - run: npx playwright-core install --with-deps ${{ matrix.browser }}
-      - run: node scripts/e2e-browser.mjs ${{ matrix.browser }}
+      - name: Install ${{ matrix.browser }}
+        run: npx playwright-core install --with-deps ${{ matrix.browser }}
+      - name: Drive the canvas in ${{ matrix.browser }}
+        run: node scripts/e2e-browser.mjs ${{ matrix.browser }}
 
   # Windows and macOS: the full pipeline plus the packed package, since paths, line endings and shells differ.
   cross-os:
