@@ -1,10 +1,11 @@
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { annotate, mapHtml } from '../src/core/html-map';
 import { applyEdit } from '../src/core/patch';
 import { matches, parseSelector, specificity } from '../src/core/selector';
 import { EditError, type Edit } from '../src/core/edit-types';
 
-const ENTRY = '/site/index.html';
+const ENTRY = path.resolve('/site/index.html');
 
 const page = `<!doctype html>
 <html>
@@ -110,10 +111,11 @@ describe('style edits', () => {
   it('writes into a linked stylesheet', () => {
     const html = '<link rel="stylesheet" href="s.css"><h1 id="t">x</h1>';
     const css = '#t {\n  font-size: 40px;\n  color: #111;\n}\n';
-    const files = { [ENTRY]: html, '/site/s.css': css };
+    const sheet = path.resolve(path.dirname(ENTRY), 's.css'); // a real absolute path on this OS, as the server reads them
+    const files = { [ENTRY]: html, [sheet]: css };
     const id = idOf(html, (e) => e.tag === 'h1');
     const out = applyEdit(files, ENTRY, { kind: 'style', ...id, props: { 'font-size': '32px' } });
-    expect(out['/site/s.css']).toBe('#t {\n  font-size: 32px;\n  color: #111;\n}\n');
+    expect(out[sheet]).toBe('#t {\n  font-size: 32px;\n  color: #111;\n}\n');
     expect(out[ENTRY]).toBe(html);
   });
 
