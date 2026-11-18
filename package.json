@@ -1,16 +1,16 @@
 {
   "name": "brushup",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
-  "description": "Visual canvas for editing agent-generated UI. Edits write back to the HTML/CSS; agent edits flow back to the canvas.",
+  "description": "A visual canvas for touching up agent-generated UI on the page itself. Edits are written back to your HTML/CSS, React and Tailwind source, and Claude Code can read your notes over MCP.",
   "scripts": {
     "brushup": "tsx src/cli.ts",
     "build": "node scripts/build.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "demo": "tsx demo/record.ts",
-    "demo:claude": "tsx demo/record-claude.ts"
+    "demo:claude": "tsx demo/record-claude.ts",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
     "@babel/parser": "^7.29.14",
@@ -56,13 +56,37 @@
     "./package.json": "./package.json"
   },
   "license": "MIT",
+  "author": "prathikshetty2002",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/prathikshetty2002/brushup.git"
+  },
+  "homepage": "https://github.com/prathikshetty2002/brushup#readme",
+  "bugs": {
+    "url": "https://github.com/prathikshetty2002/brushup/issues"
+  },
+  "keywords": [
+    "visual-editor",
+    "ui",
+    "canvas",
+    "tailwind",
+    "tailwindcss",
+    "nextjs",
+    "react",
+    "vite",
+    "shadcn",
+    "mcp",
+    "claude-code",
+    "ai-agents",
+    "devtools"
+  ],
   "files": [
     "dist",
     "README.md"
   ],
   "bin": {
-    "brushup": "./dist/cli.js",
-    "brushup-mcp": "./dist/mcp.js"
+    "brushup": "dist/cli.js",
+    "brushup-mcp": "dist/mcp.js"
   },
   "peerDependencies": {
     "next": ">=15.3",
