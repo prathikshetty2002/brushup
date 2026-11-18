@@ -28,13 +28,13 @@ When your agent changes the code, the canvas updates in place.
 | | Tested | Notes |
 | --- | --- | --- |
 | Node | 26 locally; **20.9, 22 and 24 in CI** | Node 22 and 24 run the full test suite; Node 20.9 installs the packed package and exercises the commands, both module formats, the MCP server and the static server (the test tooling itself needs Node 22+) |
-| Next.js | 16.4 (Turbopack and webpack) | `>=15.3` is the lowest version with the stable `turbopack.rules` config |
+| Next.js | 16.4 and 15.5, each with Turbopack and webpack, App Router and Pages Router | `>=15.3` is the lowest version with the stable `turbopack.rules` config; Next 14 is untested |
 | Vite | 8 | plugin API is unchanged back to 5, untested |
 | React | 19 | |
-| Tailwind | 4 | v3 uses the same arbitrary-value classes, untested |
+| Tailwind | 4.3 and 3.4 | the installed version decides whether off-scale values become `ml-9.5` (v4) or `ml-[38px]` (v3) |
 | shadcn/ui | current Base UI version | Radix-based versions forward props the same way, untested |
 | Browser | Chrome | Firefox and Safari untested |
-| OS | Linux | macOS and Windows untested |
+| OS | Linux locally; Windows and macOS in CI | CI runs the whole test suite and the packed package on both; the canvas itself has only been driven by hand on Linux |
 
 ## Quick start (Next.js + Tailwind + shadcn/ui)
 
@@ -185,7 +185,6 @@ What it does not protect against: **other users or processes on the same machine
 - CSS-in-JS (styled-components, Emotion, vanilla-extract): their class names are generated at runtime, so there is no rule to find; elements styled that way get an inline style.
 - Resize handles on a flex item that sets `flex-basis` write `flex-basis` (a width would be ignored). When the page still refuses a size (a `max-width`, a `min-width`, `flex-grow`, a grid track, an inline element), the readout says why while you drag and the status says it again after saving; the class is still written.
 - MCP: no screenshot tool, no write tools for source (by design), and `brushup_inspect` answers one element at a time.
-- Tested on Linux only; Next.js tested on 16.4 + Turbopack (the webpack path is wired up but not exercised).
 
 ## License
 

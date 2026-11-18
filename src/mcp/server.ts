@@ -85,7 +85,10 @@ export function createServer(ctx: ToolContext) {
       description:
         'Ask the open Brushup canvas how an element actually renders: size and position, computed layout/spacing/typography/colors, whether its content is clipped (and how far content extends past the box), and its parent. ' +
         'Defaults to the selected element; pass note_id to inspect the element a note is pinned to. Needs the app running and open in a browser. Use it instead of asking the user for a screenshot.',
-      inputSchema: { note_id: z.string().optional().describe('Inspect the element this note is pinned to instead of the selection.') },
+      inputSchema: {
+        note_id: z.string().optional().describe('Inspect the element this note is pinned to instead of the selection.'),
+        note_ids: z.array(z.string()).max(10).optional().describe('Inspect the elements of several notes at once (up to 10); each answers separately.'),
+      },
       annotations: { ...readOnly, openWorldHint: false },
     },
     async (input) => asContent(await inspect(ctx, input)),

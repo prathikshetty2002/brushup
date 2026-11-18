@@ -104,6 +104,27 @@ describe('brushup_recent_edits', () => {
   });
 });
 
+describe('brushup_inspect with several notes', () => {
+  it('asks once per note and keeps each answer, including the ones that failed', async () => {
+    const asked: unknown[] = [];
+    const ask = async (q: unknown) => {
+      asked.push(q);
+      const id = (q as { noteId: string }).noteId;
+      return id === 'gone' ? { ok: false as const, error: 'That note\'s element is not on this page.' } : { ok: true as const, data: { tag: id } };
+    };
+    const r = await inspect({ root: dir, ask }, { note_ids: ['a', 'gone', 'b'] });
+    expect(r).toEqual({ ok: true, data: { count: 3, elements: [{ note_id: 'a', tag: 'a' }, { note_id: 'gone', error: "That note's element is not on this page." }, { note_id: 'b', tag: 'b' }] } });
+    expect(asked).toHaveLength(3);
+  });
+
+  it('caps the list at ten and still handles the single-note and selection forms', async () => {
+    const asked: unknown[] = [];
+    const ask = async (q: unknown) => (asked.push(q), { ok: true as const, data: {} });
+    await inspect({ root: dir, ask }, { note_ids: Array.from({ length: 14 }, (_, i) => `n${i}`) });
+    expect(asked).toHaveLength(10);
+  });
+});
+
 describe('brushup_inspect', () => {
   it('asks the canvas and returns its answer, passing the note id', async () => {
     const asked: unknown[] = [];

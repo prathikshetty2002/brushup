@@ -102,8 +102,20 @@ export async function getRecentEdits(ctx: ToolContext, input: { limit?: number }
   return ok({ count: entries.length, edits: entries });
 }
 
-/** How an element renders right now (computed styles, size, overflow), straight from the open canvas. */
-export async function inspect(ctx: ToolContext, input: { note_id?: string }): Promise<ToolResult> {
-  const answer = await (ctx.ask ?? ((q) => askCanvas(ctx.root, q)))({ kind: 'inspect', noteId: input.note_id });
+/**
+ * How an element renders right now (computed styles, size, overflow), straight from the open canvas. `note_ids`
+ * inspects several notes' elements in one call; each answers on its own, so one that can't be found doesn't hide the rest.
+ */
+export async function inspect(ctx: ToolContext, input: { note_id?: string; note_ids?: string[] }): Promise<ToolResult> {
+  const ask = ctx.ask ?? ((q) => askCanvas(ctx.root, q));
+  if (input.note_ids?.length) {
+    const elements = [];
+    for (const noteId of input.note_ids.slice(0, 10)) {
+      const answer = await ask({ kind: 'inspect', noteId });
+      elements.push(answer.ok ? { note_id: noteId, ...(answer.data as object) } : { note_id: noteId, error: answer.error });
+    }
+    return ok({ count: elements.length, elements });
+  }
+  const answer = await ask({ kind: 'inspect', noteId: input.note_id });
   return answer.ok ? ok(answer.data) : fail(answer.error);
 }
