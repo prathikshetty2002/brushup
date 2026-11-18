@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { instrument } from '../core/jsx';
+import { projectRelative } from '../core/paths';
 
 interface LoaderContext {
   resourcePath: string;
@@ -17,8 +18,8 @@ function brushupLoader(this: LoaderContext, source: string, map?: unknown) {
   const options = this.getOptions?.() ?? {};
   const file = this.resourcePath;
   const root = options.root ?? this.rootContext ?? process.cwd();
-  const rel = path.relative(root, file).split(path.sep).join('/');
-  if (!/\.[jt]sx$/.test(file) || rel.startsWith('..') || file.includes(`${path.sep}node_modules${path.sep}`)) {
+  const rel = projectRelative(root, file);
+  if (!/\.[jt]sx$/.test(file) || rel === null || file.includes(`${path.sep}node_modules${path.sep}`)) {
     return this.callback(null, source, map);
   }
   const out = instrument(source, file, rel, { usage: options.usage !== false });

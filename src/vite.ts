@@ -1,6 +1,6 @@
-import path from 'node:path';
 import type { Plugin } from 'vite';
 import { instrument } from './core/jsx';
+import { projectRelative } from './core/paths';
 import type { DevOptions } from './server/dev-project';
 import { startDevHost, type DevHost } from './server/dev-host';
 
@@ -35,8 +35,8 @@ export default function brushup(options: BrushupOptions = {}): Plugin {
     transform(code, id) {
       const file = id.split('?')[0];
       if (!/\.[jt]sx$/.test(file) || file.includes('/node_modules/')) return null;
-      const rel = path.relative(root, file).split(path.sep).join('/');
-      if (rel.startsWith('..')) return null;
+      const rel = projectRelative(root, file);
+      if (rel === null) return null;
       return instrument(code, file, rel) as { code: string; map: never } | null;
     },
 
