@@ -48,7 +48,7 @@ describe('contrast', () => {
     const issues = scanPage(document);
     expect(issues).toHaveLength(1);
     expect(issues[0]).toMatchObject({ rule: 'contrast', fix: { props: { color: expect.stringMatching(/^#[0-9a-f]{6}$/) } } });
-    expect(issues[0].title).toMatch(/needs 4\.5:1/);
+    expect(issues[0].title).toMatch(/Text is hard to read: contrast .*needs 4\.5:1/);
   });
 
   it('asks only 3:1 of large text', () => {
@@ -77,7 +77,7 @@ describe('tap targets', () => {
     box(document.getElementById('c')!, 50, 14);
     const issues = scanPage(document).filter((i) => i.rule === 'target-size');
     expect(issues).toHaveLength(1);
-    expect(issues[0].title).toBe('Small tap target: 16×16px');
+    expect(issues[0].title).toBe('Hard to tap: only 16×16px');
     expect(issues[0].fix?.props).toEqual({ 'min-width': '24px', 'min-height': '24px' });
   });
 });
@@ -104,7 +104,7 @@ describe('images, names and headings', () => {
     put('<h1>Title</h1><h3>Jumped</h3><h4>Fine after that</h4><h2>Back up is fine</h2>');
     const issues = scanPage(document).filter((i) => i.rule === 'heading-order');
     expect(issues).toHaveLength(1);
-    expect(issues[0].title).toBe('Heading level skips from 1 to 3');
+    expect(issues[0].title).toBe('Heading jumps from level 1 to 3');
   });
 });
 

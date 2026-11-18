@@ -95,7 +95,7 @@ npx brushup page.html          # http://127.0.0.1:4321
 | Edit text | Double-click an element that only contains text; Enter commits, Esc cancels |
 | Type, spacing, size | Fields in the **Style** tab |
 | Add a note | Select an element, press **N** (or Notes tab) |
-| Check accessibility | **A11y** tab: contrast, tap size, missing alt text, unnamed controls, heading order; one-click fixes where a style edit can do it |
+| Check accessibility | **Accessibility** tab: contrast, tap size, missing alt text, unnamed controls, heading order; one-click fixes where a style edit can do it |
 | Review what changed | **Changes** tab: the git diff against your last commit, files Brushup edited marked, Copy diff |
 | Undo / redo | `Ctrl/Cmd+Z`, `Ctrl/Cmd+Shift+Z` |
 | Use the page normally | Switch to **Preview** |

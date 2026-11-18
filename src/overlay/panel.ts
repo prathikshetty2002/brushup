@@ -353,7 +353,7 @@ export function createPanel(hooks: PanelHooks) {
           <button role="tab" id="brushup-tab-style" aria-controls="brushup-pane-style" data-tab="style" aria-selected="true" tabindex="0">Style</button>
           <button role="tab" id="brushup-tab-notes" aria-controls="brushup-pane-notes" data-tab="notes" aria-selected="false" tabindex="-1">Notes<span class="count" hidden></span></button>
           <button role="tab" id="brushup-tab-changes" aria-controls="brushup-pane-changes" data-tab="changes" aria-selected="false" tabindex="-1">Changes</button>
-          <button role="tab" id="brushup-tab-a11y" aria-controls="brushup-pane-a11y" data-tab="a11y" aria-selected="false" tabindex="-1" title="Accessibility" aria-label="Accessibility">A11y<span class="count" data-a11y-count hidden></span></button>
+          <button role="tab" id="brushup-tab-a11y" aria-controls="brushup-pane-a11y" data-tab="a11y" aria-selected="false" tabindex="-1" >Accessibility<span class="count" data-a11y-count hidden></span></button>
         </div>
         <div data-pane="style" role="tabpanel" id="brushup-pane-style" aria-labelledby="brushup-tab-style">
           <div class="info">Click an element to select it.</div>
@@ -366,9 +366,9 @@ export function createPanel(hooks: PanelHooks) {
           <div class="chlist"></div>
         </div>
         <div data-pane="a11y" role="tabpanel" id="brushup-pane-a11y" aria-labelledby="brushup-tab-a11y" hidden>
-          <div class="chbar"><span class="a11ysum">Not scanned yet</span><span class="sp"></span><button class="ghost" data-act="a11y-scan">Rescan</button></div>
+          <div class="chbar"><span class="a11ysum">Open this tab to check the page</span><span class="sp"></span><button class="ghost" data-act="a11y-scan">Check again</button></div>
           <div class="a11ylist"></div>
-          <p class="chnote a11ynote" hidden>Automated checks find some problems, not all. A clean result isn't a pass: try the page with a keyboard and a screen reader too.</p>
+          <p class="chnote a11ynote" hidden>These checks catch some accessibility problems, not all of them. A clean result doesn't mean the page is accessible: also try it with only a keyboard, and with a screen reader.</p>
         </div>
         <div data-pane="notes" role="tabpanel" id="brushup-pane-notes" aria-labelledby="brushup-tab-notes" hidden>
           <button class="add" data-act="add-note" disabled>Select an element to add a note</button>
@@ -874,21 +874,21 @@ export function createPanel(hooks: PanelHooks) {
   const a11yCount = $<HTMLElement>('[data-a11y-count]');
   const a11yNote = $<HTMLElement>('.a11ynote');
   root.querySelector('[data-act=a11y-scan]')!.addEventListener('click', () => {
-    a11ySum.textContent = 'Scanning…';
+    a11ySum.textContent = 'Checking…';
     hooks.onA11yScan();
   });
   const setA11y = (issues: A11yView[]) => {
     a11yList.textContent = '';
     a11yCount.hidden = issues.length === 0;
     a11yCount.textContent = String(issues.length);
-    a11ySum.textContent = issues.length ? `${issues.length} issue${issues.length === 1 ? '' : 's'} found` : 'No issues found';
+    a11ySum.textContent = issues.length ? `${issues.length} accessibility issue${issues.length === 1 ? '' : 's'}` : 'No accessibility issues found';
     a11yNote.hidden = false;
     for (const issue of issues) {
       const item = document.createElement('div');
       item.className = 'a11yitem';
       const rule = document.createElement('span');
       rule.className = 'rule';
-      rule.textContent = issue.rule.replace('-', ' ');
+      rule.textContent = ({ contrast: 'Contrast', 'target-size': 'Tap size', 'image-alt': 'Image', name: 'Name', 'heading-order': 'Headings' } as Record<string, string>)[issue.rule] ?? issue.rule;
       const title = document.createElement('b');
       title.textContent = issue.title; // text only: this comes from the page being inspected
       const detail = document.createElement('p');

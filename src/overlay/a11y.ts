@@ -183,9 +183,9 @@ export function scanPage(doc: Document, ignore: (el: Element) => boolean = () =>
     add({
       rule: 'contrast',
       el,
-      title: `Low contrast: ${ratio.toFixed(1)}:1 (needs ${required}:1)`,
-      detail: `${describe(el)} is ${hex(text)} on ${hex(bg)}, ${Math.round(size)}px${large ? ' (large text)' : ''}.`,
-      ...(better ? { fix: { label: `Use ${better}`, props: { color: better } } } : {}),
+      title: `Text is hard to read: contrast ${ratio.toFixed(1)}:1, needs ${required}:1`,
+      detail: `${describe(el)} is ${hex(text)} on ${hex(bg)} at ${Math.round(size)}px${large ? ' (large text)' : ''}. Low contrast is hard to read for many people, especially in bright light or with low vision.`,
+      ...(better ? { fix: { label: `Change color to ${better}`, props: { color: better } } } : {}),
     });
   }
 
@@ -202,9 +202,9 @@ export function scanPage(doc: Document, ignore: (el: Element) => boolean = () =>
     add({
       rule: 'target-size',
       el,
-      title: `Small tap target: ${Math.round(r.width)}×${Math.round(r.height)}px`,
-      detail: `${describe(el)} is smaller than ${MIN_TARGET}×${MIN_TARGET}px (WCAG 2.2, 2.5.8), which is hard to hit with a finger or pointer.`,
-      fix: { label: `Make it at least ${MIN_TARGET}px`, props: { 'min-width': `${MIN_TARGET}px`, 'min-height': `${MIN_TARGET}px` } },
+      title: `Hard to tap: only ${Math.round(r.width)}×${Math.round(r.height)}px`,
+      detail: `${describe(el)} is smaller than ${MIN_TARGET}×${MIN_TARGET}px, the minimum WCAG 2.2 asks for. Small targets are easy to miss with a finger or a shaky hand.`,
+      fix: { label: `Make it at least ${MIN_TARGET}×${MIN_TARGET}px`, props: { 'min-width': `${MIN_TARGET}px`, 'min-height': `${MIN_TARGET}px` } },
     });
   }
 
@@ -212,14 +212,14 @@ export function scanPage(doc: Document, ignore: (el: Element) => boolean = () =>
   for (const img of doc.body.querySelectorAll<HTMLImageElement>('img')) {
     if (issues.length >= MAX_ISSUES) break;
     if (skip(img) || img.hasAttribute('alt') || img.getAttribute('role') === 'presentation' || img.getAttribute('role') === 'none' || !shown(img)) continue;
-    add({ rule: 'image-alt', el: img, title: 'Image has no alt attribute', detail: `${describe(img)} needs alt text describing it, or alt="" if it is only decoration.` });
+    add({ rule: 'image-alt', el: img, title: 'Image is missing alt text', detail: `${describe(img)} has no alt attribute, so a screen reader can't say what it shows. Add a short description, or alt="" if it is only decoration.` });
   }
 
   // Controls with no accessible name.
   for (const el of doc.body.querySelectorAll<HTMLElement>('a[href], button, input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=reset]), select, textarea, [role=button]')) {
     if (issues.length >= MAX_ISSUES) break;
     if (skip(el) || !shown(el) || accessibleName(el)) continue;
-    add({ rule: 'name', el, title: 'No accessible name', detail: `${describe(el)} has no text, label or aria-label, so a screen reader can't say what it is.` });
+    add({ rule: 'name', el, title: 'Control has no name for screen readers', detail: `${describe(el)} has no text, label or aria-label, so a screen reader can only say "button" or "link". Give it a visible label or an aria-label.` });
   }
 
   // Heading levels that skip.
@@ -228,7 +228,7 @@ export function scanPage(doc: Document, ignore: (el: Element) => boolean = () =>
     if (skip(h) || !shown(h)) continue;
     const level = h.matches('[role=heading][aria-level]') ? parseInt(h.getAttribute('aria-level') ?? '', 10) : parseInt(h.tagName[1], 10);
     if (!Number.isFinite(level)) continue;
-    if (last && level > last + 1) add({ rule: 'heading-order', el: h, title: `Heading level skips from ${last} to ${level}`, detail: `${describe(h)} follows an h${last}. Screen reader users navigate by heading level, so skipped levels look like missing content.` });
+    if (last && level > last + 1) add({ rule: 'heading-order', el: h, title: `Heading jumps from level ${last} to ${level}`, detail: `${describe(h)} follows an h${last}. People using a screen reader move around by heading level, so a skipped level looks like missing content.` });
     last = level;
   }
   return issues;

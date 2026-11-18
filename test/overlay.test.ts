@@ -765,18 +765,20 @@ describe('the A11y tab', () => {
     faint();
     el('a2').title = '<img src=x onerror=alert(1)>';
     q('[data-tab=a11y]').click();
-    expect(q('.a11ysum').textContent).toBe('1 issue found');
-    expect(q('.a11yitem b').textContent).toMatch(/Low contrast/);
+    expect(q('.a11ysum').textContent).toBe('1 accessibility issue');
+    expect(q('.a11yitem b').textContent).toMatch(/Text is hard to read/);
+    expect(q('.a11yitem .rule').textContent).toBe('Contrast');
+    expect(q('[data-tab=a11y]').textContent).toContain('Accessibility');
     expect(q('[data-a11y-count]').textContent).toBe('1');
     expect(o.root.querySelector('.a11yitem img')).toBeNull();
-    expect(buttons()).toEqual([expect.stringMatching(/^Use #/), 'Locate', 'Send to Claude']);
+    expect(buttons()).toEqual([expect.stringMatching(/^Change color to #/), 'Locate', 'Send to Claude']);
   });
 
   it('says so when the page is clean, and never claims it is a pass', () => {
     q('[data-tab=a11y]').click();
-    expect(q('.a11ysum').textContent).toBe('No issues found');
+    expect(q('.a11ysum').textContent).toBe('No accessibility issues found');
     expect(q('.a11ynote').hidden).toBe(false);
-    expect(q('.a11ynote').textContent).toMatch(/isn't a pass/);
+    expect(q('.a11ynote').textContent).toMatch(/doesn't mean the page is accessible/);
   });
 
   it('Apply writes the fix as a normal style edit on the element', async () => {
@@ -797,7 +799,7 @@ describe('the A11y tab', () => {
     await settle();
     const saved = o.last('note-save').note;
     expect(saved.label).toBe('Accessibility');
-    expect(saved.text).toMatch(/^Accessibility: Low contrast/);
+    expect(saved.text).toMatch(/^Accessibility: Text is hard to read/);
     o.reply({ ok: true });
     await settle();
     o.receive({ type: 'notes', notes: [{ ...saved, id: 'n1', status: 'open', createdAt: '', updatedAt: '' }] });
@@ -809,7 +811,7 @@ describe('the A11y tab', () => {
 
   it('does not scan the overlay itself', () => {
     q('[data-tab=a11y]').click();
-    expect(q('.a11ysum').textContent).toBe('No issues found'); // the panel has icon-only buttons with labels, and none are reported
+    expect(q('.a11ysum').textContent).toBe('No accessibility issues found'); // the panel has icon-only buttons with labels, and none are reported
   });
 });
 
