@@ -11,13 +11,15 @@ const arg = process.argv[2];
 if (!arg) throw new Error('Usage: node scripts/smoke.mjs <brushup-*.tgz | npm spec>');
 const tarball = existsSync(path.resolve(arg)) ? path.resolve(arg) : arg;
 const dir = mkdtempSync(path.join(tmpdir(), 'brushup-smoke-'));
-const bin = (name) => path.join(dir, 'node_modules', '.bin', name);
+// Run the package's own entry files with node, so this works the same on Windows (where .bin entries are .cmd shims).
+const pkg = (file) => path.join(dir, 'node_modules', 'brushup', 'dist', file);
+const win = process.platform === 'win32';
 let failed = 0;
 const check = (name, ok, detail = '') => {
   console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${ok || !detail ? '' : `: ${detail}`}`);
   if (!ok) failed++;
 };
-const run = (cmd, args, opts = {}) => spawnSync(cmd, args, { cwd: dir, encoding: 'utf8', ...opts });
+const run = (cmd, args, opts = {}) => spawnSync(cmd, args, { cwd: dir, encoding: 'utf8', shell: win && cmd === 'npm', ...opts });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 console.log(`node ${process.version}, project ${dir}`);
@@ -25,10 +27,10 @@ run('npm', ['init', '-y']);
 const install = run('npm', ['install', tarball, '--no-audit', '--no-fund']);
 check(`npm install of ${path.basename(tarball)}`, install.status === 0, install.stderr.slice(-300));
 
-const usage = run(bin('brushup'), []);
+const usage = run('node', [pkg('cli.js')]);
 check('brushup prints usage', /Usage: brushup/.test(usage.stdout + usage.stderr));
 
-const init = run(bin('brushup'), ['init', '.', '--mcp']);
+const init = run('node', [pkg('cli.js'), 'init', '.', '--mcp']);
 check('brushup init writes CLAUDE.md and .mcp.json', init.status === 0 && existsSync(path.join(dir, 'CLAUDE.md')) && existsSync(path.join(dir, '.mcp.json')), init.stderr);
 check('.mcp.json registers the brushup server', existsSync(path.join(dir, '.mcp.json')) && 'brushup' in JSON.parse(readFileSync(path.join(dir, '.mcp.json'), 'utf8')).mcpServers);
 
@@ -38,7 +40,7 @@ const esm = run('node', ['--input-type=module', '-e', "import {withBrushup} from
 check('ESM: brushup/next and brushup/vite', esm.status === 0, esm.stderr.slice(-300));
 
 // MCP server over stdio
-const mcp = spawn(bin('brushup-mcp'), [], { cwd: dir, stdio: ['pipe', 'pipe', 'ignore'] });
+const mcp = spawn('node', [pkg('mcp.js')], { cwd: dir, stdio: ['pipe', 'pipe', 'ignore'] });
 let out = '';
 mcp.stdout.on('data', (d) => (out += d));
 const send = (m) => mcp.stdin.write(JSON.stringify(m) + '\n');
@@ -54,7 +56,7 @@ check('MCP server lists its 5 tools', tools.length === 5 && tools.every((t) => t
 
 // static server
 writeFileSync(path.join(dir, 'index.html'), '<!doctype html><title>t</title><h1>Hello</h1>');
-const server = spawn(bin('brushup'), ['index.html', '--port', '4399'], { cwd: dir, stdio: 'ignore' });
+const server = spawn('node', [pkg('cli.js'), 'index.html', '--port', '4399'], { cwd: dir, stdio: 'ignore' });
 let page = '';
 for (let i = 0; i < 20 && !page; i++) {
   await sleep(500);

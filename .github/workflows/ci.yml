@@ -38,6 +38,31 @@ jobs:
           name: tarball
           path: brushup-*.tgz
 
+  # Windows and macOS: the full pipeline plus the packed package, since paths, line endings and shells differ.
+  cross-os:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm run check:cjs
+      - run: npm pack
+      - run: node scripts/smoke.mjs (Get-ChildItem brushup-*.tgz | Select-Object -First 1).FullName
+        if: runner.os == 'Windows'
+        shell: pwsh
+      - run: node scripts/smoke.mjs brushup-*.tgz
+        if: runner.os != 'Windows'
+
   # The oldest Node the package claims (it is also Next 16's minimum): install the packed tarball and use it.
   node-20:
     needs: test
