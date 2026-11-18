@@ -66,6 +66,17 @@ describe('NotesStore', () => {
     expect(seen).toContain('done');
   });
 
+  it('watches from a project that has no .brushup folder yet, and sees an agent\'s reply to a note saved later', async () => {
+    const seen: (string | undefined)[] = [];
+    store.watch((list) => seen.push(...list.map((x) => x.reply)));
+    await new Promise((r) => setTimeout(r, 300));
+    const [n] = await store.save({ text: 'first', anchor }); // the canvas saves first; that write is ours and not echoed
+    await new Promise((r) => setTimeout(r, 500));
+    await new NotesStore(dir).save({ ...n, status: 'done', reply: 'Done in page.tsx' }); // an agent, in another process
+    await new Promise((r) => setTimeout(r, 1000));
+    expect(seen).toContain('Done in page.tsx');
+  });
+
   it('does not echo its own writes to the watcher', async () => {
     const seen: number[] = [];
     await store.save({ text: 'a', anchor });

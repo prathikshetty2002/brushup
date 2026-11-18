@@ -1072,7 +1072,7 @@ export function createPanel(hooks: PanelHooks) {
         head.append(num, name, kind);
         const text = document.createElement('p');
         text.textContent = n.text;
-        item.append(head);
+        item.append(head, text);
         if (!n.found) {
           const warn = document.createElement('p');
           warn.className = 'warn';
@@ -1097,7 +1097,7 @@ export function createPanel(hooks: PanelHooks) {
         act('Edit', () => api.openComposer(n));
         act(n.done ? 'Reopen' : 'Done', () => hooks.onNoteDone(n.id, !n.done));
         act('Delete', () => hooks.onNoteDelete(n.id));
-        item.append(text, acts);
+        item.append(acts);
         listEl.append(item);
       }
       if (notes.length && elsewhere) {

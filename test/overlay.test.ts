@@ -748,6 +748,8 @@ describe('the Changes tab', () => {
     o.receive({ type: 'notes', notes: [{ id: 'n1', kind: 'section', label: 'Hero', text: 'More space', status: 'done', reply: 'Added py-16 in page.tsx', createdAt: '', updatedAt: '', anchor: { tag: 'h1', classes: [], text: 'Hello', index: 0, page: '/' } }] });
     o.tick();
     expect(q('.note .reply').textContent).toBe('Claude: Added py-16 in page.tsx');
+    const parts = [...o.root.querySelectorAll('.note > *')].map((e) => e.className || e.tagName.toLowerCase());
+    expect(parts.indexOf('p')).toBeLessThan(parts.indexOf('reply')); // the note's own text first, then the reply
   });
 });
 

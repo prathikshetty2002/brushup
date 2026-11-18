@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { mkdirSync } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import chokidar from 'chokidar';
@@ -178,6 +179,7 @@ export class NotesStore {
   /** Calls `onChange` when notes.json changes on disk by someone else. */
   watch(onChange: (notes: Note[]) => void) {
     if (this.watcher) return;
+    mkdirSync(this.dir, { recursive: true }); // a watch on a folder that doesn't exist yet never fires, even once it does
     this.watcher = chokidar.watch(this.file, { ignoreInitial: true });
     const changed = async () => {
       try {
