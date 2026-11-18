@@ -18,6 +18,8 @@ if (!existsSync(tarball)) throw new Error('Pack Brushup first (npm pack) or pass
 
 const dir = mkdtempSync(path.join(tmpdir(), `brushup-dev-${framework}-`));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const control = process.env.BRUSHUP_E2E_CONTROL === '1'; // no Brushup wiring: does the bare app work on this machine?
+class Done extends Error {}
 let failed = 0;
 const check = (name, ok, detail = '') => {
   console.log(`${ok ? 'ok  ' : 'FAIL'} [${label}] ${name}${ok || !detail ? '' : `: ${detail}`}`);
@@ -62,16 +64,18 @@ let browser;
 let serverLog = '';
 let page;
 let failureDetails = () => '';
+let serverPort = 0;
 try {
   const install = run('npm', ['install', ...deps, tarball, '--no-audit', '--no-fund']);
   check('installs the framework and the packed Brushup', install.status === 0, install.stderr.slice(-400));
   if (install.status !== 0) throw new Error('install failed');
 
-  const init = run(process.execPath, [path.join(dir, 'node_modules/brushup/dist/cli.js'), 'init', '.', '--mcp']);
-  check('brushup init wires the project', init.status === 0 && /brushup/.test(readFileSync(path.join(dir, framework === 'vite' ? 'vite.config.js' : 'next.config.mjs'), 'utf8')), init.stdout + init.stderr);
-  if (framework === 'next') check('init puts <BrushupScript /> in the layout', readFileSync(path.join(dir, 'app/layout.jsx'), 'utf8').includes('BrushupScript'));
+  const init = control ? { status: 0, stdout: 'skipped (control run)', stderr: '' } : run(process.execPath, [path.join(dir, 'node_modules/brushup/dist/cli.js'), 'init', '.', '--mcp']);
+  check('brushup init wires the project', init.status === 0 && (control || /brushup/.test(readFileSync(path.join(dir, framework === 'vite' ? 'vite.config.js' : 'next.config.mjs'), 'utf8'))), init.stdout + init.stderr);
+  if (framework === 'next' && !control) check('init puts <BrushupScript /> in the layout', readFileSync(path.join(dir, 'app/layout.jsx'), 'utf8').includes('BrushupScript'));
 
   const port = 5200 + Math.floor(Math.random() * 600);
+  serverPort = port;
   const bin = framework === 'vite' ? path.join(dir, 'node_modules/vite/bin/vite.js') : path.join(dir, 'node_modules/next/dist/bin/next');
   server = spawn(process.execPath, framework === 'vite' ? [bin, '--port', String(port), '--strictPort', '--host', '127.0.0.1'] : [bin, 'dev', '--port', String(port), '--hostname', '127.0.0.1'], { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, NEXT_TELEMETRY_DISABLED: '1' } });
   for (const stream of [server.stdout, server.stderr]) stream.on('data', (d) => (serverLog = (serverLog + d).slice(-4000)));
@@ -91,6 +95,10 @@ try {
   });
   failureDetails = () => `console errors: ${consoleErrors.slice(0, 6).join(' | ')}`;
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 });
+  if (control) {
+    check('the bare app renders its heading (no Brushup involved)', await page.locator('h1').first().waitFor({ timeout: 30000 }).then(() => true, () => false));
+    throw new Done();
+  }
   await page.waitForSelector('#brushup-root', { state: 'attached', timeout: 120000 });
   check('the canvas loads', await page.locator('.panel').first().isVisible());
 
@@ -118,7 +126,8 @@ try {
   check('the rest of the file is untouched', html.includes('<p>A paragraph.</p>') && html.includes('Hello Brushup'));
   check('no page or hydration errors', errors.length === 0, errors.join('; ').slice(0, 300));
 } catch (err) {
-  check('run', false, String(err).slice(0, 400));
+  if (!(err instanceof Done)) check('run', false, String(err).slice(0, 400));
+  if (!(err instanceof Done)) {
   // What the browser and the dev server were doing when it went wrong.
   console.log(`--- diagnostics [${label}]`);
   console.log(failureDetails());
@@ -128,7 +137,14 @@ try {
   } catch {
     /* page already gone */
   }
+  if (framework === 'vite') {
+    for (const p of ['@vite/client', 'src/main.jsx']) {
+      const r = await fetch(`http://127.0.0.1:${serverPort}/${p}`).catch((e) => ({ status: String(e), headers: new Headers() }));
+      console.log(`GET /${p} -> ${r.status} content-type: ${r.headers.get('content-type')}`);
+    }
+  }
   console.log('dev server output (tail):\n' + serverLog.slice(-1500));
+  }
 } finally {
   await browser?.close().catch(() => {});
   if (server?.pid) {

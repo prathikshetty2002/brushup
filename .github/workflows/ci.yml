@@ -99,6 +99,25 @@ jobs:
       - name: ${{ matrix.framework }} dev server in ${{ matrix.browser }}
         run: node scripts/e2e-dev.mjs ${{ matrix.framework }} ${{ matrix.browser }}
 
+  # Control for the Windows Vite failures: the same bare app with no Brushup at all.
+  dev-server-control:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm pack
+      - run: npx playwright-core install chromium
+      - run: node scripts/e2e-dev.mjs vite chromium
+        env:
+          BRUSHUP_E2E_CONTROL: '1'
+
   # Windows and macOS: the full pipeline plus the packed package, since paths, line endings and shells differ.
   cross-os:
     runs-on: ${{ matrix.os }}
