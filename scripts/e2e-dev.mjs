@@ -4,7 +4,7 @@
 //   node scripts/e2e-dev.mjs vite|next chromium|firefox|webkit [path/to/brushup-*.tgz]
 // BRUSHUP_CHROME=/path/to/chrome uses an installed Chrome for `chromium`.
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { chromium, firefox, webkit } from 'playwright-core';
@@ -16,7 +16,9 @@ const label = `${framework}/${browserName}/${process.platform}`;
 const tarball = path.resolve(tarballArg ?? readdirSync('.').find((f) => /^brushup-.*\.tgz$/.test(f)) ?? '');
 if (!existsSync(tarball)) throw new Error('Pack Brushup first (npm pack) or pass the tarball path');
 
-const dir = mkdtempSync(path.join(tmpdir(), `brushup-dev-${framework}-`));
+// The long, real spelling of the temp folder: Windows hands out 8.3 short names (RUNNER~1) that Vite itself mishandles
+// (it serves its own /@vite/client as the HTML page), which has nothing to do with Brushup.
+const dir = mkdtempSync(path.join(realpathSync.native(tmpdir()), `brushup-dev-${framework}-`));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const control = process.env.BRUSHUP_E2E_CONTROL === '1'; // no Brushup wiring: does the bare app work on this machine?
 class Done extends Error {}
