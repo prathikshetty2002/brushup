@@ -50,7 +50,7 @@ describe('placesIn', () => {
   });
 
   it('skips tests, stories, node_modules and config files', () => {
-    for (const f of ['a.test.tsx', 'src/__tests__/a.tsx', 'x.stories.tsx', 'node_modules/p/i.js', 'package.json', 'tsconfig.json', 'e2e/a.ts', 'types.d.ts']) expect(SKIPPED.test(f), f).toBe(true);
+    for (const f of ['a.test.tsx', 'src/__tests__/a.tsx', 'x.stories.tsx', 'node_modules/p/i.js', 'package.json', 'tsconfig.json', 'e2e/a.ts', 'types.d.ts', 'next.config.js', 'tailwind.config.ts', '.eslintrc.json', 'src/.env']) expect(SKIPPED.test(f), f).toBe(true);
     for (const f of ['src/app/page.tsx', 'messages/en.json', 'src/data/items.ts']) expect(SKIPPED.test(f), f).toBe(false);
   });
 });

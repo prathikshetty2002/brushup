@@ -32,7 +32,7 @@ const MAX_ASK_BYTES = 8 * 1024;
  * authenticates the HTTP upgrade (host/origin/token) before handing it over.
  */
 export function createHub(session: FileSession, notes?: NotesStore) {
-  const wss = new WebSocketServer({ noServer: true });
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 4 * 1024 * 1024 });
   const clients = new Map<WebSocket, ClientInfo>();
   /** Questions an agent asked the canvas that are still waiting for an answer. */
   const pending = new Map<string, { agent: WebSocket; timer: NodeJS.Timeout }>();

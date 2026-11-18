@@ -16,7 +16,7 @@ const collapse = (v: string) => v.replace(/\s+/g, ' ').trim();
 const NOT_TEXT_ATTRS = new Set(['className', 'class', 'id', 'key', 'ref', 'style', 'htmlFor', 'type', 'href', 'src', 'rel', 'target', 'role', 'name', 'slot', 'variant', 'size', 'as', 'to', 'method', 'action', 'lang', 'dir']);
 
 export const TEXT_FILES = /\.(tsx|jsx|ts|js|mjs|cjs|json)$/;
-export const SKIPPED = /(^|[\\/])(node_modules|\.git|\.brushup|\.next|\.turbo|\.vite|dist|build|coverage|out|__tests__|__mocks__|__snapshots__|tests?|e2e|cypress|stories|fixtures?)([\\/]|$)|\.(test|spec|stories|d)\.[a-z]+$|(^|[\\/])(package|package-lock|tsconfig[^\\/]*|components)\.json$/i;
+export const SKIPPED = /(^|[\\/])(node_modules|\.git|\.brushup|\.next|\.turbo|\.vite|dist|build|coverage|out|__tests__|__mocks__|__snapshots__|tests?|e2e|cypress|stories|fixtures?)([\\/]|$)|\.(test|spec|stories|d)\.[a-z]+$|(^|[\\/])(package|package-lock|tsconfig[^\\/]*|components)\.json$|[^\\/]*\.config\.[a-z]+$|(^|[\\/])\.[^\\/]+$/i;
 
 /** A short, distinctive piece of `text` that must appear in any file that writes it (cheap pre-filter before parsing). */
 export const needleOf = (text: string): string | null => {

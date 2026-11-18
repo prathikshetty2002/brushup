@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Dark-mode contrast.** Text on the accent colour (Next, Save note, pins, the notes count) is dark in dark mode; white on the lighter vermilion was 3.1:1, now about 5.7:1.
+- **Find-by-value leaves config alone.** `*.config.*` files and dotfiles are never searched or rewritten.
+- **Message size cap.** The edit socket refuses messages over 4 MB.
 - **The shared-rule switch says what it does.** Its hint reads “Off: only this element changes” / “On: every element this rule matches changes”, and a tooltip explains both.
 
 ## 0.1.4
