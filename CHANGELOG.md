@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.4
 
 - **A guided tour.** The `?` button in the panel walks through selecting, moving and resizing, the style fields, text editing, notes, undo and preview, highlighting each part as it goes. A dot on the button marks it until it has been opened once.
 - **Panel polish.** The margin/padding widget has more room, selection handles draw behind the panel, and the shortcuts are an aligned list.
