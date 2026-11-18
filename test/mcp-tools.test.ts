@@ -37,7 +37,7 @@ describe('brushup_get_notes', () => {
   });
 
   it('is empty when there is no .brushup folder', async () => {
-    expect(((await getNotes(ctx(), {})) as any).data).toEqual({ count: 0, notes: [] });
+    expect(((await getNotes(ctx(), {})) as any).data).toMatchObject({ count: 0, notes: [] });
   });
 });
 
@@ -163,5 +163,76 @@ describe('token economy', () => {
     const el = ((await getNotes(ctx(), {})) as any).data.notes[0].element;
     expect(el.classes).toHaveLength(12);
     expect(el.classesTotal).toBe(40);
+  });
+});
+
+describe('the agent inbox', () => {
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  it('keeps a note\'s times when it is read, so since can tell what changed', async () => {
+    const store = new NotesStore(dir);
+    await store.save({ text: 'old', anchor: anchor() });
+    const first = ((await getNotes(ctx(), { status: 'all' })) as any).data;
+    await wait(20);
+    const second = ((await getNotes(ctx(), { status: 'all' })) as any).data;
+    expect(second.notes[0].updatedAt).toBe(first.notes[0].updatedAt);
+  });
+
+  it('returns only what is new since the cursor, and hands back the next cursor', async () => {
+    const store = new NotesStore(dir);
+    await store.save({ text: 'first', anchor: anchor() });
+    const a = ((await getNotes(ctx(), {})) as any).data;
+    expect(a.count).toBe(1);
+    expect(Date.parse(a.cursor)).not.toBeNaN();
+    await wait(20);
+    expect(((await getNotes(ctx(), { since: a.cursor })) as any).data.count).toBe(0);
+    await wait(20);
+    await store.save({ text: 'second', anchor: anchor() });
+    const b = ((await getNotes(ctx(), { since: a.cursor })) as any).data;
+    expect(b.notes.map((n: any) => n.note)).toEqual(['second']);
+  });
+
+  it('shows a note that was reopened or changed after the cursor', async () => {
+    const store = new NotesStore(dir);
+    const list = await store.save({ text: 'x', anchor: anchor() });
+    await updateNote(ctx(), { id: list[0].id, status: 'done' });
+    const c = ((await getNotes(ctx(), { status: 'all' })) as any).data.cursor;
+    await wait(20);
+    await updateNote(ctx(), { id: list[0].id, status: 'open' });
+    expect(((await getNotes(ctx(), { since: c })) as any).data.notes[0].status).toBe('open');
+  });
+
+  it('refuses a since that is not a date', async () => {
+    const r = await getNotes(ctx(), { since: 'yesterday-ish' });
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.error).toMatch(/ISO date-time/);
+  });
+
+  it('stores the agent\'s reply with the note, shows it, and keeps it when the canvas saves the note again', async () => {
+    const store = new NotesStore(dir);
+    const list = await store.save({ text: 'Make it wider', anchor: anchor() });
+    const r = await updateNote(ctx(), { id: list[0].id, status: 'done', reply: 'Widened to max-w-4xl in page.tsx' });
+    expect(r.ok && (r.data as any).reply).toBe('Widened to max-w-4xl in page.tsx');
+    expect(((await getNotes(ctx(), { status: 'done' })) as any).data.notes[0].reply).toBe('Widened to max-w-4xl in page.tsx');
+    const [note] = await store.list();
+    await store.save({ id: note.id, text: 'Make it wider, please', anchor: note.anchor, status: 'done' }); // the canvas edits the text
+    expect(((await getNotes(ctx(), { status: 'done' })) as any).data.notes[0].reply).toBe('Widened to max-w-4xl in page.tsx');
+    await updateNote(ctx(), { id: note.id, status: 'open' }); // reopening without a reply keeps the old one
+    expect(((await getNotes(ctx(), { status: 'all' })) as any).data.notes[0].reply).toBe('Widened to max-w-4xl in page.tsx');
+  });
+
+  it('marks manual edits locked, filters by since, and says what locked means', async () => {
+    await mkdir(path.join(dir, '.brushup'));
+    const old = { at: '2026-01-01T00:00:00.000Z', edit: { kind: 'text', id: 'a.tsx:1:1', text: 'Old' }, files: ['a.tsx'] };
+    const fresh = { at: new Date(Date.now() + 5000).toISOString(), edit: { kind: 'style', id: 'a.tsx:2:2', props: { width: '10px' } }, files: ['a.tsx'] };
+    const undone = { at: new Date(Date.now() + 6000).toISOString(), undo: ['a.tsx'] };
+    await writeFile(path.join(dir, '.brushup', 'edits.jsonl'), [old, fresh, undone].map((e) => JSON.stringify(e)).join('\n') + '\n');
+    const all = ((await getRecentEdits(ctx(), {})) as any).data;
+    expect(all.rule).toMatch(/do not revert/);
+    expect(all.edits.map((e: any) => [e.action, e.locked])).toEqual([['undo', false], ['edit', true], ['edit', true]]);
+    const recent = ((await getRecentEdits(ctx(), { since: '2026-06-01T00:00:00Z' })) as any).data;
+    expect(recent.edits).toHaveLength(2);
+    expect(Date.parse(recent.cursor)).not.toBeNaN();
+    expect((await getRecentEdits(ctx(), { since: 'nope' })).ok).toBe(false);
   });
 });

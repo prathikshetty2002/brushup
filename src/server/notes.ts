@@ -33,6 +33,8 @@ export interface Note {
   text: string;
   anchor: Anchor;
   status: 'open' | 'done';
+  /** What the agent says it did, set when it marks the note done (max 500 chars). */
+  reply?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -68,6 +70,7 @@ export function sanitizeNote(raw: unknown, existing?: Note): Note | null {
       page: clip(a.page || '/', 300),
     },
     status: r.status === 'done' ? 'done' : 'open',
+    ...(clip(r.reply ?? existing?.reply, 500).trim() ? { reply: clip(r.reply ?? existing?.reply, 500).trim() } : {}),
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   };
@@ -127,7 +130,16 @@ export class NotesStore {
   async list(): Promise<Note[]> {
     try {
       const parsed = JSON.parse(await readFile(this.file, 'utf8'));
-      return Array.isArray(parsed) ? parsed.map((n) => sanitizeNote(n, n)).filter((n): n is Note => !!n && !!n.id) : [];
+      // sanitizeNote stamps "now"; reading must not, or `since` could never tell what changed.
+      const stamp = (v: unknown, fallback: string) => (typeof v === 'string' && !Number.isNaN(Date.parse(v)) ? v : fallback);
+      return Array.isArray(parsed)
+        ? parsed
+            .map((n) => {
+              const clean = sanitizeNote(n, n);
+              return clean && { ...clean, createdAt: stamp(n?.createdAt, clean.createdAt), updatedAt: stamp(n?.updatedAt, clean.updatedAt) };
+            })
+            .filter((n): n is Note => !!n && !!n.id)
+        : [];
     } catch {
       return [];
     }

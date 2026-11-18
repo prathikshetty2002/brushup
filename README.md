@@ -130,10 +130,10 @@ npx brushup init --mcp --agents  # also: the same instructions in AGENTS.md (Cod
 
 | Tool | What it gives Claude |
 | --- | --- |
-| `brushup_get_notes` | Your pinned notes (open by default), each with the file and line, the component usage site, the element's classes/text, and the pin number you see on the canvas |
-| `brushup_update_note` | Mark a note done or reopen it. The only write: it changes `.brushup/notes.json`, never your source |
+| `brushup_get_notes` | Your pinned notes (open by default), each with the file and line, the component usage site, the element's classes/text, and the pin number you see on the canvas. `since` returns only what is new, and the answer carries the `cursor` to pass next time |
+| `brushup_update_note` | Mark a note done or reopen it, with a one-line `reply` saying what Claude did. The only write: it changes `.brushup/notes.json`, never your source |
 | `brushup_get_selection` | The element you have selected right now, to resolve "this" |
-| `brushup_recent_edits` | Your latest manual tweaks (newest first, batches flattened) so Claude keeps them |
+| `brushup_recent_edits` | Your latest manual tweaks (newest first, batches flattened) so Claude keeps them. Each is marked `locked` (made on purpose, don't revert it), and `since` works here too |
 | `brushup_inspect` | How the selected element, or the element a note is pinned to, renders **right now**: position and size, computed layout / spacing / typography / colours, whether it overflows, its parent. Needs the app running and open in a browser |
 
 Everything except `brushup_update_note` is read-only. Claude still changes your code with its normal file tools.

@@ -26,6 +26,7 @@ function describeNote(n: Note, number: number) {
     name: n.label || undefined,
     note: n.text,
     status: n.status,
+    reply: n.reply,
     page: n.anchor.page,
     where: {
       component: n.anchor.use ? `<${n.anchor.use.split('#')[1]}> used at ${n.anchor.use.split('#')[0]}` : undefined,
@@ -33,26 +34,41 @@ function describeNote(n: Note, number: number) {
     },
     element: { tag: n.anchor.tag, classes: n.anchor.classes.slice(0, 12), classesTotal: n.anchor.classes.length, text: n.anchor.text || undefined },
     createdAt: n.createdAt,
+    updatedAt: n.updatedAt,
   };
 }
 
-/** Notes the user pinned on the canvas, with where each lives in source. */
-export async function getNotes(ctx: ToolContext, input: { status?: 'open' | 'done' | 'all'; page?: string }): Promise<ToolResult> {
+/** A `since` cursor from the caller: an ISO time, or an error message. */
+function parseSince(since?: string): { at: number } | { error: string } {
+  if (since === undefined) return { at: -Infinity };
+  const at = Date.parse(since);
+  return Number.isNaN(at) ? { error: `"since" must be an ISO date-time such as 2026-01-31T09:30:00Z. Pass the "cursor" a previous call returned.` } : { at };
+}
+
+/**
+ * Notes the user pinned on the canvas, with where each lives in source. `since` returns only notes created or changed
+ * after that time, and the `cursor` in the answer is what to pass next time, so an agent never re-reads what it has seen.
+ */
+export async function getNotes(ctx: ToolContext, input: { status?: 'open' | 'done' | 'all'; page?: string; since?: string }): Promise<ToolResult> {
+  const since = parseSince(input.since);
+  if ('error' in since) return fail(since.error);
+  const cursor = new Date().toISOString();
   const all = await new NotesStore(ctx.root).list();
   const want = input.status ?? 'open';
   const notes = all
-    .map((n, i) => describeNote(n, i + 1))
-    .filter((n) => (want === 'all' || n.status === want) && (!input.page || n.page === input.page));
-  return ok({ count: notes.length, notes });
+    .map((n, i) => ({ n, view: describeNote(n, i + 1) }))
+    .filter(({ n, view }) => (want === 'all' || view.status === want) && (!input.page || view.page === input.page) && Date.parse(n.updatedAt) > since.at)
+    .map(({ view }) => view);
+  return ok({ count: notes.length, cursor, notes });
 }
 
-/** Mark a note done (or reopen it). Only `.brushup/notes.json` changes. */
-export async function updateNote(ctx: ToolContext, input: { id: string; status: 'open' | 'done' }): Promise<ToolResult> {
+/** Mark a note done (or reopen it), optionally saying what was done. Only `.brushup/notes.json` changes. */
+export async function updateNote(ctx: ToolContext, input: { id: string; status: 'open' | 'done'; reply?: string }): Promise<ToolResult> {
   const store = new NotesStore(ctx.root);
   const note = (await store.list()).find((n) => n.id === input.id);
   if (!note) return fail(`No note with id ${input.id}. Use brushup_get_notes to see the ids.`);
-  await store.save({ ...note, status: input.status });
-  return ok({ id: note.id, status: input.status });
+  const saved = (await store.save({ ...note, status: input.status, reply: input.reply ?? note.reply })).find((n) => n.id === note.id);
+  return ok({ id: note.id, status: input.status, reply: saved?.reply });
 }
 
 /** The element currently selected on the canvas, as last written by the canvas. */
@@ -78,7 +94,10 @@ const summarize = (e: LoggedEdit) =>
   e.kind === 'text' ? { target: shortRef(e.id), change: `text → "${(e.text ?? '').slice(0, 80)}"` } : { target: shortRef(e.id), change: Object.entries(e.props ?? {}).map(([k, v]) => `${k}: ${v}`).join('; ') };
 
 /** The user's recent manual edits on the canvas. Agents should keep these, not revert them. */
-export async function getRecentEdits(ctx: ToolContext, input: { limit?: number }): Promise<ToolResult> {
+export async function getRecentEdits(ctx: ToolContext, input: { limit?: number; since?: string }): Promise<ToolResult> {
+  const since = parseSince(input.since);
+  if ('error' in since) return fail(since.error);
+  const cursor = new Date().toISOString();
   const limit = Math.min(Math.max(Math.floor(input.limit ?? 10), 1), 50);
   let lines: string[] = [];
   try {
@@ -92,14 +111,14 @@ export async function getRecentEdits(ctx: ToolContext, input: { limit?: number }
         const e = JSON.parse(line);
         const action = e.undo ? 'undo' : e.redo ? 'redo' : 'edit';
         const edits: LoggedEdit[] = e.edits ?? (e.edit ? [e.edit] : []);
-        return { at: e.at, action, files: e.files ?? e.undo ?? e.redo ?? [], changes: edits.map(summarize) };
+        return { at: e.at, action, locked: action !== 'undo', files: e.files ?? e.undo ?? e.redo ?? [], changes: edits.map(summarize) };
       } catch {
         return null; // a corrupt line must not use up the limit
       }
     })
-    .filter((e): e is NonNullable<typeof e> => e !== null);
+    .filter((e): e is NonNullable<typeof e> => e !== null && Date.parse(e.at) > since.at);
   const entries = parsed.slice(-limit).reverse(); // newest first
-  return ok({ count: entries.length, edits: entries });
+  return ok({ count: entries.length, cursor, rule: 'Edits marked locked were made by the user on purpose and are already in source. Keep them; do not revert, overwrite or redo them.', edits: entries });
 }
 
 /**

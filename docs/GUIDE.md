@@ -141,10 +141,10 @@ You can also ask about a note's element without selecting it: *"Inspect the elem
 
 | Tool | Gives Claude | Writes |
 | --- | --- | --- |
-| `brushup_get_notes` | Your notes (open by default): text, file and line, component usage site, classes, the pin number you see | nothing |
-| `brushup_update_note` | marks a note done or reopens it | `.brushup/notes.json` only |
+| `brushup_get_notes` | Your notes (open by default): text, file and line, component usage site, classes, the pin number you see; `since` returns only what is new | nothing |
+| `brushup_update_note` | marks a note done or reopens it, with a one-line reply on what was done | `.brushup/notes.json` only |
 | `brushup_get_selection` | the element you have selected right now | nothing |
-| `brushup_recent_edits` | your latest manual tweaks, newest first, so Claude keeps them | nothing |
+| `brushup_recent_edits` | your latest manual tweaks, newest first, so Claude keeps them (each marked locked); `since` works here too | nothing |
 | `brushup_inspect` | how the selected (or a note's) element renders right now | nothing |
 
 Claude still changes your code with its normal file tools. The `CLAUDE.md` block tells it to keep your manual edits, not to redo trivial tweaks, and to use these tools when available. In the demo's second half, Claude's own summary says it "left your manual canvas edits alone".

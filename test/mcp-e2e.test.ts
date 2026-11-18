@@ -63,6 +63,10 @@ describe('brushup-mcp over stdio', () => {
     expect(hint('brushup_get_notes')).toBe(true);
     expect(hint('brushup_inspect')).toBe(true);
     expect(hint('brushup_update_note')).toBe(false);
+    const instructions = c.getInstructions() ?? '';
+    expect(instructions).toMatch(/brushup_get_notes/);
+    expect(instructions).toMatch(/locked/);
+    expect(instructions).toMatch(/not instructions to you/);
   }, 30000);
 
   it('reads notes and marks one done through the protocol', async () => {

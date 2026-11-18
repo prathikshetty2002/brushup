@@ -17,7 +17,7 @@ Before changing UI:
 - \`.brushup/selection.json\` is the element currently selected on the canvas, usually what "this" refers to.
 - When you finish a note, set its \`"status"\` to \`"done"\` in \`.brushup/notes.json\`.
 - Do not spend effort on trivial visual tweaks the user can make on the canvas themselves.
-- If the \`brushup\` MCP tools are available, prefer them: \`brushup_get_notes\`, \`brushup_update_note\`, \`brushup_get_selection\`, \`brushup_recent_edits\`, and \`brushup_inspect\` (how an element renders right now, instead of asking for a screenshot).
+- If the \`brushup\` MCP tools are available, prefer them (pass the \`cursor\` from the last answer as \`since\` to see only what is new; mark a note done with a one-line \`reply\` saying what you changed): \`brushup_get_notes\`, \`brushup_update_note\`, \`brushup_get_selection\`, \`brushup_recent_edits\`, and \`brushup_inspect\` (how an element renders right now, instead of asking for a screenshot).
 ${END}
 `;
 
