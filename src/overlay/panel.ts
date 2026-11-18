@@ -159,6 +159,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .shared input { appearance: none; -webkit-appearance: none; flex: none; width: 30px; height: 18px; margin-top: 1px; padding: 0; border-radius: 2px; background: var(--raise-2); border: 0; position: relative; cursor: pointer; }
 .shared input::after { content: ''; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 1px; background: var(--bg); transition: transform .12s; }
 .shared input:checked { background: var(--accent); } .shared input:checked::after { transform: translateX(12px); background: #fff; }
+.keys { margin: 14px 0 0; padding-top: 10px; border-top: 1px solid var(--line); display: grid; gap: 6px; color: var(--faint); font-size: 11.5px; }
+.keys div { display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: 8px; } .keys dt, .keys dd { margin: 0; } .keys kbd { margin: 0; }
 .hint { margin: 12px 0 0; color: var(--faint); font-size: 10.5px; line-height: 2; }
 kbd { white-space: nowrap; font: 500 11px/1 var(--mono); padding: 2px 5px; border-radius: 2px; border: 1px solid var(--line); color: var(--muted); margin: 0 1px; }
 .add { width: 100%; border: 1px dashed var(--accent); border-radius: 2px; color: var(--accent); padding: 8px; font-weight: 500; }
@@ -307,7 +309,7 @@ export function createPanel(hooks: PanelHooks) {
           <div class="info">Click an element to select it.</div>
           <div class="fields" hidden></div>
           <label class="shared" hidden><input type="checkbox" /><span>Edit the shared CSS rule, affecting every element it matches</span></label>
-          <p class="hint"><kbd>drag</kbd> move &nbsp;<kbd>↑↓←→</kbd> nudge <kbd>⇧</kbd> ×10 &nbsp;<kbd>dbl-click</kbd> edit text &nbsp;<kbd>N</kbd> note &nbsp;<kbd>Esc</kbd> deselect</p>
+          <dl class="keys" aria-label="Shortcuts"><div><dt><kbd>drag</kbd></dt><dd>Move</dd></div><div><dt><kbd>↑ ↓ ← →</kbd></dt><dd>Nudge 1px, <kbd>⇧</kbd> for 10</dd></div><div><dt><kbd>double-click</kbd></dt><dd>Edit text</dd></div><div><dt><kbd>N</kbd></dt><dd>Add a note</dd></div><div><dt><kbd>Esc</kbd></dt><dd>Deselect</dd></div></dl>
         </div>
         <div data-pane="notes" role="tabpanel" id="brushup-pane-notes" aria-labelledby="brushup-tab-notes" hidden>
           <button class="add" data-act="add-note" disabled>Select an element to add a note</button>
