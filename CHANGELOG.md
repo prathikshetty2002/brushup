@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **The shared-rule switch says what it does.** Its hint reads “Off: only this element changes” / “On: every element this rule matches changes”, and a tooltip explains both.
+
 ## 0.1.4
 
 - **A guided tour.** The `?` button in the panel walks through selecting, moving and resizing, the style fields, text editing, notes, undo and preview, highlighting each part as it goes. A dot on the button marks it until it has been opened once.

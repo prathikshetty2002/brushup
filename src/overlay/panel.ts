@@ -156,6 +156,7 @@ input[type=color] { padding: 2px; cursor: pointer; } input[type=color]::-webkit-
 input:hover, select:hover, textarea:hover { border-color: var(--faint); } input:disabled { opacity: .35; }
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
 .shared { display: flex; gap: 9px; align-items: flex-start; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); color: var(--muted); cursor: pointer; font-size: 11px; line-height: 1.45; }
+.shared b { display: block; color: var(--text); font-weight: 600; } .shared .why { display: block; margin-top: 2px; color: var(--faint); font-size: 10.5px; }
 .shared input { appearance: none; -webkit-appearance: none; flex: none; width: 30px; height: 18px; margin-top: 1px; padding: 0; border-radius: 2px; background: var(--raise-2); border: 0; position: relative; cursor: pointer; }
 .shared input::after { content: ''; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 1px; background: var(--bg); transition: transform .12s; }
 .shared input:checked { background: var(--accent); } .shared input:checked::after { transform: translateX(12px); background: #fff; }
@@ -316,7 +317,7 @@ export function createPanel(hooks: PanelHooks) {
         <div data-pane="style" role="tabpanel" id="brushup-pane-style" aria-labelledby="brushup-tab-style">
           <div class="info">Click an element to select it.</div>
           <div class="fields" hidden></div>
-          <label class="shared" hidden><input type="checkbox" /><span>Edit the shared CSS rule, affecting every element it matches</span></label>
+          <label class="shared" hidden title="Off: only the selected element changes. On: the CSS rule is edited, so every element it matches changes."><input type="checkbox" /><span><b>Edit the shared CSS rule</b><small class="why">Off: only this element changes.</small></span></label>
           <dl class="keys" aria-label="Shortcuts"><div><dt><kbd>drag</kbd></dt><dd>Move</dd></div><div><dt><kbd>↑ ↓ ← →</kbd></dt><dd>Nudge 1px, <kbd>⇧</kbd> for 10</dd></div><div><dt><kbd>double-click</kbd></dt><dd>Edit text</dd></div><div><dt><kbd>N</kbd></dt><dd>Add a note</dd></div><div><dt><kbd>Esc</kbd></dt><dd>Deselect</dd></div></dl>
         </div>
         <div data-pane="notes" role="tabpanel" id="brushup-pane-notes" aria-labelledby="brushup-tab-notes" hidden>
@@ -355,6 +356,8 @@ export function createPanel(hooks: PanelHooks) {
   const fieldsEl = $<HTMLDivElement>('.fields');
   const sharedLabel = $<HTMLLabelElement>('.shared');
   const shared = $<HTMLInputElement>('.shared input');
+  const sharedWhy = $<HTMLElement>('.shared .why');
+  shared.addEventListener('change', () => (sharedWhy.textContent = shared.checked ? 'On: every element this rule matches changes.' : 'Off: only this element changes.'));
   const addBtn = $<HTMLButtonElement>('[data-act=add-note]');
   const composer = $<HTMLFormElement>('form.composer');
   const composerTarget = $<HTMLDivElement>('form.composer .target');
