@@ -37,17 +37,20 @@ const run = (code: string, edit: Edit, opts = { tailwind: false }, extra: Record
 
 const style = (code: string, tag: string, props: Record<string, string>, scope?: 'auto' | 'rule'): Edit => ({ kind: 'style', id: idOf(code, tag), tag, props, scope });
 
+/** The tags without their version tokens, for tests about where the refs point. */
+const noVer = (code: string) => code.replace(/ data-brushup-[su]v="[^"]+"/g, '');
+
 describe('instrument', () => {
   it('tags host elements only, and changes nothing else', () => {
     const out = instrument(src, FILE, 'src/App.tsx')!;
-    expect(out.code).toContain('<h1 data-brushup-src="src/App.tsx:8:6" style=');
+    expect(noVer(out.code)).toContain('<h1 data-brushup-src="src/App.tsx:8:6" style=');
     expect(out.code).not.toMatch(/<App|<Fragment/);
-    expect(out.code.replace(/ data-brushup-src="[^"]+"/g, '')).toBe(src);
+    expect(out.code.replace(/ data-brushup-(src|sv)="[^"]+"/g, '')).toBe(src);
   });
 
   it('ids point at the element they tag', () => {
     const out = instrument(src, FILE, 'src/App.tsx')!;
-    expect(out.code).toContain(`<div data-brushup-src="${idOf(src, 'div')}">`);
+    expect(noVer(out.code)).toContain(`<div data-brushup-src="${idOf(src, 'div')}">`);
   });
 
   it('skips files with no JSX or that fail to parse', () => {
@@ -56,17 +59,17 @@ describe('instrument', () => {
   });
 
   it('tags component usages with their name, and host elements inside them as before', () => {
-    expect(instrument('const x = <Card><b>hi</b></Card>;', FILE, 'a.tsx')!.code).toBe(
+    expect(noVer(instrument('const x = <Card><b>hi</b></Card>;', FILE, 'a.tsx')!.code)).toBe(
       'const x = <Card data-brushup-use="a.tsx:1:10#Card"><b data-brushup-src="a.tsx:1:16">hi</b></Card>;',
     );
   });
 
   it('leaves components alone when usage tagging is off', () => {
-    expect(instrument('const x = <Card><b>hi</b></Card>;', FILE, 'a.tsx', { usage: false })!.code).toBe('const x = <Card><b data-brushup-src="a.tsx:1:16">hi</b></Card>;');
+    expect(noVer(instrument('const x = <Card><b>hi</b></Card>;', FILE, 'a.tsx', { usage: false })!.code)).toBe('const x = <Card><b data-brushup-src="a.tsx:1:16">hi</b></Card>;');
   });
 
   it('tags member components and keeps generic arguments intact', () => {
-    const out = instrument('const x = <Dialog.Trigger asChild><List<string> items={a} /></Dialog.Trigger>;', FILE, 'a.tsx')!.code;
+    const out = noVer(instrument('const x = <Dialog.Trigger asChild><List<string> items={a} /></Dialog.Trigger>;', FILE, 'a.tsx')!.code);
     expect(out).toContain('<Dialog.Trigger data-brushup-use="a.tsx:1:10#Dialog.Trigger" asChild>');
     expect(out).toContain('<List<string> data-brushup-use="a.tsx:1:34#List" items={a} />');
   });

@@ -36,7 +36,7 @@ export class Project extends FileSession {
     }
   }
 
-  protected transform(files: Files, edit: Edit): { files: Files; target?: Target } {
+  protected transform(files: Files, edit: Edit, _before: Files): { files: Files; target?: Target } {
     return { files: applyEdit(files, this.entry, edit), target: edit.kind === 'text' ? 'text' : undefined };
   }
 

@@ -504,6 +504,51 @@ describe('dev-server mode references (component usage sites)', () => {
     expect(status()).toBe('Copied src/app/page.tsx:12');
   });
 
+  it('sends the version token of the tag it edits: the usage site\'s, with the host element\'s as a text fallback', async () => {
+    btn().setAttribute('data-brushup-uv', 'u1.f1.0.1');
+    btn().setAttribute('data-brushup-sv', 's1.f2.0.1');
+    click(btn());
+    key('ArrowRight');
+    await settle();
+    expect(o.last('edit').edit).toMatchObject({ ver: 'u1.f1.0.1' });
+    await ok('h1');
+    pointer('dblclick', btn());
+    btn().textContent = 'Start';
+    key('Enter', {}, btn());
+    await settle();
+    expect(o.last('edit').edit).toMatchObject({ kind: 'text', ver: 'u1.f1.0.1', fallbackVer: 's1.f2.0.1' });
+  });
+
+  it('after a stale answer, waits for the hot update and retries once on the same selection', async () => {
+    const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    click(btn());
+    key('ArrowRight');
+    await settle();
+    expect(o.all('edit')).toHaveLength(1);
+    o.reply({ ok: false, stale: true, error: 'changed' });
+    await settle();
+    expect(o.all('edit')).toHaveLength(1); // waiting for the hot update
+    o.receive({ type: 'hmr' });
+    await wait(250);
+    expect(o.all('edit')).toHaveLength(2);
+    o.reply({ ok: false, stale: true, error: 'changed again' });
+    await settle();
+    o.receive({ type: 'hmr' });
+    await wait(250);
+    expect(o.all('edit')).toHaveLength(2); // one retry only
+  });
+
+  it('does not retry an ordinary refusal', async () => {
+    click(btn());
+    key('ArrowRight');
+    await settle();
+    o.reply({ ok: false, error: 'Nope' });
+    await settle();
+    o.receive({ type: 'hmr' });
+    await new Promise((r) => setTimeout(r, 250));
+    expect(o.all('edit')).toHaveLength(1);
+  });
+
   it('edits go to the usage site', async () => {
     click(btn());
     key('ArrowRight');

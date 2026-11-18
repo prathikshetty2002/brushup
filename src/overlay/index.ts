@@ -24,6 +24,8 @@ interface Result {
   hash?: string;
   target?: Target;
   warning?: string;
+  /** The file changed under the page and the server couldn't tell which element was meant. */
+  stale?: boolean;
 }
 
 // Config comes from `window.__brushup` (static server, Vite plugin) or, for frameworks that render a plain
@@ -41,6 +43,8 @@ const DEV = cfg.mode === 'dev';
  */
 const SRC = 'data-brushup-src';
 const USE = 'data-brushup-use';
+const SV = 'data-brushup-sv';
+const UV = 'data-brushup-uv';
 const SID = 'data-brushup-id';
 const TAGGED = DEV ? `[${SRC}],[${USE}]` : `[${SID}]`;
 /** The reference edits are addressed to: the usage site when there is one, else the host element. */
@@ -88,10 +92,12 @@ function connect() {
       waiting.get(msg.n)?.(msg);
       waiting.delete(msg.n);
     } else if (msg.type === 'reload') {
+      freshListeners.forEach((f) => f());
       state.hash = msg.hash;
       void reload(!!msg.css);
-    } else if (msg.type === 'hmr' && previews.size) {
-      settleSoon(250); // the dev server is hot-updating the page; our temporary previews can go once it lands
+    } else if (msg.type === 'hmr') {
+      freshListeners.forEach((f) => f());
+      if (previews.size) settleSoon(250); // the dev server is hot-updating the page; our temporary previews can go once it lands
     } else if (msg.type === 'notes') {
       notes = msg.notes as Note[];
       refreshNotes(true);
@@ -148,6 +154,16 @@ async function reload(css: boolean) {
 // so selection is the node itself, re-found by (source ref, nth instance) if it is replaced.
 const instances = (ref: string) => [...document.querySelectorAll<HTMLElement>(TAGGED)].filter((e) => refOf(e) === ref);
 const tagOf = (el: HTMLElement) => el.tagName.toLowerCase();
+/** The build's version token for the tag an edit is addressed to (the usage site if there is one, else the element). */
+const verOf = (el: Element) => (DEV ? (el.hasAttribute(USE) ? el.getAttribute(UV) : el.getAttribute(SV)) ?? undefined : undefined);
+/** Waits for the dev server's next hot update (which re-stamps the tags), or `ms`. */
+const freshListeners = new Set<() => void>();
+const nextFresh = (ms: number) =>
+  new Promise<void>((resolve) => {
+    const done = () => (freshListeners.delete(done), clearTimeout(timer), resolve());
+    const timer = setTimeout(done, ms);
+    freshListeners.add(done);
+  });
 /** What the element looks like right now, so the server can find it again if its source line moved. */
 const identOf = (el: HTMLElement, withText = true) => ({
   cls: (el.getAttribute('class') ?? '').trim().slice(0, 600),
@@ -423,7 +439,7 @@ async function sendMany(edits: Edit[]): Promise<Result> {
 }
 
 /** Style changes for one or more elements, written as a single change (one undo step). */
-async function commitStyles(items: { el: HTMLElement; props: Record<string, string> }[], scope: Scope = 'auto') {
+async function commitStyles(items: { el: HTMLElement; props: Record<string, string> }[], scope: Scope = 'auto', retried = false) {
   if (!items.length) return;
   const seen = new Set<string>();
   const edits: Edit[] = [];
@@ -433,12 +449,19 @@ async function commitStyles(items: { el: HTMLElement; props: Record<string, stri
     if (seen.has(ref)) continue; // list items share one source line: a single edit covers them all
     seen.add(ref);
     const hints = { ...(Number.isFinite(rootPx) ? { rootPx } : {}), ...('font-size' in props ? { lineHeight: lineHeightRatio(el) } : {}) };
-    edits.push({ kind: 'style', id: ref, tag: tagOf(el), props, scope, hints, ...(DEV ? { ident: identOf(el) } : {}) });
+    edits.push({ kind: 'style', id: ref, tag: tagOf(el), props, scope, hints, ...(DEV ? { ident: identOf(el), ver: verOf(el) } : {}) });
   }
   const previewed = items.map((i) => preview(i.el, i.props));
   const r = await sendMany(edits);
   if (!r.ok) {
     previewed.forEach((p) => p.revert());
+    // The file changed under the page: wait for the hot update to re-tag the elements, then try once more on the same selection.
+    if (r.stale && !retried) {
+      await nextFresh(1500);
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      const els = selectedAll();
+      if (els.length === items.length) return commitStyles(items.map((it, i) => ({ el: els[i], props: it.props })), scope, true);
+    }
     return refreshPanel();
   }
   reportSaved(items[0].el, r, edits.length);
@@ -490,7 +513,7 @@ function startTextEdit(el: HTMLElement) {
     state.editing = null;
     const text = (el.textContent ?? '').trim();
     if (commit && text && text !== original.trim()) {
-      void send({ kind: 'text', id: refOf(el), fallback: fallbackOf(el), tag: tagOf(el), text, ...(DEV ? { ident: identOf(el, false) } : {}) }).then((r) => {
+      void send({ kind: 'text', id: refOf(el), fallback: fallbackOf(el), tag: tagOf(el), text, ...(DEV ? { ident: identOf(el, false), ver: verOf(el), fallbackVer: el.hasAttribute(USE) ? (el.getAttribute(SV) ?? undefined) : undefined } : {}) }).then((r) => {
         if (r.ok) reportSaved(el, r);
         else el.textContent = original;
       });

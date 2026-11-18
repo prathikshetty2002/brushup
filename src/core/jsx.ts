@@ -6,6 +6,51 @@ import MagicString from 'magic-string';
 export const SRC_ATTR = 'data-brushup-src';
 /** Stamped on component usages (`<Button>`): `file:line:col#Name`. Reaches the DOM when the component spreads its props. */
 export const USE_ATTR = 'data-brushup-use';
+/** Version tokens that ride along with the two refs above (`fileHash.fingerprint.n.of`). */
+export const SV_ATTR = 'data-brushup-sv';
+export const UV_ATTR = 'data-brushup-uv';
+
+const fnv = (text: string) => {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193) >>> 0;
+  return h.toString(36);
+};
+
+/** A short hash of a source file, insensitive to a BOM and line endings. */
+export const fileHash = (code: string) => fnv(code.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n'));
+
+const flat = (code: string, n: t.Node) => code.slice(n.start!, n.end!).replace(/\s+/g, ' ');
+
+/**
+ * What an element *is* in the source, apart from what Brushup itself edits: its tag, every attribute except
+ * className/class/style, and its direct children (text and expressions as written, nested elements by tag only).
+ * It does not move when the line does, and it does not change when Brushup rewrites the element's classes.
+ */
+export function fingerprint(code: string, el: t.JSXElement): string {
+  const open = el.openingElement;
+  const attrs = open.attributes
+    .filter((a) => !(a.type === 'JSXAttribute' && a.name.type === 'JSXIdentifier' && ['className', 'class', 'style'].includes(a.name.name)))
+    .map((a) => flat(code, a));
+  const kids = el.children
+    .map((c) => (c.type === 'JSXText' ? c.value.replace(/\s+/g, ' ').trim() : c.type === 'JSXElement' ? `<${flat(code, c.openingElement.name)}/>` : flat(code, c)))
+    .filter(Boolean)
+    .join('|')
+    .slice(0, 300);
+  return fnv([flat(code, open.name), ...attrs, kids].join('\u0001'));
+}
+
+export interface Ver {
+  file: string;
+  fp: string;
+  /** Which of the identical elements (same fingerprint) this was, in document order, and how many there were. */
+  occ: number;
+  total: number;
+}
+
+export function parseVer(token: unknown): Ver | null {
+  const m = typeof token === 'string' ? /^([0-9a-z]+)\.([0-9a-z]+)\.(\d+)\.(\d+)$/.exec(token) : null;
+  return m ? { file: m[1], fp: m[2], occ: Number(m[3]), total: Number(m[4]) } : null;
+}
 
 let lastParse: { code: string; file: string; ast: t.File } | null = null;
 
@@ -70,16 +115,33 @@ export function instrument(code: string, file: string, rel: string, options: Ins
   }
   const s = new MagicString(code);
   let count = 0;
+  const hash = fileHash(code);
+  // Fingerprint every element first, so each tag can say which of its identical twins it is.
+  const prints = new Map<number, { fp: string; occ: number; total: number }>();
+  const seen = new Map<string, number>();
+  walk(ast, (node) => {
+    if (node.type !== 'JSXElement') return;
+    const fp = fingerprint(code, node);
+    const occ = seen.get(fp) ?? 0;
+    seen.set(fp, occ + 1);
+    prints.set(node.openingElement.start!, { fp, occ, total: 0 });
+  });
+  for (const p of prints.values()) p.total = seen.get(p.fp)!;
+  const token = (open: t.JSXOpeningElement) => {
+    const p = prints.get(open.start!);
+    return p ? `${hash}.${p.fp}.${p.occ}.${p.total}` : '';
+  };
   walk(ast, (node) => {
     if (node.type !== 'JSXOpeningElement' || node.loc == null || node.name.end == null) return;
     const attrs = node.attributes;
     const has = (name: string) => attrs.some((a) => a.type === 'JSXAttribute' && a.name.type === 'JSXIdentifier' && a.name.name === name);
     const at = `${rel}:${node.loc.start.line}:${node.loc.start.column}`;
     const name = node.name;
+    const ver = (attr: string) => (token(node) ? ` ${attr}="${token(node)}"` : '');
 
     if (name.type === 'JSXIdentifier' && /^[a-z]/.test(name.name)) {
       if (has(SRC_ATTR)) return;
-      s.appendLeft(afterName(node), ` ${SRC_ATTR}="${at}"`);
+      s.appendLeft(afterName(node), ` ${SRC_ATTR}="${at}"${ver(SV_ATTR)}`);
       count++;
       return;
     }
@@ -88,7 +150,7 @@ export function instrument(code: string, file: string, rel: string, options: Ins
     if (!text) return;
     const last = text.split('.').pop()!;
     if (NO_PROPS.has(last)) return;
-    s.appendLeft(afterName(node), ` ${USE_ATTR}="${at}#${text}"`);
+    s.appendLeft(afterName(node), ` ${USE_ATTR}="${at}#${text}"${ver(UV_ATTR)}`);
     count++;
   });
   return count ? { code: s.toString(), map: s.generateMap({ hires: true, source: file, includeContent: true }) } : null;

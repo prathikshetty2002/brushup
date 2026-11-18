@@ -1,8 +1,8 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { EditError, type Edit } from '../core/edit-types';
-import { parseSrc } from '../core/jsx';
+import { EditError, type Edit, type Staleness } from '../core/edit-types';
+import { fileHash, parseSrc, parseVer } from '../core/jsx';
 import { applyJsxEdit, describeElement, TextNotHere } from '../core/jsx-patch';
 import type { Scale } from '../core/tailwind';
 import type { Files } from '../core/patch';
@@ -16,6 +16,11 @@ export interface DevOptions {
    *  - 'auto':     Tailwind if the project depends on it, else inline
    */
   style?: 'auto' | 'inline' | 'tailwind';
+  /**
+   * When the file changed under the page (the agent edited it), find the element again by what it says in the source
+   * and refuse if that's ambiguous. `false` keeps the older, looser behaviour: trust the recorded position.
+   */
+  strict?: boolean;
 }
 
 const SKIP_DIRS = new Set(['node_modules', '.git', '.brushup', 'dist', 'build', '.next', '.vite', '.turbo', 'coverage']);
@@ -55,6 +60,9 @@ export function tailwindScale(root: string): Scale {
 export class DevProject extends FileSession {
   private readonly tailwind: boolean;
   private readonly scale: Scale;
+  private readonly strict: boolean;
+  /** Per file: the hashes of every version we produced in an unbroken run of our own writes, and the latest. */
+  private readonly own = new Map<string, { hashes: Set<string>; last: string }>();
 
   constructor(
     readonly root: string,
@@ -64,6 +72,7 @@ export class DevProject extends FileSession {
     const mode = options.style ?? 'auto';
     this.tailwind = mode === 'tailwind' || (mode === 'auto' && dependsOnTailwind(root));
     this.scale = tailwindScale(root);
+    this.strict = options.strict !== false;
   }
 
   /** Where a `file:line:col` reference points, refusing anything outside the project or not JSX/TSX. */
@@ -115,16 +124,44 @@ export class DevProject extends FileSession {
     return files;
   }
 
-  protected transform(files: Files, edit: Edit): { files: Files; target?: Target; warning?: string } {
+  protected override written(from: Files, to: Files) {
+    for (const file of Object.keys(to)) {
+      const before = fileHash(from[file] ?? '');
+      const after = fileHash(to[file]);
+      const run = this.own.get(file);
+      if (run && run.last === before) (run.hashes.add(after), (run.last = after));
+      else this.own.set(file, { hashes: new Set([before, after]), last: after }); // someone else edited in between: start over
+    }
+  }
+
+  /**
+   * Did anyone but us change `file` since the page was rendered? The tag carries the file's hash from then:
+   * equal means nothing moved; a hash from our own unbroken run of writes means only we changed it (positions may lag
+   * by one HMR round, which the loose position check tolerates); anything else is an outside edit.
+   */
+  private staleness(token: string | undefined, file: string, before: Files): Staleness | undefined {
+    const ver = parseVer(token);
+    if (!ver || !this.strict) return undefined;
+    const current = fileHash(before[file] ?? '');
+    if (ver.file === current) return 'none';
+    const run = this.own.get(file);
+    return run && run.last === current && run.hashes.has(ver.file) ? 'own' : 'external';
+  }
+
+  protected transform(files: Files, edit: Edit, before: Files): { files: Files; target?: Target; warning?: string } {
     const opts = { tailwind: this.tailwind, scale: this.scale };
+    const file = this.resolve(edit.id).file;
+    // Always set from the server's own comparison: a client can't claim the file is unchanged.
+    const checked = { ...edit, stale: this.staleness(edit.ver, file, before) } as Edit;
     try {
-      return applyJsxEdit(files, this.resolve(edit.id).file, edit, opts);
+      return applyJsxEdit(files, file, checked, opts);
     } catch (err) {
       // Text written at a component's usage site (`<Button>Save</Button>`) is preferred; if the usage doesn't
       // hold it (label comes from a prop or child element), try the element the component renders.
       if (edit.kind === 'text' && edit.fallback && err instanceof TextNotHere) {
+        const hostFile = this.resolve(edit.fallback).file;
         try {
-          return applyJsxEdit(files, this.resolve(edit.fallback).file, { ...edit, id: edit.fallback, fallback: undefined }, opts);
+          return applyJsxEdit(files, hostFile, { ...edit, id: edit.fallback, ver: edit.fallbackVer, fallback: undefined, fallbackVer: undefined, stale: this.staleness(edit.fallbackVer, hostFile, before) }, opts);
         } catch (second) {
           // Neither place holds the text: the first error says why (the usage's text is an expression).
           if (second instanceof TextNotHere) throw err;

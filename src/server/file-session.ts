@@ -38,7 +38,10 @@ export abstract class FileSession {
   private ownWrites = new Map<string, Set<string>>();
 
   protected abstract loadFor(edit: Edit): Promise<Files>;
-  protected abstract transform(files: Files, edit: Edit): { files: Files; target?: Target; warning?: string };
+  /** `before` is every file as it was read from disk for this change, untouched by earlier edits in the same batch. */
+  protected abstract transform(files: Files, edit: Edit, before: Files): { files: Files; target?: Target; warning?: string };
+  /** Called after a change has been written (an edit, undo or redo): `from` is what was on disk, `to` what is there now. */
+  protected written(_from: Files, _to: Files): void {}
   /** Describe the selected element for `.brushup/selection.json`, or null if it can no longer be found. */
   protected abstract describe(sel: Selection): Promise<object | null>;
   /**
@@ -81,7 +84,7 @@ export abstract class FileSession {
     let target: Target | undefined;
     const warnings = new Set<string>();
     for (const edit of ordered) {
-      const out = this.transform(after, edit);
+      const out = this.transform(after, edit, before);
       after = out.files;
       target = out.target ?? target;
       if (out.warning) warnings.add(out.warning);
@@ -90,13 +93,14 @@ export abstract class FileSession {
     const changed = diff(before, after);
     if (!Object.keys(changed).length) return { files: [], target, warning };
     await this.write(changed);
+    this.written(pick(before, changed), changed);
     this.undoStack.push({ before: pick(before, changed), after: changed });
     this.undoStack = this.undoStack.slice(-100);
     this.redoStack = [];
     const files = Object.keys(changed);
     const where = files.map((f) => path.relative(this.root, f));
     // ident/hints are for locating and writing the edit; the agent-facing log only needs what the user did.
-    const logged = ordered.map(({ ident, hints, ...rest }: Edit & { ident?: unknown; hints?: unknown }) => rest);
+    const logged = ordered.map(({ ident, hints, ver, fallbackVer, stale, ...rest }: Edit & { ident?: unknown; hints?: unknown; ver?: unknown; fallbackVer?: unknown; stale?: unknown }) => rest);
     await this.log(logged.length === 1 ? { edit: logged[0], files: where } : { edits: logged, files: where });
     return { files, target, warning };
   }
@@ -121,6 +125,7 @@ export abstract class FileSession {
       throw new EditError('The source changed since that edit, so it can no longer be reverted safely.');
     }
     await this.write(snap[to]);
+    this.written(expected, snap[to]);
     target.push(snap);
     const files = Object.keys(snap[to]);
     await this.log({ [to === 'before' ? 'undo' : 'redo']: files.map((f) => path.relative(this.root, f)) });

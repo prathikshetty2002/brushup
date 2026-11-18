@@ -158,7 +158,7 @@ Source files are the single source of truth; the canvas holds no state of its ow
 ## Working with an agent
 
 - Edits the agent makes appear on the canvas (selection kept).
-- In dev modes an element is addressed by `file:line:col`. If the file changed under that position (the agent added lines), the server finds the element again by its class string and text; if more than one still fits it refuses instead of guessing. An edit based on a stale view of the source is otherwise rejected, and undo refuses to run if the file changed after your edit, so neither side clobbers the other.
+- In dev modes an element is addressed by `file:line:col`, and each tag also carries a version token: a hash of the file as the page was rendered plus a fingerprint of the element's own source (its tag, props and text, not its classes or style). If the file is unchanged, the position is exact. If the agent changed it, the server finds the element again by its fingerprint, and **refuses rather than guess** when the element itself changed or several identical ones can't be told apart; the canvas then waits for the hot update and retries once. Brushup's own back-to-back edits don't count as outside changes. Set `strict: false` in the plugin options (`withBrushup(config, { strict: false })`, `brushup({ strict: false })`) to go back to trusting positions. Undo refuses to run if the file changed after your edit, so neither side clobbers the other.
 
 ## Security
 

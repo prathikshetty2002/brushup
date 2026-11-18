@@ -1,8 +1,8 @@
 import type * as t from '@babel/types';
-import { EditError, type Edit, type Ident, type Target, type TextEdit } from './edit-types';
+import { EditError, StaleElement, type Edit, type Ident, type Target, type TextEdit } from './edit-types';
 import type { Files } from './patch';
 import { readRules, splice } from './css-patch';
-import { afterName, findElement, jsxName, parseSource, parseSrc, walk } from './jsx';
+import { afterName, findElement, fingerprint, jsxName, parseSource, parseSrc, parseVer, walk } from './jsx';
 import { matches, parseSelector, specificity } from './selector';
 import type { SourceElement } from './html-map';
 import { tailwindClasses, variantConflicts, type ClassHints, type Scale } from './tailwind';
@@ -78,6 +78,24 @@ function located(code: string, file: string, edit: Edit): { el: t.JSXElement; li
   const hosted = !loc.name;
   const exact = findElement(ast, loc.line, loc.col);
   const exactOk = !!exact && named(exact);
+
+  // The file changed under the page by someone other than us, so line:col can't be trusted at all. The tag carries
+  // a fingerprint of the element's own source: find that, or refuse rather than guess.
+  const ver = parseVer(edit.ver);
+  if (ver && edit.stale === 'external') {
+    const twins: t.JSXElement[] = [];
+    walk(ast, (n) => {
+      if (n.type === 'JSXElement' && named(n) && fingerprint(code, n) === ver.fp) twins.push(n);
+    });
+    // Identical twins keep their order unless one was added or removed; then only what the canvas saw can break the tie.
+    const strong = ident ? twins.filter((el) => fit(code, el, hosted, ident) >= 1) : [];
+    const found = twins.length === 1 ? twins[0] : twins.length === ver.total ? twins[ver.occ] : strong.length === 1 ? strong[0] : null;
+    const at = found?.openingElement.loc?.start;
+    if (!found || !at) {
+      throw new StaleElement(`<${loc.name ?? edit.tag}> changed in the source since the page was rendered, so Brushup can't be sure which element you meant. It will refresh; try again.`);
+    }
+    return { el: found, line: at.line, col: at.column };
+  }
   if (exactOk && (!ident || fit(code, exact, hosted, ident) >= 0)) return { el: exact, line: loc.line, col: loc.col };
 
   const same: t.JSXElement[] = [];

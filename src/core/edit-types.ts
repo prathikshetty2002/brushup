@@ -16,6 +16,9 @@ export interface Ident {
 export interface StyleEdit {
   kind: 'style';
   ident?: Ident;
+  /** Build-time version token of the element's tag (`file hash . fingerprint . n . of`), so the server can tell if it moved. */
+  ver?: string;
+  stale?: Staleness;
   id: string;
   tag: string;
   props: Record<string, string>;
@@ -36,6 +39,10 @@ export interface StyleEdit {
 
 export interface TextEdit {
   kind: 'text';
+  ver?: string;
+  /** The version token of `fallback`. */
+  fallbackVer?: string;
+  stale?: Staleness;
   /** Where the text is edited: the component usage when there is one (`<Button>Save</Button>`), else the host element. */
   id: string;
   /** The host element's own reference, tried when the usage site doesn't hold the text itself. */
@@ -51,3 +58,9 @@ export type Edit = StyleEdit | TextEdit;
 export type Target = 'inline' | 'rule' | 'class' | 'text';
 
 export class EditError extends Error {}
+
+/** The element the canvas meant is no longer where the page says, and the source can't say which one it was now. */
+export class StaleElement extends EditError {}
+
+/** How the file compares with the one the page was rendered from (set by the server, never trusted from a client). */
+export type Staleness = 'none' | 'own' | 'external';
