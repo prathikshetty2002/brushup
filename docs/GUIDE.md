@@ -21,7 +21,7 @@ Everything is written to your real source files (Tailwind classes, JSX, CSS), as
 - **Claude Code** (any recent version) for loops B and C.
 - A **Chromium-based browser** (tested on Chrome; Firefox and Safari are untested).
 
-Brushup isn't published to npm yet, so installs use the tarball built from this repo (`npm run build && npm pack` produces `brushup-0.1.0.tgz`).
+Brushup is on npm: [npmjs.com/package/brushup](https://www.npmjs.com/package/brushup).
 
 ## 2. Set up (about two minutes)
 
@@ -30,7 +30,7 @@ Work on a branch, or commit first: Brushup edits your files, and `git diff` is t
 ### Next.js or Vite
 
 ```bash
-npm install -D /path/to/brushup-0.1.0.tgz
+npm install -D brushup
 npx brushup init --mcp
 ```
 

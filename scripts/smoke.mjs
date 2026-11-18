@@ -1,14 +1,15 @@
 // Installs a packed Brushup tarball into a throwaway project and exercises what a user would: the commands,
 // both module formats, the MCP server and the static server. Uses only Node built-ins, so it runs on the
 // oldest supported Node (20.9) where the dev tooling (vitest, tsc) cannot.
-//   node scripts/smoke.mjs path/to/brushup-0.1.0.tgz
+//   node scripts/smoke.mjs path/to/brushup-0.1.0.tgz     (or an npm spec such as brushup@latest)
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-const tarball = path.resolve(process.argv[2] ?? '');
-if (!existsSync(tarball)) throw new Error('Usage: node scripts/smoke.mjs <brushup-*.tgz>');
+const arg = process.argv[2];
+if (!arg) throw new Error('Usage: node scripts/smoke.mjs <brushup-*.tgz | npm spec>');
+const tarball = existsSync(path.resolve(arg)) ? path.resolve(arg) : arg;
 const dir = mkdtempSync(path.join(tmpdir(), 'brushup-smoke-'));
 const bin = (name) => path.join(dir, 'node_modules', '.bin', name);
 let failed = 0;
@@ -22,7 +23,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 console.log(`node ${process.version}, project ${dir}`);
 run('npm', ['init', '-y']);
 const install = run('npm', ['install', tarball, '--no-audit', '--no-fund']);
-check('npm install of the tarball', install.status === 0, install.stderr.slice(-300));
+check(`npm install of ${path.basename(tarball)}`, install.status === 0, install.stderr.slice(-300));
 
 const usage = run(bin('brushup'), []);
 check('brushup prints usage', /Usage: brushup/.test(usage.stdout + usage.stderr));
