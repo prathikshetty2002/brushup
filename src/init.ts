@@ -2,22 +2,22 @@ import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { wireProject, type WireResult } from './wire';
 
-const START = '<!-- ascend:start -->';
-const END = '<!-- ascend:end -->';
+const START = '<!-- brushup:start -->';
+const END = '<!-- brushup:end -->';
 
-/** What goes into CLAUDE.md so Claude Code knows how to use Ascend's notes and respects manual edits. */
+/** What goes into CLAUDE.md so Claude Code knows how to use Brushup's notes and respects manual edits. */
 export const CLAUDE_BLOCK = `${START}
-## Ascend design notes
+## Brushup design notes
 
-This project uses Ascend, a visual canvas where the user makes small UI changes by hand (text, size, spacing, position) and pins notes on elements, sections and components.
+This project uses Brushup, a visual canvas where the user makes small UI changes by hand (text, size, spacing, position) and pins notes on elements, sections and components.
 
 Before changing UI:
-- Read \`.ascend/notes.md\`: open notes the user pinned, each with the source file:line of the element when known. Do what each note asks.
-- Read \`.ascend/edits.jsonl\`: recent manual edits made on the canvas. Keep them; do not revert or redo them.
-- \`.ascend/selection.json\` is the element currently selected on the canvas, usually what "this" refers to.
-- When you finish a note, set its \`"status"\` to \`"done"\` in \`.ascend/notes.json\`.
+- Read \`.brushup/notes.md\`: open notes the user pinned, each with the source file:line of the element when known. Do what each note asks.
+- Read \`.brushup/edits.jsonl\`: recent manual edits made on the canvas. Keep them; do not revert or redo them.
+- \`.brushup/selection.json\` is the element currently selected on the canvas, usually what "this" refers to.
+- When you finish a note, set its \`"status"\` to \`"done"\` in \`.brushup/notes.json\`.
 - Do not spend effort on trivial visual tweaks the user can make on the canvas themselves.
-- If the \`ascend\` MCP tools are available, prefer them: \`ascend_get_notes\`, \`ascend_update_note\`, \`ascend_get_selection\`, \`ascend_recent_edits\`, and \`ascend_inspect\` (how an element renders right now, instead of asking for a screenshot).
+- If the \`brushup\` MCP tools are available, prefer them: \`brushup_get_notes\`, \`brushup_update_note\`, \`brushup_get_selection\`, \`brushup_recent_edits\`, and \`brushup_inspect\` (how an element renders right now, instead of asking for a screenshot).
 ${END}
 `;
 
@@ -39,12 +39,12 @@ export interface InitResult {
   wire?: WireResult;
 }
 
-/** Register the Ascend MCP server in the project's `.mcp.json`, leaving every other server as it was. */
+/** Register the Brushup MCP server in the project's `.mcp.json`, leaving every other server as it was. */
 async function initMcp(root: string): Promise<NonNullable<InitResult['mcp']>> {
   const file = path.join(root, '.mcp.json');
-  const entry = { command: 'npx', args: ['ascend-mcp'] };
+  const entry = { command: 'npx', args: ['brushup-mcp'] };
   if (!(await exists(file))) {
-    await writeFile(file, JSON.stringify({ mcpServers: { ascend: entry } }, null, 2) + '\n');
+    await writeFile(file, JSON.stringify({ mcpServers: { brushup: entry } }, null, 2) + '\n');
     return 'created';
   }
   let config: { mcpServers?: Record<string, unknown> };
@@ -53,15 +53,15 @@ async function initMcp(root: string): Promise<NonNullable<InitResult['mcp']>> {
   } catch {
     return 'invalid-json'; // never overwrite a file we can't parse
   }
-  if (config.mcpServers?.ascend) return 'unchanged';
-  config.mcpServers = { ...config.mcpServers, ascend: entry };
+  if (config.mcpServers?.brushup) return 'unchanged';
+  config.mcpServers = { ...config.mcpServers, brushup: entry };
   await writeFile(file, JSON.stringify(config, null, 2) + '\n');
   return 'updated';
 }
 
-/** Idempotent project setup: CLAUDE.md block, `.ascend/` in .gitignore, optional MCP entry, and the Next/Vite wiring. */
+/** Idempotent project setup: CLAUDE.md block, `.brushup/` in .gitignore, optional MCP entry, and the Next/Vite wiring. */
 export async function initProject(root: string, options: { mcp?: boolean; wire?: boolean } = {}): Promise<InitResult> {
-  await mkdir(path.join(root, '.ascend'), { recursive: true });
+  await mkdir(path.join(root, '.brushup'), { recursive: true });
 
   const claude = path.join(root, 'CLAUDE.md');
   let claudeMd: InitResult['claudeMd'];
@@ -86,9 +86,9 @@ export async function initProject(root: string, options: { mcp?: boolean; wire?:
   let ignore: InitResult['gitignore'] = 'absent';
   if (await exists(gitignore)) {
     const current = await readFile(gitignore, 'utf8');
-    if (/^\.ascend\/?$/m.test(current)) ignore = 'unchanged';
+    if (/^\.brushup\/?$/m.test(current)) ignore = 'unchanged';
     else {
-      await appendFile(gitignore, (current.endsWith('\n') ? '' : '\n') + '.ascend/\n');
+      await appendFile(gitignore, (current.endsWith('\n') ? '' : '\n') + '.brushup/\n');
       ignore = 'updated';
     }
   }

@@ -44,7 +44,7 @@ async function fakeCanvas(onAsk: (ask: any) => any, label = 'canvas') {
   return { ws, asked };
 }
 
-beforeEach(async () => void (dir = await mkdtemp(path.join(os.tmpdir(), 'ascend-e2e-'))));
+beforeEach(async () => void (dir = await mkdtemp(path.join(os.tmpdir(), 'brushup-e2e-'))));
 afterEach(async () => {
   sockets.splice(0).forEach((s) => s.terminate());
   await client?.close();
@@ -54,42 +54,42 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-describe('ascend-mcp over stdio', () => {
+describe('brushup-mcp over stdio', () => {
   it('lists its five tools with read-only hints where they apply', async () => {
     const c = await connect();
     const { tools } = await c.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual(['ascend_get_notes', 'ascend_get_selection', 'ascend_inspect', 'ascend_recent_edits', 'ascend_update_note']);
+    expect(tools.map((t) => t.name).sort()).toEqual(['brushup_get_notes', 'brushup_get_selection', 'brushup_inspect', 'brushup_recent_edits', 'brushup_update_note']);
     const hint = (n: string) => tools.find((t) => t.name === n)!.annotations?.readOnlyHint;
-    expect(hint('ascend_get_notes')).toBe(true);
-    expect(hint('ascend_inspect')).toBe(true);
-    expect(hint('ascend_update_note')).toBe(false);
+    expect(hint('brushup_get_notes')).toBe(true);
+    expect(hint('brushup_inspect')).toBe(true);
+    expect(hint('brushup_update_note')).toBe(false);
   }, 30000);
 
   it('reads notes and marks one done through the protocol', async () => {
     const [n] = await new NotesStore(dir).save({ kind: 'section', label: 'Hero', text: 'Add spacing', anchor: { tag: 'h1', classes: [], text: 'Hi', src: 'src/page.tsx:3:4', index: 0, page: '/' } });
     const c = await connect();
-    const notes = json(await c.callTool({ name: 'ascend_get_notes', arguments: {} }));
+    const notes = json(await c.callTool({ name: 'brushup_get_notes', arguments: {} }));
     expect(notes.notes[0]).toMatchObject({ id: n.id, number: 1, name: 'Hero', where: { renderedBy: 'src/page.tsx:3:4' } });
-    await c.callTool({ name: 'ascend_update_note', arguments: { id: n.id, status: 'done' } });
-    expect(json(await c.callTool({ name: 'ascend_get_notes', arguments: {} })).count).toBe(0);
-    expect(json(await c.callTool({ name: 'ascend_get_notes', arguments: { status: 'done' } })).count).toBe(1);
+    await c.callTool({ name: 'brushup_update_note', arguments: { id: n.id, status: 'done' } });
+    expect(json(await c.callTool({ name: 'brushup_get_notes', arguments: {} })).count).toBe(0);
+    expect(json(await c.callTool({ name: 'brushup_get_notes', arguments: { status: 'done' } })).count).toBe(1);
   }, 30000);
 
   it('rejects invalid arguments with a protocol-level error', async () => {
     const c = await connect();
-    const r = await c.callTool({ name: 'ascend_update_note', arguments: { id: 'x', status: 'banana' } }).catch((e) => e);
+    const r = await c.callTool({ name: 'brushup_update_note', arguments: { id: 'x', status: 'banana' } }).catch((e) => e);
     expect(r instanceof Error || (r as any).isError).toBe(true);
   }, 30000);
 
-  it('says clearly when no Ascend server is running', async () => {
+  it('says clearly when no Brushup server is running', async () => {
     const c = await connect();
-    const r: any = await c.callTool({ name: 'ascend_inspect', arguments: {} });
+    const r: any = await c.callTool({ name: 'brushup_inspect', arguments: {} });
     expect(r.isError).toBe(true);
     expect(text(r)).toMatch(/not running/i);
   }, 30000);
 });
 
-describe('ascend_inspect against a live Ascend server', () => {
+describe('brushup_inspect against a live Brushup server', () => {
   beforeEach(async () => {
     await mkdir(path.join(dir, 'src'), { recursive: true });
     await writeFile(path.join(dir, 'package.json'), '{}');
@@ -99,7 +99,7 @@ describe('ascend_inspect against a live Ascend server', () => {
   it('reaches the open canvas and returns what it answers', async () => {
     const canvas = await fakeCanvas((ask) => ({ tag: 'h1', box: { width: 640 }, echoed: ask }));
     const c = await connect();
-    const r = await c.callTool({ name: 'ascend_inspect', arguments: { note_id: 'n1' } });
+    const r = await c.callTool({ name: 'brushup_inspect', arguments: { note_id: 'n1' } });
     expect(json(r).tag).toBe('h1');
     expect(json(r).echoed).toEqual({ kind: 'inspect', noteId: 'n1' });
     expect(canvas.asked).toHaveLength(1);
@@ -108,16 +108,16 @@ describe('ascend_inspect against a live Ascend server', () => {
   it('relays the canvas\'s own error (nothing selected)', async () => {
     await fakeCanvas(() => ({ error: 'Nothing is selected on the canvas.' }));
     const c = await connect();
-    const r: any = await c.callTool({ name: 'ascend_inspect', arguments: {} });
+    const r: any = await c.callTool({ name: 'brushup_inspect', arguments: {} });
     expect(r.isError).toBe(true);
     expect(text(r)).toBe('Nothing is selected on the canvas.');
   }, 30000);
 
   it('says so when the server runs but no browser has the canvas open', async () => {
     const c = await connect();
-    const r: any = await c.callTool({ name: 'ascend_inspect', arguments: {} });
+    const r: any = await c.callTool({ name: 'brushup_inspect', arguments: {} });
     expect(r.isError).toBe(true);
-    expect(text(r)).toMatch(/No Ascend canvas is open/);
+    expect(text(r)).toMatch(/No Brushup canvas is open/);
   }, 30000);
 
   it('asks the canvas tab the user touched most recently', async () => {
@@ -127,7 +127,7 @@ describe('ascend_inspect against a live Ascend server', () => {
     a.ws.send(JSON.stringify({ type: 'select', selection: null })); // the user clicked in tab A
     await new Promise((r) => setTimeout(r, 100));
     const c = await connect();
-    expect(json(await c.callTool({ name: 'ascend_inspect', arguments: {} })).from).toBe('A');
+    expect(json(await c.callTool({ name: 'brushup_inspect', arguments: {} })).from).toBe('A');
     expect(b.asked).toHaveLength(0);
   }, 30000);
 

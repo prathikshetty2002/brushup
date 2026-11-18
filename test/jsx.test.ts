@@ -40,14 +40,14 @@ const style = (code: string, tag: string, props: Record<string, string>, scope?:
 describe('instrument', () => {
   it('tags host elements only, and changes nothing else', () => {
     const out = instrument(src, FILE, 'src/App.tsx')!;
-    expect(out.code).toContain('<h1 data-ascend-src="src/App.tsx:8:6" style=');
+    expect(out.code).toContain('<h1 data-brushup-src="src/App.tsx:8:6" style=');
     expect(out.code).not.toMatch(/<App|<Fragment/);
-    expect(out.code.replace(/ data-ascend-src="[^"]+"/g, '')).toBe(src);
+    expect(out.code.replace(/ data-brushup-src="[^"]+"/g, '')).toBe(src);
   });
 
   it('ids point at the element they tag', () => {
     const out = instrument(src, FILE, 'src/App.tsx')!;
-    expect(out.code).toContain(`<div data-ascend-src="${idOf(src, 'div')}">`);
+    expect(out.code).toContain(`<div data-brushup-src="${idOf(src, 'div')}">`);
   });
 
   it('skips files with no JSX or that fail to parse', () => {
@@ -57,24 +57,24 @@ describe('instrument', () => {
 
   it('tags component usages with their name, and host elements inside them as before', () => {
     expect(instrument('const x = <Card><b>hi</b></Card>;', FILE, 'a.tsx')!.code).toBe(
-      'const x = <Card data-ascend-use="a.tsx:1:10#Card"><b data-ascend-src="a.tsx:1:16">hi</b></Card>;',
+      'const x = <Card data-brushup-use="a.tsx:1:10#Card"><b data-brushup-src="a.tsx:1:16">hi</b></Card>;',
     );
   });
 
   it('leaves components alone when usage tagging is off', () => {
-    expect(instrument('const x = <Card><b>hi</b></Card>;', FILE, 'a.tsx', { usage: false })!.code).toBe('const x = <Card><b data-ascend-src="a.tsx:1:16">hi</b></Card>;');
+    expect(instrument('const x = <Card><b>hi</b></Card>;', FILE, 'a.tsx', { usage: false })!.code).toBe('const x = <Card><b data-brushup-src="a.tsx:1:16">hi</b></Card>;');
   });
 
   it('tags member components and keeps generic arguments intact', () => {
     const out = instrument('const x = <Dialog.Trigger asChild><List<string> items={a} /></Dialog.Trigger>;', FILE, 'a.tsx')!.code;
-    expect(out).toContain('<Dialog.Trigger data-ascend-use="a.tsx:1:10#Dialog.Trigger" asChild>');
-    expect(out).toContain('<List<string> data-ascend-use="a.tsx:1:34#List" items={a} />');
+    expect(out).toContain('<Dialog.Trigger data-brushup-use="a.tsx:1:10#Dialog.Trigger" asChild>');
+    expect(out).toContain('<List<string> data-brushup-use="a.tsx:1:34#List" items={a} />');
   });
 
   it('never tags components that accept no props', () => {
     const out = instrument('const x = <><Suspense fallback={f}><Ctx.Provider value={v}><React.Fragment><i /></React.Fragment></Ctx.Provider></Suspense></>;', FILE, 'a.tsx')!.code;
-    expect(out).not.toMatch(/<(Suspense|Ctx\.Provider|React\.Fragment) data-ascend/);
-    expect(out).toContain('<i data-ascend-src=');
+    expect(out).not.toMatch(/<(Suspense|Ctx\.Provider|React\.Fragment) data-brushup/);
+    expect(out).toContain('<i data-brushup-src=');
   });
 });
 

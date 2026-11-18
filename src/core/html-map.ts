@@ -92,11 +92,11 @@ export function afterTagName(source: string, el: SourceElement): number {
   return el.startTag.start + (m ? m[0].length : 1 + el.tag.length);
 }
 
-/** Serve-time copy of the page: every body element gets `data-ascend-id`. */
+/** Serve-time copy of the page: every body element gets `data-brushup-id`. */
 export function annotate(doc: SourceDoc): string {
   const inserts = doc.elements
     .filter((el) => !el.inHead)
-    .map((el) => ({ at: afterTagName(doc.source, el), text: ` data-ascend-id="${el.id}"` }))
+    .map((el) => ({ at: afterTagName(doc.source, el), text: ` data-brushup-id="${el.id}"` }))
     .sort((a, b) => b.at - a.at);
   let out = doc.source;
   for (const { at, text } of inserts) out = out.slice(0, at) + text + out.slice(at);

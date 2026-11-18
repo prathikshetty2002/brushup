@@ -3,9 +3,9 @@ import type * as t from '@babel/types';
 import MagicString from 'magic-string';
 
 /** Stamped on host elements (`<div>`): `file:line:col` of the element. */
-export const SRC_ATTR = 'data-ascend-src';
+export const SRC_ATTR = 'data-brushup-src';
 /** Stamped on component usages (`<Button>`): `file:line:col#Name`. Reaches the DOM when the component spreads its props. */
-export const USE_ATTR = 'data-ascend-use';
+export const USE_ATTR = 'data-brushup-use';
 
 let lastParse: { code: string; file: string; ast: t.File } | null = null;
 
@@ -55,8 +55,8 @@ export interface InstrumentOptions {
 
 /**
  * Tag the JSX in a file so the canvas can map DOM back to source:
- *  - host elements (`<div>`, `<h1>`…) get `data-ascend-src="file:line:col"`;
- *  - component usages (`<Button>`, `<Dialog.Trigger>`) get `data-ascend-use="file:line:col#Name"`,
+ *  - host elements (`<div>`, `<h1>`…) get `data-brushup-src="file:line:col"`;
+ *  - component usages (`<Button>`, `<Dialog.Trigger>`) get `data-brushup-use="file:line:col#Name"`,
  *    which lands on the DOM element when the component forwards its props (shadcn/ui does).
  * Returns null when there is nothing to tag or the file doesn't parse.
  */

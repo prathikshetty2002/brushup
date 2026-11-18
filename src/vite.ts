@@ -4,21 +4,21 @@ import { instrument } from './core/jsx';
 import type { DevOptions } from './server/dev-project';
 import { startDevHost, type DevHost } from './server/dev-host';
 
-export type AscendOptions = DevOptions;
+export type BrushupOptions = DevOptions;
 
 /**
  * Vite plugin for dev-server mode. In `vite dev` it
- *  1. stamps every JSX host element with `data-ascend-src="file:line:col"`,
- *  2. starts the Ascend edit server (loopback only), and
+ *  1. stamps every JSX host element with `data-brushup-src="file:line:col"`,
+ *  2. starts the Brushup edit server (loopback only), and
  *  3. injects the canvas overlay into the page.
  * It does nothing in `vite build`.
  */
-export default function ascend(options: AscendOptions = {}): Plugin {
+export default function brushup(options: BrushupOptions = {}): Plugin {
   let root = process.cwd();
   let host: DevHost | undefined;
 
   return {
-    name: 'ascend',
+    name: 'brushup',
     apply: 'serve',
     enforce: 'pre',
 
@@ -29,7 +29,7 @@ export default function ascend(options: AscendOptions = {}): Plugin {
     async configureServer(server) {
       host = await startDevHost(root, options);
       server.httpServer?.once('close', () => void host?.close());
-      server.config.logger.info(`  ➜  Ascend canvas active (edits write back to your JSX)`);
+      server.config.logger.info(`  ➜  Brushup canvas active (edits write back to your JSX)`);
     },
 
     transform(code, id) {
@@ -43,7 +43,7 @@ export default function ascend(options: AscendOptions = {}): Plugin {
     transformIndexHtml() {
       if (!host) return;
       return [
-        { tag: 'script', children: `window.__ascend=${JSON.stringify({ mode: 'dev', ws: host.wsUrl, hash: '' })};`, injectTo: 'head-prepend' },
+        { tag: 'script', children: `window.__brushup=${JSON.stringify({ mode: 'dev', ws: host.wsUrl, hash: '' })};`, injectTo: 'head-prepend' },
         { tag: 'script', attrs: { src: host.overlayUrl }, injectTo: 'body' },
       ];
     },

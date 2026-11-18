@@ -39,9 +39,9 @@ const run = (edit: Edit, files = { [ENTRY]: page }) => applyEdit(files, ENTRY, e
 describe('mapHtml / annotate', () => {
   it('ids body elements in document order and skips head', () => {
     const out = annotate(mapHtml(page));
-    expect(out).toContain('<h1 data-ascend-id=');
-    expect(out).not.toMatch(/<style data-ascend-id/);
-    expect(out.replace(/ data-ascend-id="a\d+"/g, '')).toBe(page);
+    expect(out).toContain('<h1 data-brushup-id=');
+    expect(out).not.toMatch(/<style data-brushup-id/);
+    expect(out.replace(/ data-brushup-id="a\d+"/g, '')).toBe(page);
   });
 });
 

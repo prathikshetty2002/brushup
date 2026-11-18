@@ -5,13 +5,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { initProject } from '../src/init';
 
 let dir: string;
-beforeEach(async () => void (dir = await mkdtemp(path.join(os.tmpdir(), 'ascend-init-'))));
+beforeEach(async () => void (dir = await mkdtemp(path.join(os.tmpdir(), 'brushup-init-'))));
 afterEach(() => rm(dir, { recursive: true, force: true }));
 
-describe('ascend init', () => {
+describe('brushup init', () => {
   it('creates CLAUDE.md when missing', async () => {
     expect((await initProject(dir)).claudeMd).toBe('created');
-    expect(await readFile(path.join(dir, 'CLAUDE.md'), 'utf8')).toContain('.ascend/notes.md');
+    expect(await readFile(path.join(dir, 'CLAUDE.md'), 'utf8')).toContain('.brushup/notes.md');
   });
 
   it('appends to an existing CLAUDE.md without touching the rest, and is idempotent', async () => {
@@ -21,14 +21,14 @@ describe('ascend init', () => {
     expect(once.startsWith('# My project\n\nUse pnpm.\n')).toBe(true);
     expect((await initProject(dir)).claudeMd).toBe('unchanged');
     expect(await readFile(path.join(dir, 'CLAUDE.md'), 'utf8')).toBe(once);
-    expect(once.match(/ascend:start/g)).toHaveLength(1);
+    expect(once.match(/brushup:start/g)).toHaveLength(1);
   });
 
-  it('adds .ascend/ to an existing .gitignore only once', async () => {
+  it('adds .brushup/ to an existing .gitignore only once', async () => {
     await writeFile(path.join(dir, '.gitignore'), 'node_modules');
     expect((await initProject(dir)).gitignore).toBe('updated');
     expect((await initProject(dir)).gitignore).toBe('unchanged');
-    expect(await readFile(path.join(dir, '.gitignore'), 'utf8')).toBe('node_modules\n.ascend/\n');
+    expect(await readFile(path.join(dir, '.gitignore'), 'utf8')).toBe('node_modules\n.brushup/\n');
   });
 
   it('does not create a .gitignore', async () => {
@@ -36,10 +36,10 @@ describe('ascend init', () => {
   });
 });
 
-describe('ascend init --mcp', () => {
+describe('brushup init --mcp', () => {
   it('creates .mcp.json with the server', async () => {
     expect((await initProject(dir, { mcp: true })).mcp).toBe('created');
-    expect(JSON.parse(await readFile(path.join(dir, '.mcp.json'), 'utf8'))).toEqual({ mcpServers: { ascend: { command: 'npx', args: ['ascend-mcp'] } } });
+    expect(JSON.parse(await readFile(path.join(dir, '.mcp.json'), 'utf8'))).toEqual({ mcpServers: { brushup: { command: 'npx', args: ['brushup-mcp'] } } });
   });
 
   it('adds beside existing servers without touching them, and is idempotent', async () => {
@@ -48,7 +48,7 @@ describe('ascend init --mcp', () => {
     const config = JSON.parse(await readFile(path.join(dir, '.mcp.json'), 'utf8'));
     expect(config.mcpServers.other).toEqual({ command: 'x' });
     expect(config.extra).toBe(1);
-    expect(config.mcpServers.ascend.args).toEqual(['ascend-mcp']);
+    expect(config.mcpServers.brushup.args).toEqual(['brushup-mcp']);
     expect((await initProject(dir, { mcp: true })).mcp).toBe('unchanged');
   });
 

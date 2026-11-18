@@ -1,10 +1,10 @@
 /**
- * Records a scripted demo of Ascend (static + dev-server modes) to demo/out/ascend-demo.mp4.
+ * Records a scripted demo of Brushup (static + dev-server modes) to demo/out/brushup-demo.mp4.
  *
  *   npm run build && npm run demo
  *
  * Needs Chrome (set CHROME=/path if not at /usr/bin/google-chrome-stable), ffmpeg, and a Vite + React
- * app that has the Ascend plugin (set ASCEND_DEMO_VAPP to its folder).
+ * app that has the Brushup plugin (set BRUSHUP_DEMO_VAPP to its folder).
  */
 import { spawn, type ChildProcess } from 'node:child_process';
 import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
@@ -18,7 +18,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
 const WORK = path.join(HERE, 'work');
 const OUT = path.join(HERE, 'out');
-const VAPP = process.env.ASCEND_DEMO_VAPP ?? '';
+const VAPP = process.env.BRUSHUP_DEMO_VAPP ?? '';
 const CHROME = process.env.CHROME ?? '/usr/bin/google-chrome-stable';
 const VITE_PORT = 5199;
 const STAGE_PORT = 4400;
@@ -166,7 +166,7 @@ const killChildren = () => {
 };
 
 async function main() {
-  if (!VAPP) throw new Error('Set ASCEND_DEMO_VAPP to a Vite + React app folder that uses the ascend/vite plugin.');
+  if (!VAPP) throw new Error('Set BRUSHUP_DEMO_VAPP to a Vite + React app folder that uses the brushup/vite plugin.');
 
   // Fresh workspaces so the demo is repeatable.
   await rm(WORK, { recursive: true, force: true });
@@ -174,8 +174,8 @@ async function main() {
   await mkdir(OUT, { recursive: true });
   for (const f of await readdir(path.join(ROOT, 'examples'))) await cp(path.join(ROOT, 'examples', f), path.join(WORK, f));
   await writeFile(path.join(VAPP, 'src/App.tsx'), APP_TSX);
-  await rm(path.join(VAPP, '.ascend'), { recursive: true, force: true });
-  await rm(path.join(WORK, '.ascend'), { recursive: true, force: true });
+  await rm(path.join(VAPP, '.brushup'), { recursive: true, force: true });
+  await rm(path.join(WORK, '.brushup'), { recursive: true, force: true });
 
   const html = path.join(WORK, 'landing.html');
   const css = path.join(WORK, 'landing.css');
@@ -192,7 +192,7 @@ async function main() {
   const page: Page = await context.newPage();
 
   // Record with Chrome's screencast piped into the system ffmpeg (no extra binaries needed).
-  const mp4 = path.join(OUT, 'ascend-demo.mp4');
+  const mp4 = path.join(OUT, 'brushup-demo.mp4');
   const ffmpeg = spawn('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', '30', '-i', '-', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', mp4], {
     stdio: ['pipe', 'inherit', 'inherit'],
   });
@@ -271,7 +271,7 @@ async function main() {
     await sleep(400);
     await page.evaluate(([u, l]) => (window as any).setApp(u, l), [url, label]);
     await app.locator('h1').first().waitFor({ timeout: 30000 });
-    await app.locator('#ascend-root').waitFor({ state: 'attached' });
+    await app.locator('#brushup-root').waitFor({ state: 'attached' });
     await sleep(2500); // let styles, HMR connection and the overlay socket settle
   };
   /** Click an element and confirm the canvas selected it (retrying if the page was still settling). */

@@ -1,9 +1,9 @@
 // Builds the publishable bundle:
 //   dist/overlay.js      in-page canvas
 //   dist/vite.js         Vite plugin + edit server
-//   dist/next.js         Next.js config wrapper (withAscend)
+//   dist/next.js         Next.js config wrapper (withBrushup)
 //   dist/next-loader.cjs build loader that tags JSX (webpack + Turbopack)
-//   dist/next-script.js  <AscendScript /> component
+//   dist/next-script.js  <BrushupScript /> component
 import { build } from 'esbuild';
 import { mkdir, writeFile } from 'node:fs/promises';
 
@@ -13,7 +13,7 @@ await build({ entryPoints: ['src/overlay/index.ts'], bundle: true, outfile: 'dis
 
 const node = { bundle: true, platform: 'node', target: 'node20', packages: 'external' };
 await build({ ...node, entryPoints: ['src/vite.ts'], outfile: 'dist/vite.js', format: 'esm' });
-// CommonJS twins, for `require('ascend/vite')` in a CJS vite.config / `require('ascend/next')` in next.config.js.
+// CommonJS twins, for `require('brushup/vite')` in a CJS vite.config / `require('brushup/next')` in next.config.js.
 // import.meta.url is rewritten to the file's own URL, and the exports are merged onto the default function.
 const cjs = {
   ...node,
@@ -44,27 +44,27 @@ await writeFile(
   'dist/vite.d.ts',
   `import type { Plugin } from 'vite';
 
-export interface AscendOptions {
+export interface BrushupOptions {
   /** How style edits are written: Tailwind utilities, inline style props, or auto-detect (default). */
   style?: 'auto' | 'inline' | 'tailwind';
 }
 
-export default function ascend(options?: AscendOptions): Plugin;
+export default function brushup(options?: BrushupOptions): Plugin;
 `,
 );
 
 await writeFile(
   'dist/next.d.ts',
-  `export interface AscendNextOptions {
+  `export interface BrushupNextOptions {
   /** How style edits are written: Tailwind utilities, inline style props, or auto-detect (default). */
   style?: 'auto' | 'inline' | 'tailwind';
   /** Also tag component usages (<Button>) so edits reach the usage site. Default true. */
   components?: boolean;
 }
 
-/** Wrap your Next.js config: export default withAscend(nextConfig) */
-export function withAscend<T = any>(nextConfig?: T, options?: AscendNextOptions): (phase: string, context?: unknown) => Promise<any>;
-export default withAscend;
+/** Wrap your Next.js config: export default withBrushup(nextConfig) */
+export function withBrushup<T = any>(nextConfig?: T, options?: BrushupNextOptions): (phase: string, context?: unknown) => Promise<any>;
+export default withBrushup;
 `,
 );
 
@@ -72,9 +72,9 @@ await writeFile(
   'dist/next-script.d.ts',
   `import type { ReactElement } from 'react';
 
-/** Put <AscendScript /> in your root layout, inside <body>. Renders nothing in production. */
-export function AscendScript(): ReactElement | null;
-export default AscendScript;
+/** Put <BrushupScript /> in your root layout, inside <body>. Renders nothing in production. */
+export function BrushupScript(): ReactElement | null;
+export default BrushupScript;
 `,
 );
 

@@ -11,12 +11,12 @@ let port = 0;
 let wsUrl = '';
 
 beforeEach(async () => {
-  dir = await mkdtemp(path.join(os.tmpdir(), 'ascend-static-'));
+  dir = await mkdtemp(path.join(os.tmpdir(), 'brushup-static-'));
   await writeFile(path.join(dir, 'index.html'), '<!doctype html><html><body><h1>Hi</h1></body></html>');
   server = await startServer(path.join(dir, 'index.html'), 45000 + Math.floor(Math.random() * 500));
   port = Number(new URL(server.url).port);
   const html = await (await fetch(server.url)).text();
-  wsUrl = JSON.parse(/window\.__ascend=(\{.*?\})<\/script>/.exec(html)![1]).ws;
+  wsUrl = JSON.parse(/window\.__brushup=(\{.*?\})<\/script>/.exec(html)![1]).ws;
 });
 afterEach(async () => {
   await server?.close();
@@ -34,7 +34,7 @@ const tryConnect = (url: string, headers: Record<string, string> = {}) =>
 
 describe('static-mode WebSocket access', () => {
   it('puts a per-run token in the page it serves', () => {
-    expect(wsUrl).toMatch(new RegExp(`^ws://127\\.0\\.0\\.1:${port}/__ascend/ws\\?token=[0-9a-f]{32}$`));
+    expect(wsUrl).toMatch(new RegExp(`^ws://127\\.0\\.0\\.1:${port}/__brushup/ws\\?token=[0-9a-f]{32}$`));
   });
 
   it('accepts the page\'s own origin with the token', async () => {
@@ -42,8 +42,8 @@ describe('static-mode WebSocket access', () => {
   });
 
   it('rejects a connection with no token or the wrong token', async () => {
-    expect(await tryConnect(`ws://127.0.0.1:${port}/__ascend/ws`)).toBe('rejected');
-    expect(await tryConnect(`ws://127.0.0.1:${port}/__ascend/ws?token=${'0'.repeat(32)}`)).toBe('rejected');
+    expect(await tryConnect(`ws://127.0.0.1:${port}/__brushup/ws`)).toBe('rejected');
+    expect(await tryConnect(`ws://127.0.0.1:${port}/__brushup/ws?token=${'0'.repeat(32)}`)).toBe('rejected');
   });
 
   it('rejects another website even with a valid token (Origin check)', async () => {

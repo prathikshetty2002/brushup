@@ -45,9 +45,9 @@ describe('morphPage (live sync of agent edits into the open page)', () => {
     expect(morphPage(parse('<title>One</title><h1 class="t" data-x="1">Hello</h1>'))).toBe('reload');
   });
 
-  it('ignores the Ascend overlay\'s own scripts when deciding whether scripts changed', () => {
+  it('ignores the Brushup overlay\'s own scripts when deciding whether scripts changed', () => {
     const own = document.createElement('script');
-    own.textContent = 'window.__ascend={"mode":"static"}';
+    own.textContent = 'window.__brushup={"mode":"static"}';
     document.body.append(own);
     expect(morphPage(parse('<title>One</title><style>.a { color: red }</style><h1 class="t" data-x="1">Hello</h1><p>World</p>'))).toBe('ok');
   });

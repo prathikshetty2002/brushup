@@ -142,7 +142,7 @@ function patchInline(code: string, file: string, edit: Edit, prop: string, value
   }
   const expr = attr.value?.type === 'JSXExpressionContainer' ? attr.value.expression : null;
   if (!expr || expr.type !== 'ObjectExpression') {
-    throw new EditError('This element\'s style prop is not an object literal, so Ascend can\'t edit it.');
+    throw new EditError('This element\'s style prop is not an object literal, so Brushup can\'t edit it.');
   }
   const existing = expr.properties.find(
     (p): p is t.ObjectProperty =>

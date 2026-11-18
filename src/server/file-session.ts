@@ -39,7 +39,7 @@ export abstract class FileSession {
 
   protected abstract loadFor(edit: Edit): Promise<Files>;
   protected abstract transform(files: Files, edit: Edit): { files: Files; target?: Target; warning?: string };
-  /** Describe the selected element for `.ascend/selection.json`, or null if it can no longer be found. */
+  /** Describe the selected element for `.brushup/selection.json`, or null if it can no longer be found. */
   protected abstract describe(sel: Selection): Promise<object | null>;
   /**
    * The order a batch is applied in. A patch can move later text on the same line (JSX columns), so a mode whose
@@ -132,7 +132,7 @@ export abstract class FileSession {
       const set = this.ownWrites.get(file) ?? new Set<string>();
       set.add(sha(content));
       this.ownWrites.set(file, set);
-      const tmp = path.join(path.dirname(file), `.ascend-${process.pid}-${path.basename(file)}.tmp`);
+      const tmp = path.join(path.dirname(file), `.brushup-${process.pid}-${path.basename(file)}.tmp`);
       await writeFile(tmp, content);
       await rename(tmp, file);
     }
@@ -149,13 +149,13 @@ export abstract class FileSession {
 
   /** What the agent can read to learn what the user did and what is selected. */
   private async log(entry: object) {
-    const dir = path.join(this.root, '.ascend');
+    const dir = path.join(this.root, '.brushup');
     await mkdir(dir, { recursive: true });
     await appendFile(path.join(dir, 'edits.jsonl'), JSON.stringify({ at: new Date().toISOString(), ...entry }) + '\n');
   }
 
   async setSelection(sel: Selection | null) {
-    const dir = path.join(this.root, '.ascend');
+    const dir = path.join(this.root, '.brushup');
     await mkdir(dir, { recursive: true });
     const file = path.join(dir, 'selection.json');
     if (!sel) return writeFile(file, 'null\n');

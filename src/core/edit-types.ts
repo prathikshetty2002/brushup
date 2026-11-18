@@ -1,6 +1,6 @@
 /**
  * Edits the canvas can ask the server to make. Elements are addressed by the
- * `data-ascend-id` the server injects when serving the page; `tag` is a sanity
+ * `data-brushup-id` the server injects when serving the page; `tag` is a sanity
  * check that the id still points at the element the user clicked.
  */
 export type Scope = 'auto' | 'element' | 'rule';

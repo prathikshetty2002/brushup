@@ -4,7 +4,7 @@ import { normalizeHex } from '../src/overlay/panel';
 import { click, key, layout, loadOverlay, pointer, settle, type Overlay } from './overlay-harness';
 
 let o: Overlay;
-const el = (id: string) => document.querySelector(`[data-ascend-id="${id}"]`) as HTMLElement;
+const el = (id: string) => document.querySelector(`[data-brushup-id="${id}"]`) as HTMLElement;
 const info = () => o.root.querySelector('[data-pane=style] .info')!.textContent!;
 const status = () => o.root.querySelector('.status')!.textContent!;
 const handle = (kind: string) => o.root.querySelector(`[data-kind="${kind}"]`)!;
@@ -12,9 +12,9 @@ const ok = async (hash = 'h1', extra: object = {}) => (await settle(), o.reply({
 
 beforeEach(async () => {
   document.body.innerHTML = `
-    <h1 data-ascend-id="a1">Hello</h1>
-    <p data-ascend-id="a2" class="lede">World</p>
-    <div data-ascend-id="a3"><span data-ascend-id="a4">x</span></div>`;
+    <h1 data-brushup-id="a1">Hello</h1>
+    <p data-brushup-id="a2" class="lede">World</p>
+    <div data-brushup-id="a3"><span data-brushup-id="a4">x</span></div>`;
   o = await loadOverlay({ mode: 'static' });
 });
 afterEach(() => o.destroy());
@@ -292,7 +292,7 @@ describe('inline text editing', () => {
   });
 
   it('lets spaces be typed into a <button> label (Space would otherwise press the button)', () => {
-    document.body.insertAdjacentHTML('beforeend', '<button data-ascend-id="b1">Get</button>');
+    document.body.insertAdjacentHTML('beforeend', '<button data-brushup-id="b1">Get</button>');
     const b = el('b1');
     let pressed = 0;
     b.addEventListener('click', () => pressed++);
@@ -376,7 +376,7 @@ describe('notes', () => {
   });
 
   it('suggests "section" for a section-like element', () => {
-    document.body.insertAdjacentHTML('beforeend', '<section data-ascend-id="s1">s</section>');
+    document.body.insertAdjacentHTML('beforeend', '<section data-brushup-id="s1">s</section>');
     click(el('s1'));
     key('n');
     expect((o.root.querySelector('form.composer select[name=kind]') as HTMLSelectElement).value).toBe('section');
@@ -463,8 +463,8 @@ describe('dev-server mode references (component usage sites)', () => {
   beforeEach(async () => {
     o.destroy();
     document.body.innerHTML = `
-      <button data-ascend-src="src/ui/button.tsx:5:4" data-ascend-use="src/app/page.tsx:12:6#Button">Go</button>
-      <li data-ascend-src="src/List.tsx:3:2">a</li><li data-ascend-src="src/List.tsx:3:2">b</li>`;
+      <button data-brushup-src="src/ui/button.tsx:5:4" data-brushup-use="src/app/page.tsx:12:6#Button">Go</button>
+      <li data-brushup-src="src/List.tsx:3:2">a</li><li data-brushup-src="src/List.tsx:3:2">b</li>`;
     o = await loadOverlay({ mode: 'dev' });
   });
   const btn = () => document.querySelector('button')!;
@@ -482,10 +482,10 @@ describe('dev-server mode references (component usage sites)', () => {
     expect(link().getAttribute('href')).toBeNull(); // the project root isn't known yet
     o.receive({ type: 'info', root: '/home/me/app' });
     expect(link().getAttribute('href')).toBe('vscode://file/home/me/app/src/app/page.tsx:12:6');
-    localStorage.setItem('ascend:editor', 'cursor');
+    localStorage.setItem('brushup:editor', 'cursor');
     o.receive({ type: 'info', root: '/home/me/app' });
     expect(link().getAttribute('href')).toBe('cursor://file/home/me/app/src/app/page.tsx:12:6');
-    localStorage.removeItem('ascend:editor');
+    localStorage.removeItem('brushup:editor');
   });
 
   it('encodes characters in the project path that would end a URL path early', () => {
@@ -552,7 +552,7 @@ describe('dev-server mode references (component usage sites)', () => {
   });
 });
 
-describe('ascend_inspect overflow reporting', () => {
+describe('brushup_inspect overflow reporting', () => {
   const ask = (id: string) => (o.receive({ type: 'ask', id, ask: { kind: 'inspect' } }), o.all('answer').find((m) => m.id === id)!.data.overflow);
   const withScroll = (e: HTMLElement, scrollH: number, clientH: number) => {
     Object.defineProperty(e, 'scrollHeight', { value: scrollH, configurable: true });

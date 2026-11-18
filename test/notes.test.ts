@@ -10,7 +10,7 @@ let store: NotesStore;
 const anchor = { tag: 'h1', classes: ['text-4xl', 'font-bold'], text: 'Ship interfaces your agent drafted', src: 'src/app/page.tsx:21:8', index: 0, page: '/' };
 
 beforeEach(async () => {
-  dir = await mkdtemp(path.join(os.tmpdir(), 'ascend-notes-'));
+  dir = await mkdtemp(path.join(os.tmpdir(), 'brushup-notes-'));
   store = new NotesStore(dir);
 });
 afterEach(async () => {
@@ -22,12 +22,12 @@ describe('NotesStore', () => {
   it('saves a note, writes notes.json and a readable notes.md pointing at source', async () => {
     const list = await store.save({ kind: 'section', label: 'Hero', text: 'Feels cramped, add breathing room', anchor });
     expect(list).toHaveLength(1);
-    const md = await readFile(path.join(dir, '.ascend', 'notes.md'), 'utf8');
+    const md = await readFile(path.join(dir, '.brushup', 'notes.md'), 'utf8');
     expect(md).toContain('## 1. Hero (section)');
     expect(md).toContain('Feels cramped, add breathing room');
     expect(md).toContain('`src/app/page.tsx:21:8`');
     expect(md).toContain('"Ship interfaces your agent drafted"');
-    expect(JSON.parse(await readFile(path.join(dir, '.ascend', 'notes.json'), 'utf8'))[0].status).toBe('open');
+    expect(JSON.parse(await readFile(path.join(dir, '.brushup', 'notes.json'), 'utf8'))[0].status).toBe('open');
   });
 
   it('updates in place by id, and removes', async () => {
@@ -43,7 +43,7 @@ describe('NotesStore', () => {
     const [first] = await store.list();
     await store.save({ ...first, status: 'done', text: 'x' });
     await store.save({ text: 'still open', anchor });
-    const md = await readFile(path.join(dir, '.ascend', 'notes.md'), 'utf8');
+    const md = await readFile(path.join(dir, '.brushup', 'notes.md'), 'utf8');
     expect(md).not.toContain('Primary button');
     expect(md).toContain('still open');
     // numbering is the position in the full list, matching the pin on the canvas
@@ -52,7 +52,7 @@ describe('NotesStore', () => {
 
   it('shows a component note with its usage site', async () => {
     await store.save({ kind: 'component', label: 'Primary button', text: 'Make it wider', anchor: { ...anchor, tag: 'button', use: 'src/app/page.tsx:30:10#Button' } });
-    const md = await readFile(path.join(dir, '.ascend', 'notes.md'), 'utf8');
+    const md = await readFile(path.join(dir, '.brushup', 'notes.md'), 'utf8');
     expect(md).toContain('component `<Button>` used at `src/app/page.tsx:30:10`');
   });
 
@@ -61,7 +61,7 @@ describe('NotesStore', () => {
     const seen: string[] = [];
     store.watch((list) => seen.push(...list.map((x) => x.status)));
     await new Promise((r) => setTimeout(r, 300));
-    await writeFile(path.join(dir, '.ascend', 'notes.json'), JSON.stringify([{ ...n, status: 'done' }]));
+    await writeFile(path.join(dir, '.brushup', 'notes.json'), JSON.stringify([{ ...n, status: 'done' }]));
     await new Promise((r) => setTimeout(r, 800));
     expect(seen).toContain('done');
   });

@@ -13,7 +13,7 @@ export type ToolResult = { ok: true; data: unknown } | { ok: false; error: strin
 
 const ok = (data: unknown): ToolResult => ({ ok: true, data });
 const fail = (error: string): ToolResult => ({ ok: false, error });
-const ascendFile = (ctx: ToolContext, name: string) => path.join(ctx.root, '.ascend', name);
+const brushupFile = (ctx: ToolContext, name: string) => path.join(ctx.root, '.brushup', name);
 
 /** Short `file:line` / `file:line#Component` for a source reference. */
 const shortRef = (ref?: string) => (ref ? ref.replace(/:\d+(#|$)/, '$1') : undefined);
@@ -46,18 +46,18 @@ export async function getNotes(ctx: ToolContext, input: { status?: 'open' | 'don
   return ok({ count: notes.length, notes });
 }
 
-/** Mark a note done (or reopen it). Only `.ascend/notes.json` changes. */
+/** Mark a note done (or reopen it). Only `.brushup/notes.json` changes. */
 export async function updateNote(ctx: ToolContext, input: { id: string; status: 'open' | 'done' }): Promise<ToolResult> {
   const store = new NotesStore(ctx.root);
   const note = (await store.list()).find((n) => n.id === input.id);
-  if (!note) return fail(`No note with id ${input.id}. Use ascend_get_notes to see the ids.`);
+  if (!note) return fail(`No note with id ${input.id}. Use brushup_get_notes to see the ids.`);
   await store.save({ ...note, status: input.status });
   return ok({ id: note.id, status: input.status });
 }
 
 /** The element currently selected on the canvas, as last written by the canvas. */
 export async function getSelection(ctx: ToolContext): Promise<ToolResult> {
-  const file = ascendFile(ctx, 'selection.json');
+  const file = brushupFile(ctx, 'selection.json');
   try {
     const selection = JSON.parse(await readFile(file, 'utf8'));
     if (!selection) return ok({ selection: null, hint: 'Nothing is selected on the canvas.' });
@@ -82,7 +82,7 @@ export async function getRecentEdits(ctx: ToolContext, input: { limit?: number }
   const limit = Math.min(Math.max(Math.floor(input.limit ?? 10), 1), 50);
   let lines: string[] = [];
   try {
-    lines = (await readFile(ascendFile(ctx, 'edits.jsonl'), 'utf8')).split('\n').filter(Boolean);
+    lines = (await readFile(brushupFile(ctx, 'edits.jsonl'), 'utf8')).split('\n').filter(Boolean);
   } catch {
     /* no edits yet */
   }

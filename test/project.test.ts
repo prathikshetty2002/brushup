@@ -12,7 +12,7 @@ let project: Project;
 const HTML = '<!doctype html>\n<html><body>\n<h1>Hi</h1>\n<p>There</p>\n</body></html>\n';
 
 beforeEach(async () => {
-  dir = await mkdtemp(path.join(os.tmpdir(), 'ascend-'));
+  dir = await mkdtemp(path.join(os.tmpdir(), 'brushup-'));
   entry = path.join(dir, 'index.html');
   await writeFile(entry, HTML);
   project = new Project(entry);
@@ -21,7 +21,7 @@ afterEach(() => rm(dir, { recursive: true, force: true }));
 
 const idOf = async (tag: string) => {
   const { html } = await project.render();
-  return /data-ascend-id="(a\d+)"/.exec(html.slice(html.indexOf(`<${tag} `)))![1];
+  return /data-brushup-id="(a\d+)"/.exec(html.slice(html.indexOf(`<${tag} `)))![1];
 };
 
 describe('Project', () => {
@@ -65,7 +65,7 @@ describe('Project', () => {
 
   it('records the selection for the agent', async () => {
     await project.setSelection({ id: await idOf('p'), tag: 'p' });
-    const sel = JSON.parse(await readFile(path.join(dir, '.ascend', 'selection.json'), 'utf8'));
+    const sel = JSON.parse(await readFile(path.join(dir, '.brushup', 'selection.json'), 'utf8'));
     expect(sel).toMatchObject({ file: 'index.html', tag: 'p', line: 4, text: 'There' });
   });
 });

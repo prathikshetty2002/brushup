@@ -1,6 +1,6 @@
 /** Update the live DOM in place to match a freshly fetched copy of the page, keeping node identity (and so selection, scroll, focus). */
 
-const OURS = (s: HTMLScriptElement) => s.src.endsWith('/__ascend/overlay.js') || (s.textContent ?? '').startsWith('window.__ascend=');
+const OURS = (s: HTMLScriptElement) => s.src.endsWith('/__brushup/overlay.js') || (s.textContent ?? '').startsWith('window.__brushup=');
 
 const scriptSignature = (d: Document) =>
   [...d.querySelectorAll('script')]
@@ -51,7 +51,7 @@ export function refreshStylesheets() {
   document.querySelectorAll<HTMLLinkElement>('link[rel~="stylesheet"]').forEach((old) => {
     const url = new URL(old.href, location.href);
     if (url.origin !== location.origin) return;
-    url.searchParams.set('ascend', String(Date.now()));
+    url.searchParams.set('brushup', String(Date.now()));
     const fresh = old.cloneNode() as HTMLLinkElement;
     fresh.href = url.href;
     fresh.onload = () => old.remove();

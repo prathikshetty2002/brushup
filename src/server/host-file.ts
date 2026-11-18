@@ -2,7 +2,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 /**
- * `.ascend/host.json` tells other local processes (the MCP server) where the running canvas server is.
+ * `.brushup/host.json` tells other local processes (the MCP server) where the running canvas server is.
  * The dev-server modes include a per-run token in `wsUrl`, so the file is readable only by the project's owner
  * in practice (it sits in the project folder next to the code the same user can already edit).
  */
@@ -13,7 +13,7 @@ export interface HostInfo {
   pid: number;
 }
 
-const fileFor = (root: string) => path.join(root, '.ascend', 'host.json');
+const fileFor = (root: string) => path.join(root, '.brushup', 'host.json');
 
 export async function writeHostFile(root: string, info: HostInfo) {
   await mkdir(path.dirname(fileFor(root)), { recursive: true });

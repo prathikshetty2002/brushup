@@ -1,13 +1,13 @@
 /**
- * Records a demo of Ascend working with Claude Code to demo/out/ascend-claude-demo.mp4.
+ * Records a demo of Brushup working with Claude Code to demo/out/brushup-claude-demo.mp4.
  *
- * Everything on screen is real: the Next.js app and Ascend canvas are driven in Chrome, and Claude Code is run
+ * Everything on screen is real: the Next.js app and Brushup canvas are driven in Chrome, and Claude Code is run
  * live (headless, `claude -p`) with its actual tool calls streamed into the terminal panel. The setup commands
  * are real output captured from a fresh project beforehand and replayed at typing speed.
  *
- * Prerequisites (see docs/GUIDE.md): the Next test app with Ascend installed, `next dev` running on :3456,
+ * Prerequisites (see docs/GUIDE.md): the Next test app with Brushup installed, `next dev` running on :3456,
  * `claude` logged in, Chrome, ffmpeg.
- *   ASCEND_DEMO_NEXTAPP=/path/to/app npx tsx demo/record-claude.ts
+ *   BRUSHUP_DEMO_NEXTAPP=/path/to/app npx tsx demo/record-claude.ts
  */
 import { execFileSync, spawn } from 'node:child_process';
 import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, stat } from 'node:fs/promises';
@@ -20,10 +20,10 @@ import { chromium, type Page } from 'playwright-core';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
 const OUT = path.join(HERE, 'out');
-const NEXTAPP = process.env.ASCEND_DEMO_NEXTAPP ?? '';
+const NEXTAPP = process.env.BRUSHUP_DEMO_NEXTAPP ?? '';
 const NEXT_URL = 'http://localhost:3456/';
 const CHROME = process.env.CHROME ?? '/usr/bin/google-chrome-stable';
-const TARBALL = path.join(ROOT, 'ascend-0.1.0.tgz');
+const TARBALL = path.join(ROOT, 'brushup-0.1.0.tgz');
 const STAGE_PORT = 4401;
 const W = 1600;
 const H = 900;
@@ -80,11 +80,11 @@ function startStage() {
 /* ---------- real setup output, captured from a fresh project ---------- */
 
 async function captureSetup() {
-  const dir = await mkdtemp(path.join(os.tmpdir(), 'ascend-demo-proj-'));
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'brushup-demo-proj-'));
   const run = (cmd: string, args: string[]) => execFileSync(cmd, args, { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
   run('npm', ['init', '-y']);
   const install = run('npm', ['install', '-D', TARBALL]).split('\n').filter((l) => l && !/npm warn|install-scripts/i.test(l));
-  const init = run(path.join(dir, 'node_modules/.bin/ascend'), ['init', '--mcp']).split('\n').filter(Boolean);
+  const init = run(path.join(dir, 'node_modules/.bin/brushup'), ['init', '--mcp']).split('\n').filter(Boolean);
   await rm(dir, { recursive: true, force: true });
   return { install, init };
 }
@@ -122,10 +122,10 @@ async function runClaude(prompt: string, tools: string[], maxTurns: number, emit
           toolNames.set(c.id, c.name);
           const input = c.input ?? {};
           if (c.name === 'ToolSearch') continue;
-          if (c.name.startsWith('mcp__ascend__')) {
-            const tool = c.name.replace('mcp__ascend__', '');
+          if (c.name.startsWith('mcp__brushup__')) {
+            const tool = c.name.replace('mcp__brushup__', '');
             const a = Object.entries(input).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join(', ');
-            queue(() => emit('m', `ascend ▸ ${tool}(${short(a, 60)})`));
+            queue(() => emit('m', `brushup ▸ ${tool}(${short(a, 60)})`));
           } else if (c.name === 'Edit') {
             queue(async () => {
               await emit('t', `Edit(${rel(input.file_path)})`);
@@ -147,7 +147,7 @@ async function runClaude(prompt: string, tools: string[], maxTurns: number, emit
         const raw = typeof c.content === 'string' ? c.content : (c.content ?? []).map((x: any) => x.text ?? '').join(' ');
         let text = short(raw, 84);
         if (name === 'Read') text = `${raw.split('\n').length} lines`;
-        if (name.startsWith('mcp__ascend__')) {
+        if (name.startsWith('mcp__brushup__')) {
           try {
             const j = JSON.parse(raw);
             if (j.status) text = `status → ${j.status}`;
@@ -182,13 +182,13 @@ async function runClaude(prompt: string, tools: string[], maxTurns: number, emit
 let cx = 800, cy = 450;
 
 async function main() {
-  if (!NEXTAPP) throw new Error('Set ASCEND_DEMO_NEXTAPP to the Next.js test app folder.');
+  if (!NEXTAPP) throw new Error('Set BRUSHUP_DEMO_NEXTAPP to the Next.js test app folder.');
   await mkdir(OUT, { recursive: true });
   if (!(await fetch(NEXT_URL).then((r) => r.ok).catch(() => false))) throw new Error(`Start the app first: next dev --port 3456 (in ${NEXTAPP})`);
 
   // Fresh state: clean page, no notes/edits/selection (keep host.json, which the running server wrote).
   await copyFile(path.join(HERE, 'fixtures/next-page.tsx'), PAGE());
-  for (const f of ['notes.json', 'notes.md', 'edits.jsonl', 'selection.json']) await rm(path.join(NEXTAPP, '.ascend', f), { force: true });
+  for (const f of ['notes.json', 'notes.md', 'edits.jsonl', 'selection.json']) await rm(path.join(NEXTAPP, '.brushup', f), { force: true });
   await sleep(2500);
   await rebase();
   const setup = await captureSetup();
@@ -200,7 +200,7 @@ async function main() {
   const app = page.frameLocator('#app');
 
   // Record Chrome's screencast through the system ffmpeg at a steady 30fps.
-  const mp4 = path.join(OUT, 'ascend-claude-demo.mp4');
+  const mp4 = path.join(OUT, 'brushup-claude-demo.mp4');
   const ffmpeg = spawn('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', '30', '-i', '-', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', mp4], { stdio: ['pipe', 'inherit', 'inherit'] });
   const ffmpegDone = new Promise<void>((resolve) => ffmpeg.on('close', () => resolve()));
   let latest: Buffer | null = null;
@@ -280,23 +280,23 @@ async function main() {
   /* 1. setup (real output, replayed) */
   await say('1', 'One-time setup in your Next.js project');
   await term.clear('terminal · my-app');
-  await term.type('s', 'npm install -D ./ascend-0.1.0.tgz', 55);
+  await term.type('s', 'npm install -D ./brushup-0.1.0.tgz', 55);
   for (const l of setup.install.slice(-2)) await term.line('o', l);
   await sleep(500);
-  await term.type('s', 'npx ascend init --mcp', 55);
+  await term.type('s', 'npx brushup init --mcp', 55);
   for (const l of setup.init) { await term.line('o', l); await sleep(250); }
-  await snippet('next.config.ts', ['import { withAscend } from "ascend/next";', '', 'export default withAscend(nextConfig);']);
+  await snippet('next.config.ts', ['import { withBrushup } from "brushup/next";', '', 'export default withBrushup(nextConfig);']);
   await sleep(3200);
-  await snippet('app/layout.tsx', ['import { AscendScript } from "ascend/next/script";', '', '<body>', '  {children}', '  <AscendScript />', '</body>']);
+  await snippet('app/layout.tsx', ['import { BrushupScript } from "brushup/next/script";', '', '<body>', '  {children}', '  <BrushupScript />', '</body>']);
   await sleep(3800);
   await clearSnippet();
 
   /* 2. run the app */
-  await say('2', 'Run your app as usual. The Ascend panel appears on the page');
+  await say('2', 'Run your app as usual. The Brushup panel appears on the page');
   await term.type('s', 'npm run dev', 55);
   await term.line('o', '▲ Next.js 16.4  ·  Local: http://localhost:3456');
   await page.evaluate((u) => (window as any).setApp(u), NEXT_URL);
-  await app.locator('#ascend-root').waitFor({ state: 'attached', timeout: 30000 });
+  await app.locator('#brushup-root').waitFor({ state: 'attached', timeout: 30000 });
   await app.locator('h1').first().waitFor({ timeout: 30000 });
   await sleep(2500);
 
@@ -381,12 +381,12 @@ async function main() {
   await say('5', 'Tell Claude Code to handle the notes. It reads them, finds the file and line, and edits');
   await rebase();
   await term.clear('claude · my-app');
-  await term.type('u', 'Handle the open Ascend design notes for this project.', 42);
+  await term.type('u', 'Handle the open Brushup design notes for this project.', 42);
   await meter('Claude prompts: <b>1</b> · working…', 'busy');
   let cost: number | undefined;
   await runClaude(
-    'Handle the open Ascend design notes for this project.',
-    ['mcp__ascend__ascend_get_notes', 'mcp__ascend__ascend_update_note', 'mcp__ascend__ascend_get_selection', 'mcp__ascend__ascend_recent_edits', 'mcp__ascend__ascend_inspect', 'Read', 'Edit', 'Glob', 'Grep'],
+    'Handle the open Brushup design notes for this project.',
+    ['mcp__brushup__brushup_get_notes', 'mcp__brushup__brushup_update_note', 'mcp__brushup__brushup_get_selection', 'mcp__brushup__brushup_recent_edits', 'mcp__brushup__brushup_inspect', 'Read', 'Edit', 'Glob', 'Grep'],
     14,
     (k, t) => term.line(k, t).then(() => undefined),
     (usd) => (cost = usd),
@@ -402,13 +402,13 @@ async function main() {
   await click(h1b.x + 40, h1b.y + h1b.height / 2);
   await sleep(1000);
   await term.clear('claude · my-app');
-  const q = 'Using the Ascend tools: how wide is the element I have selected, does it overflow, and what font size is it? Do not edit anything.';
+  const q = 'Using the Brushup tools: how wide is the element I have selected, does it overflow, and what font size is it? Do not edit anything.';
   await term.type('u', q, 70);
   await meter('Claude prompts: <b>2</b> · working…', 'busy');
   let cost2: number | undefined;
   await runClaude(
     q,
-    ['mcp__ascend__ascend_get_selection', 'mcp__ascend__ascend_inspect'],
+    ['mcp__brushup__brushup_get_selection', 'mcp__brushup__brushup_inspect'],
     6,
     (k, t) => term.line(k, t).then(() => undefined),
     (usd) => (cost2 = usd),

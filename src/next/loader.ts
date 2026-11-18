@@ -13,7 +13,7 @@ interface LoaderContext {
  * JSX with source locations, in development only. Runs on the original TS/JSX
  * source, before any other transform.
  */
-function ascendLoader(this: LoaderContext, source: string, map?: unknown) {
+function brushupLoader(this: LoaderContext, source: string, map?: unknown) {
   const options = this.getOptions?.() ?? {};
   const file = this.resourcePath;
   const root = options.root ?? this.rootContext ?? process.cwd();
@@ -26,4 +26,4 @@ function ascendLoader(this: LoaderContext, source: string, map?: unknown) {
   this.callback(null, out.code, JSON.parse(out.map.toString()));
 }
 
-export default ascendLoader;
+export default brushupLoader;

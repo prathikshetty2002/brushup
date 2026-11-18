@@ -47,9 +47,9 @@ export async function startServer(entry: string, preferredPort = 4321): Promise<
   const servePage = async (res: ServerResponse, withOverlay: boolean) => {
     try {
       const { html, hash } = await project.render();
-      const boot = `<script>window.__ascend=${JSON.stringify({ mode: 'static', hash, ws: `ws://127.0.0.1:${port}/__ascend/ws?token=${token}` })}</script><script src="/__ascend/overlay.js"></script>`;
+      const boot = `<script>window.__brushup=${JSON.stringify({ mode: 'static', hash, ws: `ws://127.0.0.1:${port}/__brushup/ws?token=${token}` })}</script><script src="/__brushup/overlay.js"></script>`;
       const body = withOverlay ? (html.includes('</body>') ? html.replace(/<\/body>(?![\s\S]*<\/body>)/, boot + '</body>') : html + boot) : html;
-      res.writeHead(200, { 'content-type': MIME['.html'], 'cache-control': 'no-store', 'x-ascend-hash': hash });
+      res.writeHead(200, { 'content-type': MIME['.html'], 'cache-control': 'no-store', 'x-brushup-hash': hash });
       res.end(body);
     } catch (err) {
       res.writeHead(500).end(String(err));
@@ -72,11 +72,11 @@ export async function startServer(entry: string, preferredPort = 4321): Promise<
   const handler = async (req: IncomingMessage, res: ServerResponse) => {
     if (!hostOk(req.headers.host)) return void res.writeHead(403).end('Bad host');
     const { pathname } = new URL(req.url ?? '/', 'http://x');
-    if (pathname === '/__ascend/overlay.js') {
+    if (pathname === '/__brushup/overlay.js') {
       res.writeHead(200, { 'content-type': MIME['.js'], 'cache-control': 'no-store' });
       return void res.end(overlay);
     }
-    if (pathname === '/__ascend/page') return servePage(res, false);
+    if (pathname === '/__brushup/page') return servePage(res, false);
     if (pathname === '/' || pathname === '/' + path.basename(project.entry)) return servePage(res, true);
     return serveStatic(pathname, res);
   };
@@ -85,7 +85,7 @@ export async function startServer(entry: string, preferredPort = 4321): Promise<
   server.on('upgrade', (req, socket, head) => {
     const url = new URL(req.url ?? '/', 'http://x');
     // Host and Origin stop other websites (and DNS rebinding); the token is the same per-run secret the dev-server modes use.
-    if (!hostOk(req.headers.host) || !originOk(req.headers.origin) || url.pathname !== '/__ascend/ws' || url.searchParams.get('token') !== token) return void socket.destroy();
+    if (!hostOk(req.headers.host) || !originOk(req.headers.origin) || url.pathname !== '/__brushup/ws' || url.searchParams.get('token') !== token) return void socket.destroy();
     hub.upgrade(req, socket, head);
   });
 
@@ -99,7 +99,7 @@ export async function startServer(entry: string, preferredPort = 4321): Promise<
   });
 
   const stopWatching = watchProject(project, (files) => void hub.announce(files));
-  await writeHostFile(project.root, { mode: 'static', wsUrl: `ws://127.0.0.1:${port}/__ascend/ws?token=${token}`, pid: process.pid });
+  await writeHostFile(project.root, { mode: 'static', wsUrl: `ws://127.0.0.1:${port}/__brushup/ws?token=${token}`, pid: process.pid });
 
   return {
     url: `http://127.0.0.1:${port}/`,

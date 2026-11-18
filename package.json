@@ -1,11 +1,11 @@
 {
-  "name": "ascend",
+  "name": "brushup",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "Visual canvas for editing agent-generated UI. Edits write back to the HTML/CSS; agent edits flow back to the canvas.",
   "scripts": {
-    "ascend": "tsx src/cli.ts",
+    "brushup": "tsx src/cli.ts",
     "build": "node scripts/build.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
@@ -61,8 +61,8 @@
     "README.md"
   ],
   "bin": {
-    "ascend": "./dist/cli.js",
-    "ascend-mcp": "./dist/mcp.js"
+    "brushup": "./dist/cli.js",
+    "brushup-mcp": "./dist/mcp.js"
   },
   "peerDependencies": {
     "next": ">=15.3",

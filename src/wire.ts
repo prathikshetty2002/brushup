@@ -5,9 +5,9 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 /**
- * Hooks Ascend into a project's own files: the Next.js config wrapper, the layout tag and the Vite plugin.
+ * Hooks Brushup into a project's own files: the Next.js config wrapper, the layout tag and the Vite plugin.
  * Edits are small text splices guarded three ways: they only run on shapes we recognise, they are skipped when
- * Ascend is already wired in, and a result that no longer parses is thrown away. Anything else is left for the
+ * Brushup is already wired in, and a result that no longer parses is thrown away. Anything else is left for the
  * user, with the exact lines to add.
  */
 export type WireStatus = 'updated' | 'unchanged' | 'manual' | 'absent';
@@ -33,6 +33,8 @@ const parses = (code: string) => {
   }
 };
 
+/** `;` unless the file's own imports go without. */
+const semiOf = (code: string) => (/^import .*[^;]\s*$/m.test(code) && !/^import .*;\s*$/m.test(code) ? '' : ';');
 const quoteOf = (code: string) => (/\bfrom\s+'|require\('/.test(code) ? "'" : '"');
 
 /** Where a new import line goes: after the last import, else after leading directives ('use client'), else the top. */
@@ -46,9 +48,9 @@ function importAt(ast: t.File): number {
 
 type Wired = string | 'unchanged' | null;
 
-/** `export default nextConfig` -> `export default withAscend(nextConfig)`, or the `module.exports =` form. */
+/** `export default nextConfig` -> `export default withBrushup(nextConfig)`, or the `module.exports =` form. */
 export function wireNextConfig(code: string): Wired {
-  if (/ascend\/next['"]/.test(code)) return 'unchanged';
+  if (/brushup\/next['"]/.test(code)) return 'unchanged';
   let ast: t.File;
   try {
     ast = parseAny(code);
@@ -63,16 +65,16 @@ export function wireNextConfig(code: string): Wired {
   if (esm) {
     if (esm.declaration.type === 'FunctionDeclaration' || esm.declaration.type === 'ClassDeclaration' || esm.declaration.type === 'TSDeclareFunction') return null;
     wrapped = esm.declaration;
-    line = `import { withAscend } from ${q}ascend/next${q};\n`;
+    line = `import { withBrushup } from ${q}brushup/next${q}${semiOf(code)}\n`;
   } else {
     for (const node of ast.program.body) {
       const e = node.type === 'ExpressionStatement' ? node.expression : null;
       if (e?.type === 'AssignmentExpression' && code.slice(e.left.start!, e.left.end!) === 'module.exports') wrapped = e.right;
     }
-    line = `const { withAscend } = require(${q}ascend/next${q});\n`;
+    line = `const { withBrushup } = require(${q}brushup/next${q})${semiOf(code)}\n`;
   }
   if (!wrapped) return null;
-  s.appendLeft(wrapped.start!, 'withAscend(');
+  s.appendLeft(wrapped.start!, 'withBrushup(');
   s.appendRight(wrapped.end!, ')');
   const at = importAt(ast);
   s.appendLeft(at, at === 0 ? line : `\n${line.trimEnd()}`);
@@ -80,9 +82,9 @@ export function wireNextConfig(code: string): Wired {
   return parses(out) ? out : null;
 }
 
-/** Add `<AscendScript />` just inside the closing `</body>` of the root layout. */
+/** Add `<BrushupScript />` just inside the closing `</body>` of the root layout. */
 export function wireLayout(code: string): Wired {
-  if (code.includes('AscendScript')) return 'unchanged';
+  if (code.includes('BrushupScript')) return 'unchanged';
   const closing = [...code.matchAll(/^([ \t]*)<\/body>/gm)].at(-1);
   let ast: t.File;
   try {
@@ -92,14 +94,14 @@ export function wireLayout(code: string): Wired {
   }
   const s = new MagicString(code);
   const q = quoteOf(code);
-  if (closing) s.appendLeft(closing.index!, `${closing[1]}  <AscendScript />\n`);
+  if (closing) s.appendLeft(closing.index!, `${closing[1]}  <BrushupScript />\n`);
   else {
     const inline = code.indexOf('</body>');
     if (inline < 0) return null;
-    s.appendLeft(inline, '<AscendScript />');
+    s.appendLeft(inline, '<BrushupScript />');
   }
   const at = importAt(ast);
-  const imp = `import { AscendScript } from ${q}ascend/next/script${q};`;
+  const imp = `import { BrushupScript } from ${q}brushup/next/script${q}${semiOf(code)}`;
   s.appendLeft(at, at === 0 ? `${imp}\n` : `\n${imp}`);
   const out = s.toString();
   return parses(out) ? out : null;
@@ -143,9 +145,9 @@ function configPlugins(ast: t.File): t.ArrayExpression | null {
   return prop?.value.type === 'ArrayExpression' ? prop.value : null;
 }
 
-/** Append `ascend()` to the `plugins: [...]` array of a Vite config. */
+/** Append `brushup()` to the `plugins: [...]` array of a Vite config. */
 export function wireViteConfig(code: string): Wired {
-  if (/ascend\/vite['"]/.test(code)) return 'unchanged';
+  if (/brushup\/vite['"]/.test(code)) return 'unchanged';
   let ast: t.File;
   try {
     ast = parseAny(code);
@@ -159,10 +161,10 @@ export function wireViteConfig(code: string): Wired {
   const s = new MagicString(code);
   const q = quoteOf(code);
   const last = arr.elements.at(-1);
-  if (last) s.appendLeft(last.end!, ', ascend()');
-  else s.appendLeft(arr.start! + 1, 'ascend()');
+  if (last) s.appendLeft(last.end!, ', brushup()');
+  else s.appendLeft(arr.start! + 1, 'brushup()');
   const at = importAt(ast);
-  const imp = `import ascend from ${q}ascend/vite${q};`;
+  const imp = `import brushup from ${q}brushup/vite${q}${semiOf(code)}`;
   s.appendLeft(at, at === 0 ? `${imp}\n` : `\n${imp}`);
   const out = s.toString();
   return parses(out) ? out : null;
@@ -191,7 +193,7 @@ async function apply(file: string | null, wire: (code: string) => Wired): Promis
   return 'updated';
 }
 
-/** Wire Ascend into whichever of Next.js / Vite the project at `root` uses. */
+/** Wire Brushup into whichever of Next.js / Vite the project at `root` uses. */
 export async function wireProject(root: string): Promise<WireResult> {
   const result: WireResult = {};
   const nextConfig = await firstExisting(root, NEXT_CONFIGS);

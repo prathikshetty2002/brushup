@@ -1,11 +1,11 @@
 /**
- * Records a walkthrough of the Ascend canvas UI and flow to demo/out/ascend-ui-demo.mp4.
+ * Records a walkthrough of the Brushup canvas UI and flow to demo/out/brushup-ui-demo.mp4.
  *
- * Everything is real: Chrome drives the Next.js test app with Ascend installed, and the closing diff is read from
+ * Everything is real: Chrome drives the Next.js test app with Brushup installed, and the closing diff is read from
  * the source file the edits were written to. No Claude run is involved (see record-claude.ts for that).
  *
- * Prerequisites: the Next test app with Ascend installed and `next dev` running on :3456, Chrome, ffmpeg.
- *   ASCEND_DEMO_NEXTAPP=/path/to/app npx tsx demo/record-ui.ts
+ * Prerequisites: the Next test app with Brushup installed and `next dev` running on :3456, Chrome, ffmpeg.
+ *   BRUSHUP_DEMO_NEXTAPP=/path/to/app npx tsx demo/record-ui.ts
  */
 import { spawn } from 'node:child_process';
 import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
@@ -15,7 +15,7 @@ import { chromium, type Page } from 'playwright-core';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const OUT = path.join(HERE, 'out');
-const NEXTAPP = process.env.ASCEND_DEMO_NEXTAPP ?? '';
+const NEXTAPP = process.env.BRUSHUP_DEMO_NEXTAPP ?? '';
 const URL = 'http://localhost:3456/';
 const CHROME = process.env.CHROME ?? '/usr/bin/google-chrome-stable';
 const W = 1440;
@@ -71,13 +71,13 @@ const OVERLAY = `
 `;
 
 async function main() {
-  if (!NEXTAPP) throw new Error('Set ASCEND_DEMO_NEXTAPP to the Next.js test app folder.');
+  if (!NEXTAPP) throw new Error('Set BRUSHUP_DEMO_NEXTAPP to the Next.js test app folder.');
   await mkdir(OUT, { recursive: true });
   if (!(await fetch(URL).then((r) => r.ok).catch(() => false))) throw new Error(`Start the app first: next dev --port 3456 (in ${NEXTAPP})`);
 
   const original = await readFile(PAGE(), 'utf8');
   await copyFile(path.join(HERE, 'fixtures/next-page.tsx'), PAGE());
-  for (const f of ['notes.json', 'notes.md', 'edits.jsonl', 'selection.json']) await rm(path.join(NEXTAPP, '.ascend', f), { force: true });
+  for (const f of ['notes.json', 'notes.md', 'edits.jsonl', 'selection.json']) await rm(path.join(NEXTAPP, '.brushup', f), { force: true });
   await sleep(2500);
   const baseline = await readFile(PAGE(), 'utf8');
 
@@ -86,7 +86,7 @@ async function main() {
   await context.addInitScript(() => { try { localStorage.clear(); } catch { /* none */ } });
   const page: Page = await context.newPage();
 
-  const mp4 = path.join(OUT, 'ascend-ui-demo.mp4');
+  const mp4 = path.join(OUT, 'brushup-ui-demo.mp4');
   const ffmpeg = spawn('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', '30', '-i', '-', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', mp4], { stdio: ['pipe', 'inherit', 'inherit'] });
   const ffmpegDone = new Promise<void>((resolve) => ffmpeg.on('close', () => resolve()));
   const cdp = await context.newCDPSession(page);
@@ -97,7 +97,7 @@ async function main() {
   });
 
   await page.goto(URL, { waitUntil: 'networkidle' });
-  await page.waitForSelector('#ascend-root', { state: 'attached', timeout: 30000 });
+  await page.waitForSelector('#brushup-root', { state: 'attached', timeout: 30000 });
   await page.evaluate(OVERLAY);
   await cdp.send('Page.startScreencast', { format: 'jpeg', quality: 85, maxWidth: W, maxHeight: H, everyNthFrame: 1 });
   const startedAt = Date.now();
@@ -148,7 +148,7 @@ async function main() {
 
   /* ---------- the flow ---------- */
   await sleep(900);
-  await say('1', 'Open your own app. The Ascend panel is already there, no extra tab or app');
+  await say('1', 'Open your own app. The Brushup panel is already there, no extra tab or app');
   await sleep(2600);
 
   await say('2', 'Click anything on the page to select it');
@@ -197,7 +197,7 @@ async function main() {
   await sleep(2600);
 
   await say('8', 'Move the panel by its header, or dock it to the other side');
-  const head = await center('#ascend-root header strong');
+  const head = await center('#brushup-root header strong');
   await dragFrom(head, -520, 90, 1000);
   await sleep(1500);
   await clickOn('[data-act="dock"]');
@@ -215,7 +215,7 @@ async function main() {
   await page.keyboard.press('Control+Shift+z');
   await sleep(1400);
 
-  await page.evaluate(() => ((document.getElementById('ascend-root') as HTMLElement).style.display = 'none'));
+  await page.evaluate(() => ((document.getElementById('brushup-root') as HTMLElement).style.display = 'none'));
   const lines = diffLines(baseline.split('\n'), (await readFile(PAGE(), 'utf8')).split('\n'));
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
   await page.evaluate((html) => (window as any).demo.card(html), `<h1>All of it is in your source</h1><p>Written as small edits to the files Claude generated. Zero prompts, zero screenshots.</p><pre>${lines.slice(0, 12).map((l) => `<span class="${l.kind}">${l.kind === 'add' ? '+ ' : '- '}${esc(l.text.trim().slice(0, 110))}</span>`).join('')}</pre>`);

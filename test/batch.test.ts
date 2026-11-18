@@ -7,7 +7,7 @@ import { DevProject } from '../src/server/dev-project';
 import { Project } from '../src/server/project';
 
 let dir: string;
-beforeEach(async () => void (dir = await mkdtemp(path.join(os.tmpdir(), 'ascend-batch-'))));
+beforeEach(async () => void (dir = await mkdtemp(path.join(os.tmpdir(), 'brushup-batch-'))));
 afterEach(() => rm(dir, { recursive: true, force: true }));
 
 describe('batch edits in a JSX project', () => {
@@ -77,7 +77,7 @@ describe('batch edits in a JSX project', () => {
       { kind: 'style', id: ref('<Button>', 'Button', 0), tag: 'button', props: { width: '120px' } },
       { kind: 'style', id: ref('<p>', ''), tag: 'p', props: { 'margin-top': '8px' } },
     ]);
-    const lines = (await readFile(path.join(dir, '.ascend/edits.jsonl'), 'utf8')).trim().split('\n');
+    const lines = (await readFile(path.join(dir, '.brushup/edits.jsonl'), 'utf8')).trim().split('\n');
     expect(lines).toHaveLength(1);
     expect(JSON.parse(lines[0]).edits).toHaveLength(2);
   });
@@ -90,7 +90,7 @@ describe('batch edits in a static HTML project', () => {
     await writeFile(entry, html);
     const project = new Project(entry);
     const { hash } = await project.render();
-    const id = async (tag: string) => /data-ascend-id="(a\d+)"/.exec((await project.render()).html.slice((await project.render()).html.indexOf(`<${tag} `)))![1];
+    const id = async (tag: string) => /data-brushup-id="(a\d+)"/.exec((await project.render()).html.slice((await project.render()).html.indexOf(`<${tag} `)))![1];
     await project.editMany(
       [
         { kind: 'style', id: await id('h1'), tag: 'h1', props: { color: 'red' } },
@@ -112,7 +112,7 @@ describe('edit log', () => {
     await writeFile(path.join(dir, 'src/page.tsx'), 'export default function P() {\n  return <p className="a">Hi</p>;\n}\n');
     const project = new DevProject(dir, { style: 'tailwind' });
     await project.edit({ kind: 'style', id: 'src/page.tsx:2:9', tag: 'p', props: { 'margin-left': '8px' }, ident: { cls: 'a', text: 'Hi' }, hints: { rootPx: 16 } });
-    const entry = JSON.parse((await readFile(path.join(dir, '.ascend/edits.jsonl'), 'utf8')).trim());
+    const entry = JSON.parse((await readFile(path.join(dir, '.brushup/edits.jsonl'), 'utf8')).trim());
     expect(entry.edit).toMatchObject({ kind: 'style', props: { 'margin-left': '8px' } });
     expect(entry.edit.ident).toBeUndefined();
     expect(entry.edit.hints).toBeUndefined();

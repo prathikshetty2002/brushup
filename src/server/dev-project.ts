@@ -18,7 +18,7 @@ export interface DevOptions {
   style?: 'auto' | 'inline' | 'tailwind';
 }
 
-const SKIP_DIRS = new Set(['node_modules', '.git', '.ascend', 'dist', 'build', '.next', '.vite', '.turbo', 'coverage']);
+const SKIP_DIRS = new Set(['node_modules', '.git', '.brushup', 'dist', 'build', '.next', '.vite', '.turbo', 'coverage']);
 
 function dependsOnTailwind(root: string): boolean {
   try {

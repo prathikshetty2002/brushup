@@ -10,10 +10,10 @@ let dir: string;
 const ctx = () => ({ root: dir });
 const anchor = (over: Record<string, unknown> = {}) => ({ tag: 'h1', classes: ['text-4xl'], text: 'Ship it', src: 'src/app/page.tsx:24:8', index: 0, page: '/', ...over });
 
-beforeEach(async () => void (dir = await mkdtemp(path.join(os.tmpdir(), 'ascend-mcp-'))));
+beforeEach(async () => void (dir = await mkdtemp(path.join(os.tmpdir(), 'brushup-mcp-'))));
 afterEach(() => rm(dir, { recursive: true, force: true }));
 
-describe('ascend_get_notes', () => {
+describe('brushup_get_notes', () => {
   it('returns open notes with pin numbers and where they live in source', async () => {
     const store = new NotesStore(dir);
     await store.save({ kind: 'section', label: 'Hero', text: 'Too cramped', anchor: anchor() });
@@ -36,30 +36,30 @@ describe('ascend_get_notes', () => {
     expect(((await getNotes(ctx(), { status: 'all', page: '/pricing' })) as any).data.notes[0].number).toBe(2);
   });
 
-  it('is empty when there is no .ascend folder', async () => {
+  it('is empty when there is no .brushup folder', async () => {
     expect(((await getNotes(ctx(), {})) as any).data).toEqual({ count: 0, notes: [] });
   });
 });
 
-describe('ascend_update_note', () => {
+describe('brushup_update_note', () => {
   it('marks a note done and writes only notes.json / notes.md', async () => {
     const [n] = await new NotesStore(dir).save({ text: 'x', anchor: anchor() });
     expect(await updateNote(ctx(), { id: n.id, status: 'done' })).toEqual({ ok: true, data: { id: n.id, status: 'done' } });
-    expect(JSON.parse(await readFile(path.join(dir, '.ascend/notes.json'), 'utf8'))[0].status).toBe('done');
-    expect(await readFile(path.join(dir, '.ascend/notes.md'), 'utf8')).toContain('_No open notes._');
+    expect(JSON.parse(await readFile(path.join(dir, '.brushup/notes.json'), 'utf8'))[0].status).toBe('done');
+    expect(await readFile(path.join(dir, '.brushup/notes.md'), 'utf8')).toContain('_No open notes._');
   });
 
   it('explains an unknown id', async () => {
     const r = await updateNote(ctx(), { id: 'nope', status: 'done' });
     expect(r).toMatchObject({ ok: false });
-    expect((r as any).error).toContain('ascend_get_notes');
+    expect((r as any).error).toContain('brushup_get_notes');
   });
 });
 
-describe('ascend_get_selection', () => {
+describe('brushup_get_selection', () => {
   it('reads the selection the canvas wrote', async () => {
-    await mkdir(path.join(dir, '.ascend'));
-    await writeFile(path.join(dir, '.ascend/selection.json'), JSON.stringify({ file: 'src/app/page.tsx', line: 24, tag: 'h1' }));
+    await mkdir(path.join(dir, '.brushup'));
+    await writeFile(path.join(dir, '.brushup/selection.json'), JSON.stringify({ file: 'src/app/page.tsx', line: 24, tag: 'h1' }));
     const r = (await getSelection(ctx())) as any;
     expect(r.data.selection).toMatchObject({ file: 'src/app/page.tsx', line: 24 });
     expect(typeof r.data.updatedAt).toBe('string');
@@ -67,18 +67,18 @@ describe('ascend_get_selection', () => {
 
   it('says so when nothing is selected', async () => {
     expect(((await getSelection(ctx())) as any).data.selection).toBeNull();
-    await mkdir(path.join(dir, '.ascend'));
-    await writeFile(path.join(dir, '.ascend/selection.json'), 'null\n');
+    await mkdir(path.join(dir, '.brushup'));
+    await writeFile(path.join(dir, '.brushup/selection.json'), 'null\n');
     expect(((await getSelection(ctx())) as any).data.selection).toBeNull();
   });
 });
 
-describe('ascend_recent_edits', () => {
+describe('brushup_recent_edits', () => {
   const line = (o: object) => JSON.stringify({ at: '2026-01-01T00:00:00Z', ...o }) + '\n';
   beforeEach(async () => {
-    await mkdir(path.join(dir, '.ascend'));
+    await mkdir(path.join(dir, '.brushup'));
     await writeFile(
-      path.join(dir, '.ascend/edits.jsonl'),
+      path.join(dir, '.brushup/edits.jsonl'),
       line({ edit: { kind: 'style', id: 'src/page.tsx:31:10#Button', props: { 'font-size': '18px' } }, files: ['src/page.tsx'] }) +
         line({ edits: [{ kind: 'style', id: 'src/page.tsx:32:10#Button', props: { 'padding-left': '24px' } }, { kind: 'text', id: 'src/page.tsx:31:10#Button', text: 'Start building' }], files: ['src/page.tsx'] }) +
         line({ undo: ['src/page.tsx'] }) +
@@ -99,12 +99,12 @@ describe('ascend_recent_edits', () => {
 
   it('respects the limit and handles a missing log', async () => {
     expect(((await getRecentEdits(ctx(), { limit: 1 })) as any).data.count).toBe(1);
-    await rm(path.join(dir, '.ascend'), { recursive: true });
+    await rm(path.join(dir, '.brushup'), { recursive: true });
     expect(((await getRecentEdits(ctx(), {})) as any).data.count).toBe(0);
   });
 });
 
-describe('ascend_inspect', () => {
+describe('brushup_inspect', () => {
   it('asks the canvas and returns its answer, passing the note id', async () => {
     const asked: unknown[] = [];
     const ask = async (q: Record<string, unknown>) => (asked.push(q), { ok: true as const, data: { tag: 'h1', box: { width: 600 } } });
@@ -117,7 +117,7 @@ describe('ascend_inspect', () => {
     expect(await inspect({ root: dir, ask }, {})).toEqual({ ok: false, error: 'Nothing is selected on the canvas.' });
   });
 
-  it('explains when Ascend is not running (no host.json)', async () => {
+  it('explains when Brushup is not running (no host.json)', async () => {
     const r = await inspect({ root: dir }, {});
     expect(r).toMatchObject({ ok: false });
     expect((r as any).error).toMatch(/not running/i);
@@ -125,10 +125,10 @@ describe('ascend_inspect', () => {
 });
 
 describe('findRoot', () => {
-  it('prefers --root, then ASCEND_ROOT, then the nearest folder with .ascend', async () => {
+  it('prefers --root, then BRUSHUP_ROOT, then the nearest folder with .brushup', async () => {
     expect(findRoot(['--root', '/a/b'], {}, '/x')).toBe(path.resolve('/a/b'));
-    expect(findRoot([], { ASCEND_ROOT: '/c' }, '/x')).toBe(path.resolve('/c'));
-    await mkdir(path.join(dir, '.ascend'));
+    expect(findRoot([], { BRUSHUP_ROOT: '/c' }, '/x')).toBe(path.resolve('/c'));
+    await mkdir(path.join(dir, '.brushup'));
     await mkdir(path.join(dir, 'src/deep'), { recursive: true });
     expect(findRoot([], {}, path.join(dir, 'src/deep'))).toBe(dir);
     expect(findRoot([], {}, '/')).toBe('/');

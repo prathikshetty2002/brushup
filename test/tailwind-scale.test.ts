@@ -78,7 +78,7 @@ describe('applyJsxEdit snaps only when the page says 1rem is 16px', () => {
 
 describe('tailwindScale', () => {
   let dir: string;
-  beforeEach(async () => void (dir = await mkdtemp(path.join(os.tmpdir(), 'ascend-tw-'))));
+  beforeEach(async () => void (dir = await mkdtemp(path.join(os.tmpdir(), 'brushup-tw-'))));
   afterEach(() => rm(dir, { recursive: true, force: true }));
   const pkg = (deps: object) => writeFile(path.join(dir, 'package.json'), JSON.stringify({ devDependencies: deps }));
 

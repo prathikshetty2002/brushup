@@ -255,12 +255,12 @@ const EDITORS: Record<string, string> = { vscode: 'vscode://file', 'vscode-insid
 
 export function createPanel(hooks: PanelHooks) {
   let projectRoot = '';
-  /** `vscode://file/abs/path:line:col`; the editor is `localStorage['ascend:editor']` (vscode, cursor, windsurf, zed). */
+  /** `vscode://file/abs/path:line:col`; the editor is `localStorage['brushup:editor']` (vscode, cursor, windsurf, zed). */
   const editorUrl = (src: SourceRef) => {
     if (!projectRoot) return null;
     let editor = 'vscode';
     try {
-      editor = localStorage.getItem('ascend:editor') || 'vscode';
+      editor = localStorage.getItem('brushup:editor') || 'vscode';
     } catch {
       /* storage can be blocked */
     }
@@ -270,7 +270,7 @@ export function createPanel(hooks: PanelHooks) {
     return `${EDITORS[editor] ?? EDITORS.vscode}${path.startsWith('/') ? '' : '/'}${path}:${src.line}:${src.col}`;
   };
   const host = document.createElement('div');
-  host.id = 'ascend-root';
+  host.id = 'brushup-root';
   host.style.cssText = 'all:initial;position:fixed;inset:0;z-index:2147483647;pointer-events:none';
   const root = host.attachShadow({ mode: 'open' });
   root.innerHTML = `<style>${CSS}</style>
@@ -281,10 +281,10 @@ export function createPanel(hooks: PanelHooks) {
     <div class="band pad" hidden></div>
     <div class="handles"></div>
     <div class="tip" hidden></div>
-    <aside class="panel" role="region" aria-label="Ascend design panel">
+    <aside class="panel" role="region" aria-label="Brushup design panel">
       <header>
-        <svg class="logo" viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="3" fill="var(--accent)"/><path d="M6.5 17l5.5-10 5.5 10M9 13.2h6" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="square"/></svg>
-        <strong>Ascend</strong><span class="sp"></span>
+        <svg class="logo" viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="3" fill="var(--accent)"/><path d="M8 5.5v13M8 5.5h4.4a3.2 3.2 0 010 6.4H8m4.6 0a3.2 3.2 0 010 6.6H8" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="square" stroke-linejoin="round"/></svg>
+        <strong>Brushup</strong><span class="sp"></span>
         <div class="seg"><span class="thumb"></span><button data-mode="edit">Edit</button><button data-mode="preview">Preview</button></div>
       </header>
       <div class="body">
@@ -296,16 +296,16 @@ export function createPanel(hooks: PanelHooks) {
           <button class="iconbtn" data-act="dock" title="Move panel to the other side" aria-label="Move panel"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/></svg></button>
         </div>
         <div class="tabs" role="tablist"><span class="ink"></span>
-          <button role="tab" id="ascend-tab-style" aria-controls="ascend-pane-style" data-tab="style" aria-selected="true" tabindex="0">Style</button>
-          <button role="tab" id="ascend-tab-notes" aria-controls="ascend-pane-notes" data-tab="notes" aria-selected="false" tabindex="-1">Notes<span class="count" hidden></span></button>
+          <button role="tab" id="brushup-tab-style" aria-controls="brushup-pane-style" data-tab="style" aria-selected="true" tabindex="0">Style</button>
+          <button role="tab" id="brushup-tab-notes" aria-controls="brushup-pane-notes" data-tab="notes" aria-selected="false" tabindex="-1">Notes<span class="count" hidden></span></button>
         </div>
-        <div data-pane="style" role="tabpanel" id="ascend-pane-style" aria-labelledby="ascend-tab-style">
+        <div data-pane="style" role="tabpanel" id="brushup-pane-style" aria-labelledby="brushup-tab-style">
           <div class="info">Click an element to select it.</div>
           <div class="fields" hidden></div>
           <label class="shared" hidden><input type="checkbox" /><span>Edit the shared CSS rule, affecting every element it matches</span></label>
           <p class="hint"><kbd>drag</kbd> move &nbsp;<kbd>↑↓←→</kbd> nudge <kbd>⇧</kbd> ×10 &nbsp;<kbd>dbl-click</kbd> edit text &nbsp;<kbd>N</kbd> note &nbsp;<kbd>Esc</kbd> deselect</p>
         </div>
-        <div data-pane="notes" role="tabpanel" id="ascend-pane-notes" aria-labelledby="ascend-tab-notes" hidden>
+        <div data-pane="notes" role="tabpanel" id="brushup-pane-notes" aria-labelledby="brushup-tab-notes" hidden>
           <button class="add" data-act="add-note" disabled>Select an element to add a note</button>
           <form class="composer" hidden>
             <div class="target info"></div>
@@ -510,7 +510,7 @@ export function createPanel(hooks: PanelHooks) {
   root.querySelector('[data-act=parent]')!.addEventListener('click', () => hooks.onParent());
   // Which side the panel sits on; remembered per browser, never required.
   try {
-    if (localStorage.getItem('ascend:dock') === 'left') panel.classList.add('left');
+    if (localStorage.getItem('brushup:dock') === 'left') panel.classList.add('left');
   } catch {
     /* storage can be blocked */
   }
@@ -522,7 +522,7 @@ export function createPanel(hooks: PanelHooks) {
   };
   const saved = () => {
     try {
-      return JSON.parse(localStorage.getItem('ascend:pos') ?? 'null') as { x: number; y: number } | null;
+      return JSON.parse(localStorage.getItem('brushup:pos') ?? 'null') as { x: number; y: number } | null;
     } catch {
       return null;
     }
@@ -549,7 +549,7 @@ export function createPanel(hooks: PanelHooks) {
       header.removeEventListener('pointercancel', up);
       if (panel.style.right !== 'auto') return;
       try {
-        localStorage.setItem('ascend:pos', JSON.stringify({ x: parseFloat(panel.style.left), y: parseFloat(panel.style.top) }));
+        localStorage.setItem('brushup:pos', JSON.stringify({ x: parseFloat(panel.style.left), y: parseFloat(panel.style.top) }));
       } catch {
         /* storage can be blocked */
       }
@@ -564,8 +564,8 @@ export function createPanel(hooks: PanelHooks) {
     for (const k of ['left', 'top', 'right', 'maxHeight'] as const) panel.style[k] = '';
     const left = dragged ? panel.classList.contains('left') : panel.classList.toggle('left');
     try {
-      localStorage.removeItem('ascend:pos');
-      localStorage.setItem('ascend:dock', left ? 'left' : 'right');
+      localStorage.removeItem('brushup:pos');
+      localStorage.setItem('brushup:dock', left ? 'left' : 'right');
     } catch {
       /* storage can be blocked */
     }

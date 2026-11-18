@@ -3,11 +3,11 @@ import path from 'node:path';
 import chokidar from 'chokidar';
 import type { FileSession } from './file-session';
 
-const IGNORED = /(^|[\\/])(node_modules|\.git|\.ascend|dist|build|\.next|\.vite|\.turbo)([\\/]|$)|\.ascend-[^\\/]*\.tmp$/;
+const IGNORED = /(^|[\\/])(node_modules|\.git|\.brushup|dist|build|\.next|\.vite|\.turbo)([\\/]|$)|\.brushup-[^\\/]*\.tmp$/;
 
 /**
  * Watches the project folder and reports files changed by someone else (the
- * agent, the user's editor). Writes Ascend made itself are filtered out via
+ * agent, the user's editor). Writes Brushup made itself are filtered out via
  * the content-hash record on Project.
  */
 export function watchProject(project: FileSession, onChange: (files: string[]) => void) {

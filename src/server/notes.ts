@@ -80,10 +80,10 @@ export function renderNotesMarkdown(notes: Note[]): string {
   // Numbers are positions in the full list, so "note 3" is the same pin on the canvas and in this file.
   const open = notes.map((n, i) => ({ n, num: i + 1 })).filter((x) => x.n.status === 'open');
   const lines = [
-    '# Ascend design notes',
+    '# Brushup design notes',
     '',
     'Notes the user pinned on the design canvas. Each says where the element lives in source when known.',
-    'Make the change each note asks for, keep any manual tweaks listed in `.ascend/edits.jsonl`, and when a note is handled set its `"status"` to `"done"` in `.ascend/notes.json`.',
+    'Make the change each note asks for, keep any manual tweaks listed in `.brushup/edits.jsonl`, and when a note is handled set its `"status"` to `"done"` in `.brushup/notes.json`.',
     '',
   ];
   if (!open.length) lines.push('_No open notes._', '');
@@ -108,8 +108,8 @@ export function renderNotesMarkdown(notes: Note[]): string {
 }
 
 /**
- * Notes live in `.ascend/notes.json` (source of truth) with a readable
- * `.ascend/notes.md` beside it. The file is re-read on every operation and
+ * Notes live in `.brushup/notes.json` (source of truth) with a readable
+ * `.brushup/notes.md` beside it. The file is re-read on every operation and
  * watched, so edits made by the user or an agent (for example marking a note
  * done) show up on the canvas.
  */
@@ -120,7 +120,7 @@ export class NotesStore {
   private own = new Set<string>();
 
   constructor(readonly root: string) {
-    this.dir = path.join(root, '.ascend');
+    this.dir = path.join(root, '.brushup');
     this.file = path.join(this.dir, 'notes.json');
   }
 

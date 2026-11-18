@@ -1,5 +1,5 @@
 /**
- * Runs the real overlay (src/overlay/index.ts) inside jsdom: a mock WebSocket stands in for the Ascend server,
+ * Runs the real overlay (src/overlay/index.ts) inside jsdom: a mock WebSocket stands in for the Brushup server,
  * and tests drive it with synthetic pointer / keyboard events, then assert on what it sent.
  * jsdom has no layout, so element rectangles are supplied per test.
  */
@@ -74,10 +74,10 @@ export function key(key: string, init: Partial<KeyboardEventInit> = {}, target: 
   target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, composed: true, cancelable: true, ...init }));
 }
 
-/** Load a fresh copy of the overlay. `boot` is what the page would set as window.__ascend. */
+/** Load a fresh copy of the overlay. `boot` is what the page would set as window.__brushup. */
 export async function loadOverlay(boot: { mode: 'static' | 'dev'; hash?: string } = { mode: 'static' }): Promise<Overlay> {
   vi.resetModules();
-  document.documentElement.querySelectorAll('#ascend-root').forEach((n) => n.remove());
+  document.documentElement.querySelectorAll('#brushup-root').forEach((n) => n.remove());
   MockSocket.instances = [];
   let frame: (() => void) | null = null;
   vi.stubGlobal('WebSocket', MockSocket);
@@ -85,7 +85,7 @@ export async function loadOverlay(boot: { mode: 'static' | 'dev'; hash?: string 
     frame = cb;
     return 1;
   });
-  (window as any).__ascend = { hash: 'h0', ws: 'ws://test/__ascend/ws', ...boot };
+  (window as any).__brushup = { hash: 'h0', ws: 'ws://test/__brushup/ws', ...boot };
   const added: [string, any, any][] = [];
   const originalAdd = window.addEventListener.bind(window);
   window.addEventListener = ((type: string, listener: any, options: any) => (added.push([type, listener, options]), originalAdd(type, listener, options))) as typeof window.addEventListener;
@@ -93,7 +93,7 @@ export async function loadOverlay(boot: { mode: 'static' | 'dev'; hash?: string 
   window.addEventListener = originalAdd as typeof window.addEventListener;
   await Promise.resolve(); // let the mock socket "open"
   const socket = MockSocket.instances[0];
-  const root = document.getElementById('ascend-root')!.shadowRoot!;
+  const root = document.getElementById('brushup-root')!.shadowRoot!;
   const api: Overlay = {
     sent: socket.sent,
     root,

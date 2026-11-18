@@ -6,7 +6,7 @@ import { morphPage, refreshStylesheets } from './morph';
 import { createPanel, type HandleInfo, type Mode, type NoteDraft, type NoteKind, type NoteView } from './panel';
 
 interface Boot {
-  /** 'static': Ascend serves one HTML page. 'dev': a framework dev server serves the app. */
+  /** 'static': Brushup serves one HTML page. 'dev': a framework dev server serves the app. */
   mode: 'static' | 'dev';
   hash: string;
   ws?: string;
@@ -14,7 +14,7 @@ interface Boot {
 
 declare global {
   interface Window {
-    __ascend: Boot;
+    __brushup: Boot;
   }
 }
 
@@ -26,22 +26,22 @@ interface Result {
   warning?: string;
 }
 
-// Config comes from `window.__ascend` (static server, Vite plugin) or, for frameworks that render a plain
+// Config comes from `window.__brushup` (static server, Vite plugin) or, for frameworks that render a plain
 // <script src> tag (Next.js), from that script tag's data attributes.
 const self = document.currentScript as HTMLScriptElement | null;
-const cfg: Boot = window.__ascend ?? { mode: self?.dataset.ascendMode === 'dev' ? 'dev' : 'static', hash: '', ws: self?.dataset.ascendWs };
+const cfg: Boot = window.__brushup ?? { mode: self?.dataset.brushupMode === 'dev' ? 'dev' : 'static', hash: '', ws: self?.dataset.brushupWs };
 const DEV = cfg.mode === 'dev';
 
 /**
  * How a DOM element is tied to source:
- *  static mode: `data-ascend-id`, a synthetic id the server stamps on every element.
- *  dev mode:    `data-ascend-src` (file:line:col of the host element) and, for elements
- *               rendered by a component (shadcn `<Button>`), `data-ascend-use`
+ *  static mode: `data-brushup-id`, a synthetic id the server stamps on every element.
+ *  dev mode:    `data-brushup-src` (file:line:col of the host element) and, for elements
+ *               rendered by a component (shadcn `<Button>`), `data-brushup-use`
  *               (file:line:col#Name of the place the component was used).
  */
-const SRC = 'data-ascend-src';
-const USE = 'data-ascend-use';
-const SID = 'data-ascend-id';
+const SRC = 'data-brushup-src';
+const USE = 'data-brushup-use';
+const SID = 'data-brushup-id';
 const TAGGED = DEV ? `[${SRC}],[${USE}]` : `[${SID}]`;
 /** The reference edits are addressed to: the usage site when there is one, else the host element. */
 const refOf = (el: Element) => (DEV ? (el.getAttribute(USE) ?? el.getAttribute(SRC)!) : el.getAttribute(SID)!);
@@ -63,7 +63,7 @@ const waiting = new Map<number, (r: Result) => void>();
 
 function rpc(msg: Record<string, unknown>): Promise<Result> {
   return new Promise((resolve) => {
-    if (ws?.readyState !== WebSocket.OPEN) return resolve({ ok: false, error: 'Not connected to the Ascend server' });
+    if (ws?.readyState !== WebSocket.OPEN) return resolve({ ok: false, error: 'Not connected to the Brushup server' });
     const n = ++seq;
     waiting.set(n, resolve);
     ws.send(JSON.stringify({ ...msg, n }));
@@ -79,7 +79,7 @@ const enqueue = <T>(job: () => Promise<T>): Promise<T> => {
 };
 
 function connect() {
-  ws = new WebSocket(cfg.ws ?? `ws://${location.host}/__ascend/ws`);
+  ws = new WebSocket(cfg.ws ?? `ws://${location.host}/__brushup/ws`);
   ws.onopen = () => panel.setStatus('');
   ws.onmessage = (ev) => {
     const msg = JSON.parse(ev.data);
@@ -124,7 +124,7 @@ async function reload(css: boolean) {
   if (reloading) return void (reloadAgain = true);
   reloading = true;
   try {
-    const html = await (await fetch('/__ascend/page', { cache: 'no-store' })).text();
+    const html = await (await fetch('/__brushup/page', { cache: 'no-store' })).text();
     const next = new DOMParser().parseFromString(html, 'text/html');
     if (morphPage(next) === 'reload') return location.reload();
     if (css) refreshStylesheets();
@@ -256,7 +256,7 @@ function resolveNote(n: Note): HTMLElement | null {
   const want = a.text.slice(0, 40);
   const candidates = [...document.querySelectorAll<HTMLElement>(a.tag)].filter(
     (el) =>
-      !el.closest('#ascend-root') &&
+      !el.closest('#brushup-root') &&
       a.classes.every((c) => el.classList.contains(c)) &&
       (!want || ownText(el).startsWith(want) || (el.textContent ?? '').replace(/\s+/g, ' ').trim().startsWith(want)),
   );

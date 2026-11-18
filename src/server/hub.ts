@@ -71,7 +71,7 @@ export function createHub(session: FileSession, notes?: NotesStore) {
     if (msg.type === 'ask') {
       if (info?.role !== 'agent' || typeof msg.id !== 'string' || JSON.stringify(msg.ask ?? null).length > MAX_ASK_BYTES) return;
       const canvas = activeCanvas();
-      if (!canvas) return void send(ws, { type: 'answer', id: msg.id, ok: false, error: 'No Ascend canvas is open in a browser. Open the app with the Ascend panel visible.' });
+      if (!canvas) return void send(ws, { type: 'answer', id: msg.id, ok: false, error: 'No Brushup canvas is open in a browser. Open the app with the Brushup panel visible.' });
       const timer = setTimeout(() => finish(msg.id, { ok: false, error: 'The canvas did not answer in time.' }), ASK_TIMEOUT_MS);
       pending.set(msg.id, { agent: ws, timer });
       return void send(canvas, { type: 'ask', id: msg.id, ask: msg.ask });
