@@ -177,6 +177,13 @@ describe('stale references', () => {
   });
 });
 
+describe('tailwind flex-basis', () => {
+  it('maps flex-basis onto the basis utilities, snapping on-scale values', () => {
+    expect(tailwindClasses('flex-1 basis-1/2', 'flex-basis', '200px')).toBe('flex-1 basis-[200px]');
+    expect(tailwindClasses('basis-1/2', 'flex-basis', '64px', { scale: 'v3' })).toBe('basis-16');
+  });
+});
+
 describe('tailwind', () => {
   const tw = { tailwind: true };
 

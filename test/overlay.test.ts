@@ -228,6 +228,37 @@ describe('resize, padding and margin handles', () => {
     expect(o.last('edit').edit.props).toEqual({ width: '232px' });
   });
 
+  it('writes flex-basis, not a width it would ignore, for a flex item that sets one', async () => {
+    el('a1').parentElement!.style.display = 'flex';
+    el('a1').style.cssText = 'width: 200px; flex-basis: 200px';
+    layout(el('a1'), { x: 50, y: 50, width: 200, height: 100 });
+    click(el('a2'));
+    click(el('a1'));
+    o.tick();
+    grab('resize-e', [250, 100], [280, 100])();
+    await settle();
+    expect(o.last('edit').edit.props).toEqual({ 'flex-basis': '232px' });
+  });
+
+  it('says why the page did not honour a resize, and keeps saying so after saving', async () => {
+    const real = window.getComputedStyle.bind(window);
+    // The page refuses to grow past 240px: report that as the computed width whatever the preview asked for.
+    window.getComputedStyle = ((node: Element) => {
+      const cs = real(node);
+      return node === el('a1') ? new Proxy(cs, { get: (t, k) => (k === 'width' ? '240px' : k === 'maxWidth' ? '240px' : (t as any)[k]) }) : cs;
+    }) as typeof window.getComputedStyle;
+    try {
+      const release = grab('resize-e', [250, 100], [300, 100]);
+      expect(o.root.querySelector('.tip')!.textContent).toBe('width 292px · not applied: max-width caps it at 240px');
+      release();
+      await settle();
+      await ok('h1');
+      expect(status()).toContain("won't show: max-width caps it at 240px");
+    } finally {
+      window.getComputedStyle = real;
+    }
+  });
+
   it('Shift gives 1px precision', async () => {
     grab('resize-e', [250, 100], [280, 100], { shiftKey: true })();
     await settle();

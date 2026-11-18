@@ -22,6 +22,7 @@ const PREFIX: Record<string, string> = {
   'padding-bottom': 'pb',
   'padding-left': 'pl',
   gap: 'gap',
+  'flex-basis': 'basis',
   width: 'w',
   height: 'h',
   top: 'top',

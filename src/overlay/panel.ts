@@ -651,7 +651,11 @@ export function createPanel(hooks: PanelHooks) {
     el.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      el!.setPointerCapture?.(e.pointerId); // keeps the drag alive if the pointer leaves the grip
+      try {
+        el!.setPointerCapture(e.pointerId); // keeps the drag alive if the pointer leaves the grip
+      } catch {
+        /* no active pointer (synthetic events) */
+      }
       hooks.onHandleDown(kind, e);
     });
     handlesEl.append(el);

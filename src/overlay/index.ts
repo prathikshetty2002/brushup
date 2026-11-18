@@ -1,7 +1,7 @@
 import type { Edit, Scope, Target } from '../core/edit-types';
 import type { Note } from '../server/notes';
 import { moveBase, moveProps, type MoveBase } from './drag';
-import { handleLabel, handleProps, type BoxStart, type HandleKind } from './handles-math';
+import { explainSize, handleLabel, handleProps, sizeProps, type BoxStart, type HandleKind, type SizeStyle } from './handles-math';
 import { morphPage, refreshStylesheets } from './morph';
 import { createPanel, type HandleInfo, type Mode, type NoteDraft, type NoteKind, type NoteView } from './panel';
 
@@ -543,11 +543,28 @@ function startTextEdit(el: HTMLElement) {
 /** Moving the selection: every selected element moves by the same amount. */
 let drag: { items: { el: HTMLElement; base: MoveBase; last: Record<string, string> }[]; x: number; y: number; moved: boolean; collapseTo: HTMLElement | null } | null = null;
 /** Dragging a resize / padding / margin handle on the primary element. */
-let hdrag: { kind: HandleKind; x: number; y: number; start: BoxStart; last: Record<string, string>; moved: boolean } | null = null;
+let hdrag: { kind: HandleKind; x: number; y: number; start: BoxStart; last: Record<string, string>; moved: boolean; size: SizeStyle; blocked: string | null } | null = null;
 
 const active = () => state.mode === 'edit';
 /** Which handle is being dragged (read through a function: it is assigned inside event callbacks). */
 const draggingHandle = (): HandleKind | null => hdrag?.kind ?? null;
+
+/** What decides this element's size, read from the page as it is now. */
+function sizeStyleOf(el: HTMLElement): SizeStyle {
+  const cs = getComputedStyle(el);
+  const ps = el.parentElement ? getComputedStyle(el.parentElement) : null;
+  return {
+    display: cs.display,
+    flexBasis: cs.flexBasis,
+    flexGrow: cs.flexGrow,
+    maxWidth: cs.maxWidth,
+    minWidth: cs.minWidth,
+    maxHeight: cs.maxHeight,
+    minHeight: cs.minHeight,
+    parentDisplay: ps?.display ?? '',
+    parentFlexDirection: ps?.flexDirection ?? '',
+  };
+}
 const pageTarget = (e: Event) => ((e.target as Element | null)?.closest?.(TAGGED) as HTMLElement | null) ?? null;
 const px = (v: string) => parseFloat(v) || 0;
 
@@ -583,9 +600,20 @@ window.addEventListener(
       if (!hdrag.moved && Math.hypot(dx, dy) < 2) return;
       if (!hdrag.moved) panel.setGhost(true);
       hdrag.moved = true;
-      hdrag.last = handleProps(hdrag.kind, hdrag.start, dx, dy, e.shiftKey);
+      const asked = handleProps(hdrag.kind, hdrag.start, dx, dy, e.shiftKey);
+      hdrag.last = sizeProps(asked, hdrag.size); // a flex item sized by flex-basis gets flex-basis, not a width it would ignore
       for (const el of selectedAll()) for (const [p, v] of Object.entries(hdrag.last)) el.style.setProperty(p, v);
-      panel.setTip(handleLabel(hdrag.last), e.clientX, e.clientY);
+      // Did the page honour it? If not, say why instead of leaving a handle that silently does nothing.
+      const primary = selected();
+      hdrag.blocked = null;
+      if (primary && hdrag.kind.startsWith('resize')) {
+        for (const axis of ['width', 'height'] as const) {
+          if (!(axis in asked)) continue;
+          const wanted = parseFloat(asked[axis]);
+          if (Math.abs(parseFloat(getComputedStyle(primary)[axis]) - wanted) > 1.5) hdrag.blocked = explainSize(axis, wanted, sizeStyleOf(primary)) ?? 'the layout keeps it from changing';
+        }
+      }
+      panel.setTip(handleLabel(hdrag.last) + (hdrag.blocked ? ` · not applied: ${hdrag.blocked}` : ''), e.clientX, e.clientY);
       return;
     }
     if (!active() || isOurs(e)) return;
@@ -611,7 +639,11 @@ const endDrag = () => {
     const h = hdrag;
     hdrag = null;
     panel.setTip(null);
-    if (h.moved) void commitStyles(selectedAll().map((el) => ({ el, props: h.last })));
+    if (h.moved) {
+      void commitStyles(selectedAll().map((el) => ({ el, props: h.last }))).then(() => {
+        if (h.blocked) panel.setStatus(`Saved, but it won't show: ${h.blocked}`, 'warn', { undo: true });
+      });
+    }
     return;
   }
   const d = drag;
@@ -723,7 +755,7 @@ const panel = createPanel({
       pad: { t: px(cs.paddingTop), r: px(cs.paddingRight), b: px(cs.paddingBottom), l: px(cs.paddingLeft) },
       mar: { t: px(cs.marginTop), r: px(cs.marginRight), b: px(cs.marginBottom), l: px(cs.marginLeft) },
     };
-    hdrag = { kind, x: e.clientX, y: e.clientY, start, last: {}, moved: false };
+    hdrag = { kind, x: e.clientX, y: e.clientY, start, last: {}, moved: false, size: sizeStyleOf(el), blocked: null };
   },
 });
 panel.setMode('edit');

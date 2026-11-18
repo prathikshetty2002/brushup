@@ -182,7 +182,7 @@ What it does not protect against: **other users or processes on the same machine
 - Vue, Svelte, Astro, Remix, SvelteKit (the instrumenter is JSX-only; Vite plugin works for Remix/React Router but is untested).
 - CSS Modules and CSS-in-JS class resolution.
 - Resizing from the left/top edges (it needs the element's position to change too), snapping to neighbouring elements, and rubber-band selection.
-- Handles measure the element in the browser, so an element whose CSS ignores `width`/`height` (for example a flex child sized by `flex-basis`) can preview no change even though the class is written.
+- Resize handles on a flex item that sets `flex-basis` write `flex-basis` (a width would be ignored). When the page still refuses a size (a `max-width`, a `min-width`, `flex-grow`, a grid track, an inline element), the readout says why while you drag and the status says it again after saving; the class is still written.
 - MCP: no screenshot tool, no write tools for source (by design), and `brushup_inspect` answers one element at a time.
 - Tested on Linux only; Next.js tested on 16.4 + Turbopack (the webpack path is wired up but not exercised).
 

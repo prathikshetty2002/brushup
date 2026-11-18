@@ -58,3 +58,50 @@ export const handleLabel = (props: Record<string, string>) =>
   Object.entries(props)
     .map(([k, v]) => `${k} ${v}`)
     .join(' · ');
+
+/** The few things about an element's CSS that decide whether `width` / `height` can size it. */
+export interface SizeStyle {
+  display: string;
+  flexBasis: string;
+  flexGrow: string;
+  maxWidth: string;
+  minWidth: string;
+  maxHeight: string;
+  minHeight: string;
+  parentDisplay: string;
+  parentFlexDirection: string;
+}
+
+const isFlex = (display: string) => display === 'flex' || display === 'inline-flex';
+const isRow = (direction: string) => !direction.startsWith('column');
+const length = (v: string) => (/^-?[\d.]+px$/.test(v) ? parseFloat(v) : null);
+
+/**
+ * The property that really sizes the element on this axis. A flex item whose `flex-basis` is set takes its main-axis
+ * size from that and ignores `width` / `height`, so dragging a handle has to write `flex-basis` for it to do anything.
+ */
+export function sizeProperty(axis: 'width' | 'height', s: SizeStyle): string {
+  const main = isRow(s.parentFlexDirection) ? 'width' : 'height';
+  if (isFlex(s.parentDisplay) && axis === main && s.flexBasis !== '' && s.flexBasis !== 'auto' && s.flexBasis !== 'content') return 'flex-basis';
+  return axis;
+}
+
+/** Re-point the size a handle wrote (`width`, `height`) at the property that actually sizes the element. */
+export function sizeProps(props: Record<string, string>, s: SizeStyle): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(props)) out[key === 'width' || key === 'height' ? sizeProperty(key, s) : key] = value;
+  return out;
+}
+
+/** Why an element didn't reach the size asked for on this axis, or null if the CSS gives no clear reason. */
+export function explainSize(axis: 'width' | 'height', wanted: number, s: SizeStyle): string | null {
+  if (s.display === 'inline') return 'inline elements ignore width and height';
+  const max = length(axis === 'width' ? s.maxWidth : s.maxHeight);
+  if (max !== null && wanted > max) return `max-${axis} caps it at ${Math.round(max)}px`;
+  const min = length(axis === 'width' ? s.minWidth : s.minHeight);
+  if (min !== null && wanted < min) return `min-${axis} keeps it at ${Math.round(min)}px`;
+  const main = isRow(s.parentFlexDirection) ? 'width' : 'height';
+  if (isFlex(s.parentDisplay) && axis === main && Number(s.flexGrow) > 0) return 'flex-grow stretches it to fill the row';
+  if (s.parentDisplay === 'grid' || s.parentDisplay === 'inline-grid') return 'its grid track sets the size';
+  return null;
+}
