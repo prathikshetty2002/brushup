@@ -201,12 +201,12 @@ input:focus, select:focus, textarea:focus { box-shadow: 0 0 0 3px rgba(var(--acc
 .info.idle { text-align: center; font: italic 13px/1.5 var(--serif); color: var(--muted); padding: 22px 12px; margin: 8px 0; border: 1px dashed var(--line); border-radius: 2px; }
 form.composer, .note { animation: rise .2s cubic-bezier(.2,.8,.2,1); }
 .note .num, .pin { transition: background .2s; }
-.boxm { position: relative; display: grid; grid-template-columns: 40px minmax(0, 1fr) 40px; grid-template-areas: ". t ." "l p r" ". b ."; gap: 4px; padding: 20px 5px 5px; border: 1px dashed var(--mar); border-radius: 2px; }
-.boxp { grid-area: p; position: relative; display: grid; grid-template-columns: 40px minmax(0, 1fr) 40px; grid-template-areas: ". t ." "l k r" ". b ."; gap: 4px; padding: 20px 4px 4px; border: 1px solid var(--pad); border-radius: 2px; background: color-mix(in srgb, var(--pad) 7%, transparent); }
-.boxm .cap { position: absolute; left: 6px; top: 3px; font: italic 11.5px/1 var(--serif); color: var(--muted); }
+.boxm { position: relative; display: grid; grid-template-columns: 36px minmax(0, 1fr) 36px; grid-template-areas: ". t ." "l p r" ". b ."; gap: 8px; padding: 24px 8px 10px; border: 1px dashed var(--mar); border-radius: 2px; }
+.boxp { grid-area: p; position: relative; display: grid; grid-template-columns: 36px minmax(0, 1fr) 36px; grid-template-areas: ". t ." "l k r" ". b ."; gap: 6px; padding: 24px 8px 8px; border: 1px solid var(--pad); border-radius: 2px; background: color-mix(in srgb, var(--pad) 7%, transparent); }
+.boxm .cap { position: absolute; left: 8px; top: 5px; font: italic 11.5px/1 var(--serif); color: var(--muted); }
 .boxm .c { display: grid; place-items: center; } .boxm .c.t { grid-area: t; } .boxm .c.l { grid-area: l; } .boxm .c.r { grid-area: r; } .boxm .c.b { grid-area: b; }
-.boxp .core { grid-area: k; min-height: 26px; border: 1px dashed var(--line); border-radius: 1px; }
-label.f.mini { display: block; padding: 0; } label.f.mini input { width: 40px; height: 26px; padding: 0 2px; text-align: center; }
+.boxp .core { grid-area: k; min-height: 28px; border: 1px dashed var(--line); border-radius: 1px; }
+label.f.mini { display: block; padding: 0; } label.f.mini input { width: 36px; height: 26px; padding: 0 2px; text-align: center; }
 label.f.mini input:not(:focus), label.f.scrub > span { cursor: ew-resize; }
 .scrubbing, .scrubbing input { user-select: none; cursor: ew-resize; }
 .panel.ghost { opacity: .22; pointer-events: none; transition: opacity .12s; }
