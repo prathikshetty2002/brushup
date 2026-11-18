@@ -33,7 +33,7 @@ When your agent changes the code, the canvas updates in place.
 | React | 19 | |
 | Tailwind | 4.3 and 3.4 | the installed version decides whether off-scale values become `ml-9.5` (v4) or `ml-[38px]` (v3) |
 | shadcn/ui | current Base UI version | Radix-based versions forward props the same way, untested |
-| Browser | Chrome | Firefox and Safari untested |
+| Browser | Chrome by hand; Chromium, Firefox and WebKit (Safari's engine) driven by CI | the CI check selects, edits in the panel, drags, edits text and undoes in each, on Linux; Safari itself and mobile browsers are untested |
 | OS | Linux locally; Windows and macOS in CI | CI runs the whole test suite and the packed package on both; the canvas itself has only been driven by hand on Linux |
 
 ## Quick start (Next.js + Tailwind + shadcn/ui)

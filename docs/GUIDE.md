@@ -19,7 +19,7 @@ Everything is written to your real source files (Tailwind classes, JSX, CSS), as
 - **Node 20.9 or newer.**
 - **A project**: Next.js 15.3+ (tested on 16.4, App Router, Turbopack and webpack), Vite 5+ with React (tested on 8), or a plain HTML file. Tailwind and shadcn/ui are supported, not required.
 - **Claude Code** (any recent version) for loops B and C.
-- A **Chromium-based browser** (tested on Chrome; Firefox and Safari are untested).
+- A modern browser (checked in Chromium, Firefox and WebKit; Safari itself is untested).
 
 Brushup is on npm: [npmjs.com/package/brushup](https://www.npmjs.com/package/brushup).
 
@@ -208,7 +208,7 @@ Remove the two lines from `next.config.ts` and `layout.tsx`, the `brushup` entry
 
 ## 11. Limits today
 
-Tested only on Linux with Chrome. Supported frameworks are Next.js, Vite + React and plain HTML. Not supported yet: Vue, Svelte, Astro, CSS Modules, CSS-in-JS, a screenshot tool (deliberately: `brushup_inspect` gives Claude numbers instead). Full list in the README.
+Tested by hand on Linux with Chrome, and in CI on Windows, macOS and three browser engines. Supported frameworks are Next.js (App and Pages Router), Vite + React and plain HTML. Not supported yet: Vue, Svelte, Astro, CSS Modules, CSS-in-JS, a screenshot tool (deliberately: `brushup_inspect` gives Claude numbers instead). Full list in the README.
 
 ---
 

@@ -183,7 +183,18 @@ async function main() {
   await page.keyboard.press('Enter');
   await sleep(2000);
 
-  await say('7', 'Pin a note for Claude. Press N on any element, section or component');
+  await say('7', 'Draw a box from empty space to select several elements, then resize them together from any edge');
+  const first = (await page.locator('[data-slot="card"]').nth(0).boundingBox())!;
+  const last = (await page.locator('[data-slot="card"]').nth(2).boundingBox())!;
+  await dragFrom([140, first.y - 16], last.x + last.width + 18 - 140, first.height + 32, 1300);
+  await sleep(1600);
+  const west = await center('[data-kind="resize-w"]');
+  await dragFrom(west, -36, 0, 900);
+  await sleep(2200);
+  await page.keyboard.press('Escape');
+  await sleep(500);
+
+  await say('8', 'Pin a note for Claude. Press N on any element, section or component');
   await clickOn('main section:nth-of-type(2) > *:first-child');
   await sleep(600);
   await page.keyboard.press('n');
@@ -196,20 +207,20 @@ async function main() {
   await clickOn('form.composer button.primary');
   await sleep(2600);
 
-  await say('8', 'Move the panel by its header, or dock it to the other side');
+  await say('9', 'Move the panel by its header, or dock it to the other side');
   const head = await center('#brushup-root header strong');
   await dragFrom(head, -520, 90, 1000);
   await sleep(1500);
   await clickOn('[data-act="dock"]');
   await sleep(1500);
 
-  await say('9', 'Preview hides the chrome so you can see the page as it ships');
+  await say('10', 'Preview hides the chrome so you can see the page as it ships');
   await clickOn('[data-mode="preview"]');
   await sleep(2400);
   await clickOn('[data-mode="edit"]');
   await sleep(1000);
 
-  await say('10', 'Undo anything with Ctrl+Z. Nothing is ever locked in');
+  await say('11', 'Undo anything with Ctrl+Z. Nothing is ever locked in');
   await page.keyboard.press('Control+z');
   await sleep(1400);
   await page.keyboard.press('Control+Shift+z');
