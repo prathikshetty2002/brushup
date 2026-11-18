@@ -26,22 +26,22 @@ export type A11yRule =
 const WCAG = 'https://www.w3.org/WAI/WCAG22/Understanding/';
 
 /** Every check, in the order the tab lists them: what it looks for, and where the standard explains why. */
-export const RULES: { rule: A11yRule; label: string; what: string; learn?: string }[] = [
-  { rule: 'contrast', label: 'Contrast', what: 'Text that is hard to read against its background (4.5:1, or 3:1 for large text)', learn: `${WCAG}contrast-minimum.html` },
-  { rule: 'target-size', label: 'Tap size', what: 'Buttons, links and inputs smaller than 24×24px', learn: `${WCAG}target-size-minimum.html` },
-  { rule: 'small-text', label: 'Small text', what: 'Text under 12px, which many people cannot read comfortably' },
-  { rule: 'image-alt', label: 'Image', what: 'Images with no alt attribute', learn: `${WCAG}non-text-content.html` },
-  { rule: 'name', label: 'Name', what: 'Buttons, links and inputs a screen reader cannot name', learn: `${WCAG}name-role-value.html` },
-  { rule: 'link-text', label: 'Link text', what: 'Links that only say “click here” or “read more”', learn: `${WCAG}link-purpose-in-context.html` },
-  { rule: 'heading-order', label: 'Headings', what: 'Headings that skip a level or are empty', learn: `${WCAG}info-and-relationships.html` },
-  { rule: 'keyboard', label: 'Keyboard', what: 'Things that look clickable, or have a button role, but a keyboard cannot reach', learn: `${WCAG}keyboard.html` },
-  { rule: 'tab-order', label: 'Tab order', what: 'A custom tab order (tabindex above 0) that jumps around the page', learn: `${WCAG}focus-order.html` },
-  { rule: 'language', label: 'Language', what: 'A page with no language set on <html>', learn: `${WCAG}language-of-page.html` },
-  { rule: 'page-title', label: 'Page title', what: 'A page with no <title>', learn: `${WCAG}page-titled.html` },
-  { rule: 'zoom', label: 'Zoom', what: 'A viewport setting that stops people zooming in', learn: `${WCAG}resize-text.html` },
-  { rule: 'duplicate-id', label: 'Duplicate id', what: 'The same id used twice, which breaks labels and aria references', learn: `${WCAG}name-role-value.html` },
-  { rule: 'autoplay', label: 'Autoplay', what: 'Audio or video that starts playing by itself', learn: `${WCAG}audio-control.html` },
-  { rule: 'page-structure', label: 'Page structure', what: 'No main landmark, or no h1', learn: `${WCAG}info-and-relationships.html` },
+export const RULES: { rule: A11yRule; label: string; what: string; basis: string; learn?: string }[] = [
+  { rule: 'contrast', label: 'Contrast', what: 'Text that is hard to read against its background (4.5:1, or 3:1 for large text)', basis: 'WCAG 1.4.3 (level AA) requires 4.5:1 for normal text and 3:1 for large text (24px, or 18.66px bold).', learn: `${WCAG}contrast-minimum.html` },
+  { rule: 'target-size', label: 'Tap size', what: 'Buttons, links and inputs smaller than 24×24px', basis: 'WCAG 2.2 (2.5.8, level AA) requires at least 24×24 CSS px. Apple recommends 44×44pt and Material 48×48dp, with 8dp between targets, for primary controls, so passing this is the floor.', learn: `${WCAG}target-size-minimum.html` },
+  { rule: 'small-text', label: 'Small text', what: 'Text under 11px, below the smallest size Apple allows', learn: 'https://developer.apple.com/design/human-interface-guidelines/accessibility', basis: 'Apple’s guidelines set 11pt as the minimum text size on iOS (10pt on macOS, 12pt on visionOS and watchOS). This flags text under 11px and suggests 12px.' },
+  { rule: 'image-alt', label: 'Image', what: 'Images with no alt attribute', basis: 'WCAG 1.1.1 (level A) requires a text alternative for images that carry meaning; decorative images should use alt="".', learn: `${WCAG}non-text-content.html` },
+  { rule: 'name', label: 'Name', what: 'Buttons, links and inputs a screen reader cannot name', basis: 'WCAG 4.1.2 (level A) requires every control to have a name a screen reader can announce.', learn: `${WCAG}name-role-value.html` },
+  { rule: 'link-text', label: 'Link text', what: 'Links that only say “click here” or “read more”', basis: 'WCAG 2.4.4 (level A) wants a link’s purpose clear from its text, or from its surrounding context.', learn: `${WCAG}link-purpose-in-context.html` },
+  { rule: 'heading-order', label: 'Headings', what: 'Headings that skip a level or are empty', basis: 'WCAG 1.3.1 (level A) requires structure to be available to assistive technology, which includes a logical heading outline.', learn: `${WCAG}info-and-relationships.html` },
+  { rule: 'keyboard', label: 'Keyboard', what: 'Things that look clickable, or have a button role, but a keyboard cannot reach', basis: 'WCAG 2.1.1 (level A) requires everything that works with a mouse to work with a keyboard. The pointer-cursor check is a heuristic and can flag decoration.', learn: `${WCAG}keyboard.html` },
+  { rule: 'tab-order', label: 'Tab order', what: 'A custom tab order (tabindex above 0) that jumps around the page', basis: 'WCAG 2.4.3 (level A) requires a focus order that preserves meaning. Positive tabindex values override the natural order.', learn: `${WCAG}focus-order.html` },
+  { rule: 'language', label: 'Language', what: 'A page with no language set on <html>', basis: 'WCAG 3.1.1 (level A) requires the page’s language to be set so screen readers pronounce it correctly.', learn: `${WCAG}language-of-page.html` },
+  { rule: 'page-title', label: 'Page title', what: 'A page with no <title>', basis: 'WCAG 2.4.2 (level A) requires pages to have a title that describes their topic or purpose.', learn: `${WCAG}page-titled.html` },
+  { rule: 'zoom', label: 'Zoom', what: 'A viewport setting that stops people zooming in', basis: 'WCAG 1.4.4 (level AA) requires text to be resizable to 200%, which a viewport that blocks zoom prevents.', learn: `${WCAG}resize-text.html` },
+  { rule: 'duplicate-id', label: 'Duplicate id', what: 'The same id used twice, which breaks labels and aria references', basis: 'A duplicate id breaks label and aria references, which WCAG 4.1.2 relies on to expose a control’s name and relationships.', learn: `${WCAG}name-role-value.html` },
+  { rule: 'autoplay', label: 'Autoplay', what: 'Audio or video that starts playing by itself', basis: 'WCAG 1.4.2 (level A) requires a way to pause or stop audio that plays for more than 3 seconds.', learn: `${WCAG}audio-control.html` },
+  { rule: 'page-structure', label: 'Page structure', what: 'No main landmark, or no h1', basis: 'WCAG 1.3.1 and 2.4.1 call for landmarks and a clear heading structure so people can jump to the main content.', learn: `${WCAG}info-and-relationships.html` },
 ];
 
 export interface A11yIssue {
@@ -59,7 +59,8 @@ type Rgba = { r: number; g: number; b: number; a: number };
 
 const MAX_ISSUES = 60;
 const MIN_TARGET = 24; // WCAG 2.2 SC 2.5.8, level AA
-const MIN_TEXT = 12;
+const MIN_TEXT = 11; // Apple's HIG: 11pt is the smallest text size on iOS
+const SUGGESTED_TEXT = 12;
 const VAGUE_LINKS = new Set(['click here', 'here', 'read more', 'more', 'learn more', 'link', 'this', 'this link', 'details', 'more info', 'more details', 'view more', 'see more']);
 
 /* ---------- colour ---------- */
@@ -244,7 +245,7 @@ export function scanPage(doc: Document, ignore: (el: Element) => boolean = () =>
       rule: 'target-size',
       el,
       title: `Hard to tap: only ${Math.round(r.width)}×${Math.round(r.height)}px`,
-      detail: `${describe(el)} is smaller than ${MIN_TARGET}×${MIN_TARGET}px, the minimum WCAG 2.2 asks for. Small targets are easy to miss with a finger or a shaky hand.`,
+      detail: `${describe(el)} is smaller than ${MIN_TARGET}×${MIN_TARGET}px, the minimum WCAG 2.2 asks for. Apple recommends 44×44 and Material 48×48 for main controls. Small targets are easy to miss with a finger or a shaky hand.`,
       fix: { label: `Make it at least ${MIN_TARGET}×${MIN_TARGET}px`, props: { 'min-width': `${MIN_TARGET}px`, 'min-height': `${MIN_TARGET}px` } },
     });
   }
@@ -283,8 +284,8 @@ export function scanPage(doc: Document, ignore: (el: Element) => boolean = () =>
       rule: 'small-text',
       el,
       title: `Text is very small: ${Math.round(size * 10) / 10}px`,
-      detail: `${describe(el)} is under ${MIN_TEXT}px. Small text is hard to read on a phone and for anyone with low vision.`,
-      fix: { label: `Make it ${MIN_TEXT}px`, props: { 'font-size': `${MIN_TEXT}px` } },
+      detail: `${describe(el)} is under ${MIN_TEXT}px, the smallest text size Apple's guidelines allow. Small text is hard to read on a phone and for anyone with low vision.`,
+      fix: { label: `Make it ${SUGGESTED_TEXT}px`, props: { 'font-size': `${SUGGESTED_TEXT}px` } },
     });
   }
 

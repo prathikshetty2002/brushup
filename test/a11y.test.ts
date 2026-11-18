@@ -139,8 +139,8 @@ describe('scanPage', () => {
 });
 
 describe('more checks', () => {
-  it('flags text under 12px, with a fix', () => {
-    withMain('<p style="font-size:10px;color:#111;background:#fff">tiny</p><p style="font-size:12px;color:#111;background:#fff">ok</p>');
+  it('flags text under 11px (Apple’s minimum), with a 12px fix', () => {
+    withMain('<p style="font-size:10px;color:#111;background:#fff">tiny</p><p style="font-size:11px;color:#111;background:#fff">at the floor</p><p style="font-size:12px;color:#111;background:#fff">ok</p>');
     const [issue, ...rest] = of('small-text');
     expect(rest).toHaveLength(0);
     expect(issue.title).toBe('Text is very small: 10px');
@@ -201,7 +201,8 @@ describe('more checks', () => {
     for (const r of RULES) {
       expect(r.label.length).toBeGreaterThan(2);
       expect(r.what.length).toBeGreaterThan(10);
-      if (r.learn) expect(r.learn).toMatch(/^https:\/\/www\.w3\.org\/WAI\/WCAG22\/Understanding\/[a-z-]+\.html$/);
+      expect(r.basis.length).toBeGreaterThan(30);
+      if (r.learn) expect(r.learn).toMatch(/^https:\/\/(www\.w3\.org\/WAI\/WCAG22\/Understanding\/[a-z-]+\.html|developer\.apple\.com\/design\/human-interface-guidelines\/[a-z-]+)$/);
     }
     expect(new Set(RULES.map((r) => r.rule)).size).toBe(RULES.length);
   });

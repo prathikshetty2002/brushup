@@ -95,7 +95,7 @@ npx brushup page.html          # http://127.0.0.1:4321
 | Edit text | Double-click an element that only contains text; Enter commits, Esc cancels |
 | Type, spacing, size | Fields in the **Style** tab |
 | Add a note | Select an element, press **N** (or Notes tab) |
-| Check accessibility | **Accessibility** tab: 15 fixed checks (contrast, tap size, small text, alt text, unnamed controls, vague links, headings, keyboard access, tab order, language, title, zoom, duplicate ids, autoplay, page structure). No AI, no tokens. One-click fixes where a style edit can do it, Send to Claude for the rest, and a link to the W3C's explanation on each issue |
+| Check accessibility and design | **Checks** tab: 15 accessibility and 11 design checks (contrast, tap size, alt text, keyboard access, headings; spacing grid, line length, hierarchy, type scale, stretched images, clipped text…). No AI, no tokens. Each says where its number comes from (WCAG, Figma, Material, Apple, Baymard) and links to it; one-click fixes where a style edit can do it, Send to Claude for the rest |
 | Review what changed | **Changes** tab: the git diff against your last commit, files Brushup edited marked, Copy diff |
 | Undo / redo | `Ctrl/Cmd+Z`, `Ctrl/Cmd+Shift+Z` |
 | Use the page normally | Switch to **Preview** |

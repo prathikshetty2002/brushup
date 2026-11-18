@@ -44,6 +44,7 @@ describe('reading comfort', () => {
     document.querySelector('p')!.getBoundingClientRect = () => ({ width: 1000, height: 40 }) as DOMRect;
     const [issue] = of('line-length');
     expect(issue.title).toMatch(/about 125 characters/);
+    expect(issue.detail).toMatch(/80 characters/);
     expect(issue.fix?.props).toEqual({ 'max-width': '65ch' });
     document.querySelector('p')!.getBoundingClientRect = () => ({ width: 600, height: 40 }) as DOMRect;
     expect(of('line-length')).toHaveLength(0);
@@ -103,6 +104,17 @@ describe('boxes, images and clipping', () => {
     const found = of('cramped-button');
     expect(found.map((i) => i.el.id)).toEqual(['tight']);
     expect(found[0].fix?.props).toEqual({ 'padding-left': '12px', 'padding-right': '12px', 'padding-top': '6px', 'padding-bottom': '6px' });
+  });
+
+  it('measures the real gap, so a button with no padding but a fixed height and a centered label is fine', () => {
+    put('<button id="roomy" style="background:#000;color:#fff;padding:0;display:flex">Go</button><button id="hug" style="background:#000;color:#fff;padding:0;display:flex">Go</button>');
+    const roomy = box(document.getElementById('roomy')!, 120, 32, 100);
+    const hug = box(document.getElementById('hug')!, 40, 20, 100);
+    (Range.prototype as any).getBoundingClientRect = function () {
+      const el = (this as Range).commonAncestorContainer as HTMLElement;
+      return el === roomy ? { left: 140, right: 180, top: 8, bottom: 24, width: 40, height: 16 } : { left: 101, right: 139, top: 1, bottom: 19, width: 38, height: 18 };
+    };
+    expect(of('cramped-button').map((i) => i.el)).toEqual([hug]);
   });
 
   it('flags an image drawn at a different shape, but not one cropped with object-fit or drawn to scale', () => {
@@ -166,7 +178,14 @@ describe('scanDesign', () => {
 
   it('describes every rule', () => {
     expect(DESIGN_RULES.length).toBe(11);
-    for (const r of DESIGN_RULES) expect(r.what.length).toBeGreaterThan(15);
+    for (const r of DESIGN_RULES) {
+      expect(r.what.length).toBeGreaterThan(15);
+      expect(r.basis.length).toBeGreaterThan(40); // every rule says where its number comes from
+      expect(['standard', 'guideline', 'convention']).toContain(r.strength);
+      if (r.learn) expect(r.learn).toMatch(/^https:\/\//);
+    }
+    // a rule with no published source must say it is a convention, never imply authority
+    for (const r of DESIGN_RULES.filter((x) => !x.learn)) expect(r.strength).toBe('convention');
     expect(new Set(DESIGN_RULES.map((r) => r.rule)).size).toBe(DESIGN_RULES.length);
   });
 });

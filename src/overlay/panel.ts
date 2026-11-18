@@ -36,6 +36,9 @@ export interface A11yView {
   fix?: string;
   /** Where the standard explains why it matters. */
   learn?: string;
+  /** Where the number comes from: the standard or guideline behind it, or that it is a convention. */
+  basis?: string;
+  strength?: 'standard' | 'guideline' | 'convention';
 }
 
 export interface NoteDraft {
@@ -212,6 +215,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .a11yitem b { display: block; color: var(--text); font-weight: 600; font-size: 12px; line-height: 1.4; } .a11yitem p { margin: 3px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .a11yfilter { display: flex; gap: 4px; margin: 0 0 8px; } .a11yfilter button { padding: 3px 9px; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); font-size: 11px; } .a11yfilter button[aria-pressed=true] { background: var(--raise-2); color: var(--text); border-color: var(--fieldline); }
 .a11yitem .rule.design { color: var(--pad); }
+.a11yitem .basis { margin: 5px 0 0; padding-left: 7px; border-left: 2px solid var(--line); color: var(--faint); font-size: 10.5px; line-height: 1.5; }
+.a11ywhat .why { margin: 1px 0 0; color: var(--faint); font-size: 10.5px; line-height: 1.45; }
 .a11ywhat h4 { margin: 8px 0 2px; font: 600 10px var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--faint); }
 .a11yitem .learn { display: inline-block; margin-top: 6px; color: var(--accent); font-size: 11px; text-decoration: underline; text-underline-offset: 2px; }
 .a11ywhat { margin: 8px 0; font-size: 11px; color: var(--muted); } .a11ywhat summary { cursor: pointer; } .a11ywhat ul { margin: 6px 0 0; padding-left: 16px; line-height: 1.5; } .a11ywhat li { margin-bottom: 3px; } .a11ywhat b { color: var(--text); font-weight: 600; }
@@ -895,10 +900,15 @@ export function createPanel(hooks: PanelHooks) {
       const b = document.createElement('b');
       b.textContent = `${r.label}: `;
       li.append(b, r.what);
+      const why = document.createElement('div');
+      why.className = 'why';
+      why.textContent = r.basis;
+      li.append(why);
       ul.append(li);
     }
     whatEl.append(h, ul);
   }
+  const LEARN_HOSTS = new Set(['www.w3.org', 'www.figma.com', 'm2.material.io', 'developer.apple.com', 'baymard.com', 'boia.org', 'developer.mozilla.org']);
   let a11yAll: A11yView[] = [];
   let a11yFilter: 'all' | 'accessibility' | 'design' = 'all';
   const filterBtns = [...root.querySelectorAll<HTMLButtonElement>('.a11yfilter button')];
@@ -943,10 +953,16 @@ export function createPanel(hooks: PanelHooks) {
       act('Locate', () => hooks.onA11yLocate(issue.id));
       act('Send to Claude', () => hooks.onA11yNote(issue.id));
       item.append(rule, title, detail, acts);
-      if (issue.learn?.startsWith('https://www.w3.org/')) {
+      if (issue.basis) {
+        const basis = document.createElement('p');
+        basis.className = 'basis';
+        basis.textContent = `${issue.strength === 'convention' ? 'Common practice. ' : issue.strength === 'guideline' ? 'Guideline. ' : issue.strength === 'standard' ? 'Standard. ' : ''}${issue.basis}`;
+        item.append(basis);
+      }
+      if (issue.learn && LEARN_HOSTS.has(new URL(issue.learn).hostname)) {
         const learn = document.createElement('a');
         learn.className = 'learn';
-        learn.href = issue.learn; // always one of our own W3C links, never anything from the page
+        learn.href = issue.learn; // always one of our own source links, never anything from the page
         learn.target = '_blank';
         learn.rel = 'noopener noreferrer';
         learn.textContent = 'Learn more ↗';

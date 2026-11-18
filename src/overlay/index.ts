@@ -352,11 +352,15 @@ async function noteForTextChange(el: HTMLElement, wanted: string, was: string, w
 /* ---------- accessibility ---------- */
 
 let a11yIssues = new Map<string, A11yIssue>();
+const ruleSource = (rule: string) => {
+  const r = [...RULES, ...DESIGN_RULES].find((x) => x.rule === rule) as { learn?: string; basis?: string; strength?: 'standard' | 'guideline' | 'convention' } | undefined;
+  return { learn: r?.learn, basis: r?.basis, strength: r?.strength };
+};
 function scanA11y() {
   const ignore = (el: Element) => el === panel.host || panel.host.contains(el) || el.closest('#brushup-root') !== null;
   const found = [...scanPage(document, ignore), ...scanDesign(document, ignore)];
   a11yIssues = new Map(found.map((i) => [i.id, i]));
-  const views: A11yView[] = found.map((i) => ({ id: i.id, category: DESIGN_RULES.some((r) => r.rule === i.rule) ? ('design' as const) : ('accessibility' as const), rule: i.rule, title: i.title, detail: i.detail, fix: i.fix?.label, learn: RULES.find((r) => r.rule === i.rule)?.learn }));
+  const views: A11yView[] = found.map((i) => ({ id: i.id, category: DESIGN_RULES.some((r) => r.rule === i.rule) ? ('design' as const) : ('accessibility' as const), rule: i.rule, title: i.title, detail: i.detail, fix: i.fix?.label, ...ruleSource(i.rule) }));
   panel.setA11y(views);
 }
 /** The nearest element Brushup tagged, which is the one whose source it can edit. */

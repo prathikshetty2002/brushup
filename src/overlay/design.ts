@@ -18,18 +18,99 @@ export type DesignRule =
   | 'sideways-scroll'
   | 'text-edge';
 
-export const DESIGN_RULES: { rule: DesignRule; label: string; what: string }[] = [
-  { rule: 'spacing-grid', label: 'Spacing', what: 'Padding, margin or gap that is off a 4px grid (such as 15px or 23px), with a fix that snaps it to the grid' },
-  { rule: 'line-length', label: 'Line length', what: 'Paragraphs wider than about 85 characters per line, which are tiring to read' },
-  { rule: 'line-height', label: 'Line spacing', what: 'Multi-line text with lines packed tighter than 1.3× the font size' },
-  { rule: 'long-centered', label: 'Alignment', what: 'Long paragraphs that are centered, which makes each line start somewhere new' },
-  { rule: 'heading-hierarchy', label: 'Hierarchy', what: 'Headings that are no bigger or bolder than the text around them' },
-  { rule: 'type-scale', label: 'Type scale', what: 'A page using more than 8 different font sizes' },
-  { rule: 'cramped-button', label: 'Button padding', what: 'Buttons and links with a box where the text is squeezed against the edge' },
-  { rule: 'stretched-image', label: 'Image', what: 'Images drawn at a different shape from the original, so they look stretched or squashed' },
-  { rule: 'clipped-text', label: 'Cut off', what: 'Text hidden by its container with no ellipsis' },
-  { rule: 'sideways-scroll', label: 'Page width', what: 'Something wider than the screen, so the page scrolls sideways' },
-  { rule: 'text-edge', label: 'Screen edge', what: 'Text within 8px of the edge of the screen' },
+/**
+ * Each rule says where its number comes from, so a suggestion can be weighed rather than trusted blindly.
+ * `standard`: a published accessibility requirement. `guideline`: written down by a design system or research.
+ * `convention`: common practice that no standard pins to a number.
+ */
+export const DESIGN_RULES: { rule: DesignRule; label: string; what: string; basis: string; learn?: string; strength: 'standard' | 'guideline' | 'convention' }[] = [
+  {
+    rule: 'spacing-grid',
+    label: 'Spacing',
+    what: 'Padding, margin or gap that is off a 4px grid (such as 15px or 23px), with a fix that snaps it to the grid',
+    basis: 'Figma recommends an 8-point grid for spacing with a 4-point baseline for type, and Material aligns components to an 8dp grid with type on 4dp. Both treat it as a guide, so this flags only values off the finest (4px) step.',
+    learn: 'https://m2.material.io/design/layout/spacing-methods.html',
+    strength: 'guideline',
+  },
+  {
+    rule: 'line-length',
+    label: 'Line length',
+    what: 'Paragraphs wider than 80 characters per line, which are tiring to read',
+    basis: 'WCAG 1.4.8 sets 80 characters as the ceiling (level AAA). Baymard’s research finds 50 to 75 best and sees readers tire at 100 or more.',
+    learn: 'https://baymard.com/blog/line-length-readability',
+    strength: 'standard',
+  },
+  {
+    rule: 'line-height',
+    label: 'Line spacing',
+    what: 'Multi-line text with lines packed tighter than 1.3× the font size',
+    basis: 'Figma suggests starting body text at 1.5× the font size (about 1.1× for large headings), and WCAG 1.4.12 requires text to keep working at 1.5×. This flags only clearly tight text, below 1.3×.',
+    learn: 'https://www.figma.com/best-practices/typography-systems-in-figma/',
+    strength: 'guideline',
+  },
+  {
+    rule: 'long-centered',
+    label: 'Alignment',
+    what: 'Paragraphs of four or more lines that are centered, which makes each line start somewhere new',
+    basis: 'Accessibility guidance such as BOIA’s calls long centered text a practice to avoid, though it is advice and not a WCAG requirement, and studies of reading speed are mixed. Short centered text, under four lines, is fine.',
+    learn: 'https://boia.org/blog/why-justified-or-centered-text-is-bad-for-accessibility',
+    strength: 'convention',
+  },
+  {
+    rule: 'heading-hierarchy',
+    label: 'Hierarchy',
+    what: 'Headings that are no bigger or bolder than the text around them',
+    basis: 'Figma’s typography guide describes a type “waterfall” running from the largest text to the smallest, so each level is clearly distinct from the next.',
+    learn: 'https://www.figma.com/best-practices/typography-systems-in-figma/',
+    strength: 'guideline',
+  },
+  {
+    rule: 'type-scale',
+    label: 'Type scale',
+    what: 'A page using more than 8 different font sizes',
+    basis: 'Figma’s typography guide cites getting “a lot of range from just 7 sizes” as a starting point, and warns that scale steps over 1.4 to 1.5× grow too fast. This allows a little more, flagging above 8.',
+    learn: 'https://www.figma.com/best-practices/typography-systems-in-figma/',
+    strength: 'guideline',
+  },
+  {
+    rule: 'cramped-button',
+    label: 'Button padding',
+    what: 'Buttons and links with a box where the text is squeezed against the edge',
+    basis: 'No standard gives a number. The suggested 12px on the sides and 6px above and below is a typical default, so adjust it to your design.',
+    strength: 'convention',
+  },
+  {
+    rule: 'stretched-image',
+    label: 'Image',
+    what: 'Images drawn at a different shape from the original, so they look stretched or squashed',
+    basis: 'No standard sets this. A picture drawn at the wrong proportions looks distorted, and CSS object-fit exists to crop it to fit instead.',
+    learn: 'https://developer.mozilla.org/en-US/docs/Web/CSS/object-fit',
+    strength: 'convention',
+  },
+  {
+    rule: 'clipped-text',
+    label: 'Cut off',
+    what: 'Text hidden by its container with no ellipsis',
+    basis: 'WCAG 1.4.12 requires that no content is lost or clipped when people change text spacing, and text that is already cut off will only get worse.',
+    learn: 'https://www.w3.org/WAI/WCAG22/Understanding/text-spacing.html',
+    strength: 'standard',
+  },
+  {
+    rule: 'sideways-scroll',
+    label: 'Page width',
+    what: 'Something wider than the screen, so the page scrolls sideways',
+    basis: 'WCAG 1.4.10 (Reflow, level AA) asks that content fits a 320px-wide screen without scrolling in two directions. This checks at the current window size.',
+    learn: 'https://www.w3.org/WAI/WCAG22/Understanding/reflow.html',
+    strength: 'standard',
+  },
+  {
+    rule: 'text-edge',
+    label: 'Screen edge',
+    what: 'Text within 8px of the edge of the screen',
+    basis: 'Apple’s layout guidelines keep content inside margins and safe areas, but no standard sets this number. 8px is a floor and the suggested 16px is a typical margin.',
+    learn: 'https://developer.apple.com/design/human-interface-guidelines/layout',
+    strength: 'convention',
+  },
 ];
 
 const MAX_PER_RULE = 8;
@@ -102,12 +183,12 @@ export function scanDesign(doc: Document, ignore: (el: Element) => boolean = () 
     const lines = lh > 0 ? Math.round(r.height / lh) : 1;
     const perLine = r.width / (size * 0.5); // an average character is about half an em wide
 
-    if (text.length >= 150 && perLine > 85) {
+    if (text.length >= 150 && perLine > 80) {
       add({
         rule: 'line-length',
         el,
         title: `Lines are about ${Math.round(perLine)} characters long`,
-        detail: `${describe(el)} runs wide. Text is easiest to read at roughly 45 to 75 characters per line; with longer lines the eye loses its place finding the start of the next one.`,
+        detail: `${describe(el)} runs wide. WCAG's ceiling is 80 characters per line and research finds 50 to 75 easiest to read; with longer lines the eye loses its place finding the start of the next one.`,
         fix: { label: 'Limit the width to 65 characters', props: { 'max-width': '65ch' } },
       });
     }
@@ -116,16 +197,16 @@ export function scanDesign(doc: Document, ignore: (el: Element) => boolean = () 
         rule: 'line-height',
         el,
         title: `Lines are packed tight (${(lh / size).toFixed(2)}× the font size)`,
-        detail: `${describe(el)} has little space between lines. Body text reads best with line spacing of about 1.4 to 1.6× the font size.`,
+        detail: `${describe(el)} has little space between lines. Figma suggests starting body text at 1.5× the font size.`,
         fix: { label: 'Set line spacing to 1.5', props: { 'line-height': '1.5' } },
       });
     }
-    if (cs.textAlign === 'center' && text.length >= 200 && lines >= 3) {
+    if (cs.textAlign === 'center' && text.length >= 200 && lines >= 4) {
       add({
         rule: 'long-centered',
         el,
         title: 'A long paragraph is centered',
-        detail: `${describe(el)} is centered over ${lines} lines. Centered text is fine for a line or two, but over several lines every line starts in a new place and is harder to follow. Left-align it.`,
+        detail: `${describe(el)} is centered over ${lines} lines. Centered text is fine for a few lines, but over more every line starts in a new place and is harder to follow. Left-align it.`,
         fix: { label: 'Align left', props: { 'text-align': 'left' } },
       });
     }
@@ -156,7 +237,7 @@ export function scanDesign(doc: Document, ignore: (el: Element) => boolean = () 
   for (const el of all) if (ownText(el) && shown(el)) sizes.set(Math.round(px(getComputedStyle(el).fontSize)), (sizes.get(Math.round(px(getComputedStyle(el).fontSize))) ?? 0) + 1);
   if (sizes.size > 8) {
     const list = [...sizes.keys()].sort((a, b) => a - b).join(', ');
-    add({ rule: 'type-scale', el: doc.body, title: `The page uses ${sizes.size} different font sizes`, detail: `Sizes in use: ${list}px. Most designs need 5 to 7. Many close sizes (13, 14, 15px) read as mistakes, not as a hierarchy. Pick a scale and use only its steps.` });
+    add({ rule: 'type-scale', el: doc.body, title: `The page uses ${sizes.size} different font sizes`, detail: `Sizes in use: ${list}px. Figma's guide suggests about 7 give plenty of range. Many close sizes (13, 14, 15px) read as mistakes, not as a hierarchy. Pick a scale and use only its steps.` });
   }
 
   // Cramped buttons: a box with the text pressed against its edge.
@@ -166,9 +247,19 @@ export function scanDesign(doc: Document, ignore: (el: Element) => boolean = () 
     const bg = cs.backgroundColor;
     const hasBox = (bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') || px(cs.borderTopWidth) > 0;
     if (!hasBox) continue;
+    // Measure the real gap between the text and the edge of its box: a button can have no padding and still be roomy
+    // (a fixed height with the label centered), so padding alone would be a false alarm.
+    const range = doc.createRange();
+    range.selectNodeContents(el);
+    const text = typeof range.getBoundingClientRect === 'function' ? range.getBoundingClientRect() : null;
+    const r = el.getBoundingClientRect();
+    const measured = text && text.width > 0 && text.height > 0;
+    const gap = measured
+      ? { x: Math.min(text.left - r.left, r.right - text.right), y: Math.min(text.top - r.top, r.bottom - text.bottom) }
+      : { x: Math.min(px(cs.paddingLeft), px(cs.paddingRight)), y: Math.min(px(cs.paddingTop), px(cs.paddingBottom)) };
     const props: Record<string, string> = {};
-    if (px(cs.paddingLeft) < 8 || px(cs.paddingRight) < 8) Object.assign(props, { 'padding-left': '12px', 'padding-right': '12px' });
-    if (px(cs.paddingTop) < 4 || px(cs.paddingBottom) < 4) Object.assign(props, { 'padding-top': '6px', 'padding-bottom': '6px' });
+    if (gap.x < 8) Object.assign(props, { 'padding-left': '12px', 'padding-right': '12px' });
+    if (gap.y < 4) Object.assign(props, { 'padding-top': '6px', 'padding-bottom': '6px' });
     if (!Object.keys(props).length) continue;
     add({
       rule: 'cramped-button',

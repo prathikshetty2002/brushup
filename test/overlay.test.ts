@@ -835,7 +835,8 @@ describe('the A11y tab', () => {
     expect(q('.a11ysum').textContent).toBe('1 design issue');
     expect(o.root.querySelectorAll('.a11yitem')).toHaveLength(1);
     expect(q('.a11yitem .rule').textContent).toBe('Design · Spacing');
-    expect(q('.a11yitem .learn')).toBeNull(); // design guidelines have no standard to link to
+    expect((q('.a11yitem .learn') as HTMLAnchorElement).href).toBe('https://m2.material.io/design/layout/spacing-methods.html');
+    expect(q('.a11yitem .basis').textContent).toMatch(/^Guideline\. Figma recommends an 8-point grid/);
     (q('.a11yitem .apply') as HTMLButtonElement).click();
     await settle();
     expect(o.last('edit').edit).toMatchObject({ kind: 'style', id: 'a3', props: { 'padding-top': '16px' } });
@@ -851,6 +852,7 @@ describe('the A11y tab', () => {
   it('lists both groups under What\'s checked', () => {
     expect([...o.root.querySelectorAll('.a11ywhat h4')].map((h) => h.textContent)).toEqual(['Accessibility', 'Design']);
     expect(o.root.querySelectorAll('.a11ywhat li').length).toBe(15 + 11);
+    expect(o.root.querySelectorAll('.a11ywhat .why').length).toBe(26); // each says where its number comes from
   });
 
   it('does not scan the overlay itself', () => {
