@@ -39,14 +39,21 @@ jobs:
           name: tarball
           path: brushup-*.tgz
 
-  # The canvas in real browsers: select, edit in the panel, drag, edit text and undo, checking each lands in the file.
+  # The canvas in real browsers on each OS: select, edit in the panel, drag, edit text and undo, checking each lands in the file.
   browsers:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        browser: [chromium, firefox, webkit]
+        include:
+          - { os: ubuntu-latest, browser: chromium }
+          - { os: ubuntu-latest, browser: firefox }
+          - { os: ubuntu-latest, browser: webkit }
+          - { os: windows-latest, browser: chromium }
+          - { os: windows-latest, browser: firefox }
+          - { os: macos-latest, browser: chromium }
+          - { os: macos-latest, browser: webkit }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -59,6 +66,38 @@ jobs:
         run: npx playwright-core install --with-deps ${{ matrix.browser }}
       - name: Drive the canvas in ${{ matrix.browser }}
         run: node scripts/e2e-browser.mjs ${{ matrix.browser }}
+
+  # Dev-server mode is where operating systems differ most (paths, the build loaders, the file watcher): build a real
+  # Vite and a real Next.js app from the packed package, edit in a browser, and check the source file.
+  dev-servers:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, framework: vite, browser: chromium }
+          - { os: ubuntu-latest, framework: next, browser: chromium }
+          - { os: windows-latest, framework: vite, browser: chromium }
+          - { os: windows-latest, framework: next, browser: chromium }
+          - { os: windows-latest, framework: vite, browser: firefox }
+          - { os: macos-latest, framework: vite, browser: chromium }
+          - { os: macos-latest, framework: next, browser: chromium }
+          - { os: macos-latest, framework: vite, browser: webkit }
+          - { os: macos-latest, framework: next, browser: webkit }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm pack
+      - name: Install ${{ matrix.browser }}
+        run: npx playwright-core install --with-deps ${{ matrix.browser }}
+      - name: ${{ matrix.framework }} dev server in ${{ matrix.browser }}
+        run: node scripts/e2e-dev.mjs ${{ matrix.framework }} ${{ matrix.browser }}
 
   # Windows and macOS: the full pipeline plus the packed package, since paths, line endings and shells differ.
   cross-os:

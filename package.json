@@ -13,7 +13,8 @@
     "prepublishOnly": "npm run typecheck && npm test && npm run build && npm run check:cjs && npm run check:types",
     "check:cjs": "node scripts/check-cjs-deps.mjs",
     "check:types": "node scripts/check-types.mjs",
-    "e2e": "node scripts/e2e-browser.mjs"
+    "e2e": "node scripts/e2e-browser.mjs",
+    "e2e:dev": "node scripts/e2e-dev.mjs"
   },
   "dependencies": {
     "@babel/parser": "^7.29.14",
