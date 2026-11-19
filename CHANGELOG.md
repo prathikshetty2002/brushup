@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Checked by hand, no code change needed:** Remix on Vite (`remix vite:dev` with the Brushup plugin) loads the canvas, and a nudge, a text edit and a delete each wrote to the route's JSX. On a plain HTML page in a real browser, delete, duplicate, reorder, wrap, alt text, the Decorative checkbox and an image upload through the file picker all wrote the right changes (an upload never overwrites an existing file: it saved `a-1.png` beside `a.png`).
 - **Changes tab: one line of context** around each change instead of three, so a diff is short enough to show the edit without scrolling.
 - **Layers: `index.tsx`, `page.tsx`, `layout.tsx` and similar are named by their folder** (`components/hero/index.tsx` is `‹Hero›`), and lower-case files get a name too (`ui/pricing-card.tsx` is `‹PricingCard›`). `app/page.tsx` itself stays unnamed.
 - **Checks: a one-click fix for cut-off text.** Text that is clipped sideways gets "Show an ellipsis where it is cut" (`text-overflow: ellipsis; white-space: nowrap`), so it is visibly truncated. Other rules still have no fix button where the fix would need your words or a markup change.
