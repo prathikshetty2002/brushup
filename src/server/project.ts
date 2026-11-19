@@ -17,6 +17,11 @@ export class Project extends FileSession {
     this.root = path.dirname(entry);
   }
 
+  /** A static page keeps its images beside it, and refers to them by name. */
+  protected assets() {
+    return { dir: this.root, urlFor: (file: string) => file };
+  }
+
   protected async loadFor(): Promise<Files> {
     const html = await readFile(this.entry, 'utf8');
     const files: Files = { [this.entry]: html };

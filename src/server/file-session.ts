@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { EditError, type Edit, type Target } from '../core/edit-types';
 import type { Files } from '../core/patch';
+import { saveImage } from './assets';
 
 export type { Target };
 export const sha = (text: string) => createHash('sha1').update(text).digest('hex').slice(0, 12);
@@ -42,6 +43,8 @@ export abstract class FileSession {
   protected abstract loadFor(edit: Edit): Promise<Files>;
   /** `before` is every file as it was read from disk for this change, untouched by earlier edits in the same batch. */
   protected abstract transform(files: Files, edit: Edit, before: Files): { files: Files; target?: Target; warning?: string; select?: string };
+  /** Where an uploaded image goes, and how a page refers to it. */
+  protected abstract assets(): { dir: string; urlFor(file: string): string };
   /** Called after a change has been written (an edit, undo or redo): `from` is what was on disk, `to` what is there now. */
   protected written(_from: Files, _to: Files): void {}
   /** Describe the selected element for `.brushup/selection.json`, or null if it can no longer be found. */
@@ -55,6 +58,13 @@ export abstract class FileSession {
   }
   /** Throw an EditError if the canvas was rendered from different source than what's on disk. */
   protected checkBase(_files: Files, _hash: string): void {}
+
+  /** Save an image the user chose and say what to write as its `src`. */
+  async saveAsset(name: string, bytes: Buffer): Promise<{ src: string; file: string }> {
+    const { dir, urlFor } = this.assets();
+    const file = await saveImage(dir, name, bytes);
+    return { src: urlFor(file), file: path.relative(this.root, path.join(dir, file)).replace(/\\/g, '/') };
+  }
 
   /** Turn the canvas's element reference into `file:line` for notes, when the mode can. */
   async locate(_ref: string): Promise<string | undefined> {

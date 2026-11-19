@@ -96,6 +96,7 @@ npx brushup page.html          # http://127.0.0.1:4321
 | Type, spacing, size | Fields in the **Style** tab |
 | Add a note | Select an element, press **N** (or Notes tab) |
 | Duplicate or delete | **Ctrl/Cmd+D** or **Delete** (or the buttons): written to your source, undoable. Refuses list items, conditionals and component roots, with the reason |
+| Swap an image, write alt text | Select an image: the **Image** section in the Style tab. Choose a file (saved into your project) or type a source; write alt text or mark it decorative |
 | Reorder or wrap | **Alt+Up / Alt+Down** swaps with the neighbour; **Ctrl/Cmd+Alt+G** wraps in a `<div>` (or the Layers tab buttons). Undoable |
 | See the page's structure | **Layers** tab: the elements as a tree with a filter box, folding for big pages, and click to select |
 | Check accessibility and design | **Checks** tab: 15 accessibility and 11 design checks (contrast, tap size, alt text, keyboard access, headings; spacing grid, line length, hierarchy, type scale, stretched images, clipped text…). No AI, no tokens. Each says where its number comes from (WCAG, Figma, Material, Apple, Baymard) and links to it; one-click fixes where a style edit can do it, Send to Claude for the rest, and Ignore for the ones that don't fit (saved with the project) |

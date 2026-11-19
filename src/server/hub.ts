@@ -13,6 +13,7 @@ type ClientMessage =
   | { type: 'edits'; n: number; edits: Edit[]; hash: string }
   | { type: 'undo' | 'redo'; n: number }
   | { type: 'changes'; n: number }
+  | { type: 'upload'; n: number; name: string; data: string }
   | { type: 'ignore-add'; n: number; item: unknown }
   | { type: 'ignore-remove'; n: number; key: string }
   | { type: 'select'; selection: Selection | null }
@@ -84,6 +85,17 @@ export function createHub(session: FileSession, notes?: NotesStore, ignored?: Ig
     }
     if (msg.type === 'answer') {
       if (info?.role === 'canvas') finish(msg.id, { ok: !!msg.ok, data: msg.data, error: msg.error });
+      return;
+    }
+    if (msg.type === 'upload') {
+      if (info?.role !== 'canvas') return;
+      if (typeof msg.name !== 'string' || typeof msg.data !== 'string') return void send(ws, { type: 'result', n: msg.n, ok: false, error: 'That upload was malformed.' });
+      try {
+        const saved = await session.saveAsset(msg.name, Buffer.from(msg.data, 'base64'));
+        send(ws, { type: 'result', n: msg.n, ok: true, src: saved.src, saved: saved.file });
+      } catch (err) {
+        send(ws, { type: 'result', n: msg.n, ok: false, error: err instanceof EditError ? err.message : `Could not save the image: ${(err as Error).message}` });
+      }
       return;
     }
     if (msg.type === 'ignore-add' || msg.type === 'ignore-remove') {

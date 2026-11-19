@@ -1,5 +1,6 @@
 import path from 'node:path';
-import { EditError, type Edit, type Scope, type StructureEdit, type StyleEdit, type TextEdit } from './edit-types';
+import { checkAttr, markupValue } from './attr';
+import { EditError, type AttrEdit, type Edit, type Scope, type StructureEdit, type StyleEdit, type TextEdit } from './edit-types';
 import { duplicateSpan, removeSpan, swapSpans, wrapSpan } from './structure';
 import { afterTagName, mapHtml, type Range, type SourceDoc, type SourceElement } from './html-map';
 import { parseSelector, matches, specificity } from './selector';
@@ -138,6 +139,19 @@ function applyText(files: Files, entry: string, edit: TextEdit): Files {
   return next === source ? files : { ...files, [entry]: next };
 }
 
+/** Set an image's src or alt on a static page. */
+function applyAttr(files: Files, entry: string, edit: AttrEdit): Files {
+  checkAttr(edit);
+  const source = files[entry];
+  const el = lookup(mapHtml(source), edit);
+  const open = source.slice(el.startTag.start, el.startTag.end);
+  const found = new RegExp(`\\s${edit.name}(?=[\\s=/>])(\\s*=\\s*("[^"]*"|'[^']*'|[^\\s>]+))?`, 'i').exec(open);
+  const next = found
+    ? open.slice(0, found.index) + ` ${edit.name}=${markupValue(edit.value)}` + open.slice(found.index + found[0].length)
+    : open.replace(/^<[^\s/>]+/, (m) => `${m} ${edit.name}=${markupValue(edit.value)}`);
+  return { ...files, [entry]: source.slice(0, el.startTag.start) + next + source.slice(el.startTag.end) };
+}
+
 /** Delete or duplicate an element of a static page. */
 function applyStructure(files: Files, entry: string, edit: StructureEdit): Files {
   const source = files[entry];
@@ -167,6 +181,7 @@ function applyStructure(files: Files, entry: string, edit: StructureEdit): Files
 /** Pure: returns new file contents (unchanged files keep identity). Throws EditError if the edit can't be placed. */
 export function applyEdit(files: Files, entry: string, edit: Edit): Files {
   if (edit.kind === 'text') return applyText(files, entry, edit);
+  if (edit.kind === 'attr') return applyAttr(files, entry, edit);
   if (edit.kind !== 'style') return applyStructure(files, entry, edit);
   let out = files;
   for (const [prop, value] of Object.entries(edit.props)) {

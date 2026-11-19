@@ -84,14 +84,18 @@ export async function getSelection(ctx: ToolContext): Promise<ToolResult> {
 }
 
 interface LoggedEdit {
-  kind: 'style' | 'text' | 'delete' | 'duplicate' | 'moveUp' | 'moveDown' | 'wrap';
+  kind: 'style' | 'text' | 'delete' | 'duplicate' | 'moveUp' | 'moveDown' | 'wrap' | 'attr';
+  name?: string;
+  value?: string;
   id: string;
   props?: Record<string, string>;
   text?: string;
 }
 
 const summarize = (e: LoggedEdit) =>
-  e.kind === 'delete' || e.kind === 'duplicate' || e.kind === 'moveUp' || e.kind === 'moveDown' || e.kind === 'wrap'
+  e.kind === 'attr'
+    ? { target: shortRef(e.id), change: `${e.name} → "${(e.value ?? '').slice(0, 80)}"` }
+    : e.kind === 'delete' || e.kind === 'duplicate' || e.kind === 'moveUp' || e.kind === 'moveDown' || e.kind === 'wrap'
     ? { target: shortRef(e.id), change: { delete: 'element deleted', duplicate: 'element duplicated (a copy was added right after it)', moveUp: 'element moved up, swapped with the one before it', moveDown: 'element moved down, swapped with the one after it', wrap: 'element wrapped in a <div>' }[e.kind] }
     : e.kind === 'text' ? { target: shortRef(e.id), change: `text → "${(e.text ?? '').slice(0, 80)}"` } : { target: shortRef(e.id), change: Object.entries(e.props ?? {}).map(([k, v]) => `${k}: ${v}`).join('; ') };
 

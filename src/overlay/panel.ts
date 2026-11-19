@@ -83,6 +83,9 @@ export interface PanelHooks {
   onDuplicate(): void;
   onMove(dir: 'up' | 'down'): void;
   onWrap(): void;
+  /** The Image section's Source or Alt field was changed. `explicit` writes an empty alt even when there is none yet (a decorative image). */
+  onImageAttr(name: 'src' | 'alt', value: string, explicit?: boolean): void;
+  onImageUpload(file: File): void;
   /** The Layers tab was opened: build the tree and call `setLayers`. */
   onLayersRefresh(): void;
   onLayerSelect(key: string, add: boolean): void;
@@ -101,6 +104,8 @@ export interface PanelHooks {
   /** Dismiss one finding, or every finding of its kind. */
   onA11yIgnore(id: string, scope: 'one' | 'kind'): void;
   onA11yRestore(key: string): void;
+  /** Jump to the selected image's alt field. */
+  onA11yAlt(id: string): void;
   onHandleDown(kind: HandleKind, e: PointerEvent): void;
 }
 
@@ -254,6 +259,10 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .a11ygrouphead .rule { margin: 0; } .a11ygrouphead .gcount { margin-left: auto; color: var(--faint); font: 600 11px var(--mono); }
 .a11yitem .rule { display: inline-block; margin-bottom: 4px; padding: 1px 6px; border-radius: 2px; background: var(--raise); color: var(--muted); font: 600 10px var(--mono); text-transform: uppercase; letter-spacing: .04em; }
 .a11yitem b { display: block; color: var(--text); font-weight: 600; font-size: 12px; line-height: 1.4; } .a11yitem p { margin: 3px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.imgsec { margin: 0 0 12px; padding-bottom: 10px; border-bottom: 1px solid var(--line); } .imgsec h3 { margin: 0 0 6px; font: italic 600 13px var(--serif); color: var(--muted); }
+.imgf { display: grid; grid-template-columns: 62px 1fr; align-items: center; gap: 8px; margin-bottom: 6px; color: var(--muted); font-size: 11.5px; } .imgf input { width: 100%; height: 26px; padding: 0 8px; border: 1px solid var(--fieldline); border-radius: 3px; background: var(--field); color: var(--text); font: 11.5px var(--mono); } .imgf input:disabled { opacity: .5; }
+.imgrow { display: flex; align-items: center; gap: 8px; margin: 0 0 8px 70px; } .imgrow button { white-space: nowrap; padding: 3px 9px; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); font-size: 11px; } .imgrow button:hover { color: var(--text); } .imgnote { color: var(--faint); font-size: 10.5px; }
+.imgchk { display: flex; align-items: center; gap: 6px; margin: 0 0 4px 70px; color: var(--muted); font-size: 11px; cursor: pointer; } .imgwarn { margin: 6px 0 0; padding: 5px 8px; border-left: 2px solid var(--warn); background: var(--raise); color: var(--muted); font-size: 11px; line-height: 1.5; }
 .layacts { display: flex; gap: 4px; margin: 0 0 6px; } .layacts button { padding: 3px 9px; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); font-size: 11px; } .layacts button:hover:not(:disabled) { color: var(--text); } .layacts button:disabled { opacity: .4; }
 .layfilter { width: 100%; height: 26px; margin: 0 0 6px; padding: 0 8px; border: 1px solid var(--fieldline); border-radius: 3px; background: var(--field); color: var(--text); font: 11.5px system-ui; } .layfilter::placeholder { color: var(--faint); }
 .layers .lm { color: var(--accent); background: rgba(var(--accent-rgb), .12); border-radius: 2px; }
@@ -424,6 +433,14 @@ export function createPanel(hooks: PanelHooks) {
         </div>
         <div data-pane="style" role="tabpanel" id="brushup-pane-style" aria-labelledby="brushup-tab-style">
           <div class="info">Click an element to select it.</div>
+          <div class="imgsec" hidden>
+            <h3>Image</h3>
+            <label class="imgf"><span>Source</span><input type="text" data-img="src" placeholder="/photo.png or https://…" autocomplete="off" spellcheck="false" /></label>
+            <div class="imgrow"><button type="button" data-act="img-upload">Choose a file…</button><input type="file" class="imgfile" accept="image/png,image/jpeg,image/gif,image/webp,image/avif" hidden aria-label="Choose an image file" /><span class="imgnote">Saved into your project</span></div>
+            <label class="imgf"><span>Alt text</span><input type="text" data-img="alt" placeholder="Describe what the image shows" autocomplete="off" /></label>
+            <label class="imgchk"><input type="checkbox" data-img="decorative" /> Decorative: nothing to describe</label>
+            <p class="imgwarn" hidden>No alt text yet. People using a screen reader get nothing for this image.</p>
+          </div>
           <div class="fields" hidden></div>
           <label class="shared" hidden title="Off: only the selected element changes. On: the CSS rule is edited, so every element it matches changes."><input type="checkbox" /><span><b>Edit the shared CSS rule</b><small class="why">Off: only this element changes.</small></span></label>
           <dl class="keys" aria-label="Shortcuts"><div><dt><kbd>drag</kbd></dt><dd>Move</dd></div><div><dt><kbd>↑ ↓ ← →</kbd></dt><dd>Nudge 1px, <kbd>⇧</kbd> for 10</dd></div><div><dt><kbd>double-click</kbd></dt><dd>Edit text</dd></div><div><dt><kbd>Ctrl D</kbd></dt><dd>Duplicate</dd></div><div><dt><kbd>Alt ↑ ↓</kbd></dt><dd>Move up or down</dd></div><div><dt><kbd>Delete</kbd></dt><dd>Delete element</dd></div><div><dt><kbd>N</kbd></dt><dd>Add a note</dd></div><div><dt><kbd>Esc</kbd></dt><dd>Deselect</dd></div></dl>
@@ -950,6 +967,26 @@ export function createPanel(hooks: PanelHooks) {
     window.setTimeout(place, 0);
   };
 
+  /* ----- image section ----- */
+  const imgSec = $<HTMLElement>('.imgsec');
+  const imgSrc = $<HTMLInputElement>('[data-img=src]');
+  const imgAlt = $<HTMLInputElement>('[data-img=alt]');
+  const imgDeco = $<HTMLInputElement>('[data-img=decorative]');
+  const imgWarn = $<HTMLElement>('.imgwarn');
+  const imgFile = $<HTMLInputElement>('.imgfile');
+  imgSrc.addEventListener('change', () => hooks.onImageAttr('src', imgSrc.value.trim()));
+  imgAlt.addEventListener('change', () => hooks.onImageAttr('alt', imgAlt.value.trim()));
+  imgDeco.addEventListener('change', () => {
+    if (imgDeco.checked) hooks.onImageAttr('alt', '', true);
+    else imgAlt.focus(); // un-ticking means it needs a description: the old empty alt stays until one is written
+  });
+  root.querySelector('[data-act=img-upload]')!.addEventListener('click', () => imgFile.click());
+  imgFile.addEventListener('change', () => {
+    const file = imgFile.files?.[0];
+    imgFile.value = ''; // so choosing the same file again still fires
+    if (file) hooks.onImageUpload(file);
+  });
+
   /* ----- layers ----- */
   const laySum = $<HTMLElement>('.laysum');
   const layList = $<HTMLElement>('.layers');
@@ -1168,6 +1205,7 @@ export function createPanel(hooks: PanelHooks) {
       };
       if (issue.fix) act(issue.fix, () => hooks.onA11yFix(issue.id), 'apply');
       act('Locate', () => hooks.onA11yLocate(issue.id));
+      if (issue.rule === 'image-alt') act('Write alt text', () => hooks.onA11yAlt(issue.id), 'apply');
       act('Send to Claude', () => hooks.onA11yNote(issue.id));
       act('Ignore', () => hooks.onA11yIgnore(issue.id, 'one'));
       head.append(name, sub);
@@ -1410,6 +1448,20 @@ export function createPanel(hooks: PanelHooks) {
         return;
       }
       info.classList.remove('idle');
+      // An image gets its own section: where it comes from, and what it says.
+      const isImage = el instanceof HTMLImageElement;
+      imgSec.hidden = !isImage;
+      if (isImage) {
+        const setIf = (input: HTMLInputElement, v: string) => {
+          if (root.activeElement !== input) input.value = v;
+        };
+        setIf(imgSrc, el.getAttribute('src') ?? '');
+        setIf(imgAlt, el.getAttribute('alt') ?? '');
+        const decorative = el.hasAttribute('alt') && el.getAttribute('alt') === '';
+        imgDeco.checked = decorative;
+        imgAlt.disabled = decorative;
+        imgWarn.hidden = el.hasAttribute('alt');
+      }
       const cs = getComputedStyle(el);
       // shadcn-style components carry dozens of classes; the first few identify the element.
       const classes = [...el.classList];
@@ -1469,6 +1521,11 @@ export function createPanel(hooks: PanelHooks) {
       field('label').value = existing?.label ?? '';
       field('text').value = existing?.text ?? '';
       field('text').focus();
+    },
+    /** Show the Style tab and put the cursor in the selected image's alt (or source) field. */
+    focusImageField(which: 'alt' | 'src') {
+      showTab('style');
+      (which === 'alt' ? imgAlt : imgSrc).focus();
     },
     /** Fill the Layers tab. */
     setLayers,

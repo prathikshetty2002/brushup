@@ -66,10 +66,22 @@ export interface StructureEdit {
   ident?: Ident;
 }
 
-export type Edit = StyleEdit | TextEdit | StructureEdit;
+/** Set the `src` or `alt` of an image. Only these two, and only to a plain string. */
+export interface AttrEdit {
+  kind: 'attr';
+  ver?: string;
+  stale?: Staleness;
+  id: string;
+  tag: string;
+  ident?: Ident;
+  name: 'src' | 'alt';
+  value: string;
+}
+
+export type Edit = StyleEdit | TextEdit | StructureEdit | AttrEdit;
 
 /** Where an edit ended up, so the canvas knows how long its temporary preview must live. */
-export type Target = 'inline' | 'rule' | 'class' | 'text' | 'structure';
+export type Target = 'inline' | 'rule' | 'class' | 'text' | 'structure' | 'attribute';
 
 export class EditError extends Error {}
 

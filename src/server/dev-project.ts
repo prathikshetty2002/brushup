@@ -162,6 +162,11 @@ export class DevProject extends FileSession {
     return run && run.last === current && run.hashes.has(ver.file) ? 'own' : 'external';
   }
 
+  /** Next, Vite and React Router all serve `public/` from the site root. */
+  protected assets() {
+    return { dir: path.join(this.root, 'public'), urlFor: (file: string) => `/${file}` };
+  }
+
   protected transform(files: Files, edit: Edit, before: Files): { files: Files; target?: Target; warning?: string; select?: string } {
     try {
       return this.structured(files, edit, before);

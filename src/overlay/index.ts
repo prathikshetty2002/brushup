@@ -34,6 +34,9 @@ interface Result {
   changes?: ChangesView;
   /** Where the edited element now is (`file:line:col`), when the edit moved it. */
   select?: string;
+  /** An uploaded image: what to write as its `src`, and the file it was saved as. */
+  src?: string;
+  saved?: string;
 }
 
 // Config comes from `window.__brushup` (static server, Vite plugin) or, for frameworks that render a plain
@@ -746,6 +749,48 @@ function refreshLayers() {
 /** Tag and the start of the text: enough to tell the element that moved from the one it swapped with. */
 const signature = (el: HTMLElement) => `${tagOf(el)}|${(el.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 60)}`;
 
+/* ---------- an image's source and alt text ---------- */
+
+/** Set an image's `src` or `alt` in the source. The page shows the change straight away and puts it back if the server says no. */
+async function commitAttr(el: HTMLElement, name: 'src' | 'alt', value: string, explicit = false): Promise<boolean> {
+  const was = el.getAttribute(name);
+  if (name === 'alt' && value === '' && was === null && !explicit) return false; // nothing to clear: a decorative image is chosen on purpose
+  if (value === (was ?? '') && !(name === 'alt' && was === null)) return false;
+  if (name === 'src' && !value) {
+    panel.setStatus('An image needs a source', 'err');
+    refreshPanel();
+    return false;
+  }
+  el.setAttribute(name, value);
+  const r = await send({ kind: 'attr', id: refOf(el), tag: tagOf(el), name, value, ...(DEV ? { ident: identOf(el), ver: verOf(el) } : {}) });
+  if (!r.ok) {
+    if (was === null) el.removeAttribute(name);
+    else el.setAttribute(name, was);
+    refreshPanel();
+    return false;
+  }
+  panel.setStatus(name === 'src' ? 'Saved · image source' : value ? 'Saved · alt text' : 'Saved · marked decorative', 'ok', { undo: true });
+  refreshPanel();
+  return true;
+}
+
+/** Read a chosen image file, have the server save it into the project, and point the selected image at it. */
+async function uploadImage(file: File) {
+  const el = selected();
+  if (!(el instanceof HTMLImageElement)) return panel.setStatus('Select an image first', 'err');
+  if (file.size > 2.5 * 1024 * 1024) return panel.setStatus(`That image is ${(file.size / 1048576).toFixed(1)} MB; the limit here is 2.5 MB. Put it in your public folder yourself and type its path instead.`, 'err');
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  panel.setStatus('Saving the image…');
+  const r = await rpc({ type: 'upload', name: file.name, data: btoa(binary) });
+  if (!r.ok || !r.src) return panel.setStatus(r.error ?? 'Could not save the image', 'err');
+  const wired = await commitAttr(el, 'src', r.src);
+  if (!wired) return;
+  panel.setStatus(el.hasAttribute('alt') ? `Saved ${r.saved} and set it as the source` : `Saved ${r.saved} and set it as the source. Now describe it in Alt text.`, 'ok', { undo: true });
+  if (!el.hasAttribute('alt')) panel.focusImageField('alt');
+}
+
 /* ---------- delete and duplicate ---------- */
 
 /** Take the selected element(s) out of the source, or write a copy right after each. Both are one undo step. */
@@ -1168,6 +1213,19 @@ const panel = createPanel({
   },
   onMove: (dir) => void structure(dir === 'up' ? 'moveUp' : 'moveDown'),
   onWrap: () => void structure('wrap'),
+  onImageAttr(name, value, explicit) {
+    const el = selected();
+    if (el) void commitAttr(el, name, value, explicit);
+  },
+  onImageUpload: (file) => void uploadImage(file),
+  onA11yAlt(id) {
+    const issue = a11yIssues.get(id);
+    const target = issue && editableFor(issue.el);
+    if (!target) return panel.setStatus('Brushup can\'t tell which source this image comes from', 'warn');
+    select(target);
+    issue!.el.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+    setTimeout(() => panel.focusImageField('alt'), 60);
+  },
   onDelete: () => void structure('delete'),
   onDuplicate: () => void structure('duplicate'),
   onParent() {

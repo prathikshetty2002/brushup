@@ -1,6 +1,7 @@
 import type * as t from '@babel/types';
 import path from 'node:path';
-import { EditError, StaleElement, type Edit, type Ident, type StructureEdit, type Target, type TextEdit } from './edit-types';
+import { checkAttr } from './attr';
+import { EditError, StaleElement, type AttrEdit, type Edit, type Ident, type StructureEdit, type Target, type TextEdit } from './edit-types';
 import { duplicateSpan, removeSpan, swapSpans, wrapSpan } from './structure';
 import type { Files } from './patch';
 import { readRules, splice } from './css-patch';
@@ -248,6 +249,49 @@ function patchText(code: string, file: string, edit: TextEdit): string {
   return code.slice(0, node.start!) + lead + escapeJsxText(edit.text.trim()) + trail + code.slice(node.end!);
 }
 
+/* ---------- an image's src or alt ---------- */
+
+/** A JSX attribute's string value: quoted the way the file quotes, switching quotes (or to an expression) when the value contains one. */
+function attrValue(code: string, value: string, q: string): string {
+  const safe = value.replace(/&/g, '&amp;'); // JSX reads entities in attribute strings
+  if (!value.includes(q)) return `${q}${safe}${q}`;
+  const other = q === '"' ? "'" : '"';
+  return value.includes(other) ? `{${JSON.stringify(value)}}` : `${other}${safe}${other}`;
+}
+
+/** The quote this file puts around JSX attribute strings: what the same element uses, else what any element in the file uses, else a double quote. */
+function attrQuote(ast: t.File, el: t.JSXElement, code: string): string {
+  const quoteOf = (a: t.JSXAttribute | t.JSXSpreadAttribute) => (a.type === 'JSXAttribute' && a.value?.type === 'StringLiteral' ? code[a.value.start!] : null);
+  const own = el.openingElement.attributes.map(quoteOf).filter((q): q is string => !!q);
+  if (own.length) {
+    // The style most of its attributes use; a tie goes to the first. (One odd attribute doesn't set the style.)
+    const doubles = own.filter((q) => q === '"').length;
+    const singles = own.length - doubles;
+    return singles > doubles ? "'" : doubles > singles ? '"' : own[0];
+  }
+  let any: string | null = null;
+  walk(ast, (n) => {
+    if (!any && n.type === 'JSXAttribute') any = quoteOf(n);
+  });
+  return any ?? '"';
+}
+
+function patchAttr(code: string, file: string, edit: AttrEdit): string {
+  checkAttr(edit);
+  const { el } = located(code, file, edit);
+  const label = parseSrc(edit.id)?.name ?? edit.tag;
+  const q = attrQuote(parseSource(code, file), el, code);
+  const attr = attrNamed(el, edit.name);
+  if (!attr) {
+    const at = afterName(el.openingElement);
+    return `${code.slice(0, at)} ${edit.name}=${attrValue(code, edit.value, q)}${code.slice(at)}`;
+  }
+  const v = attr.value;
+  if (!v || v.type === 'StringLiteral') return `${code.slice(0, attr.start!)}${edit.name}=${attrValue(code, edit.value, q)}${code.slice(attr.end!)}`;
+  if (v.type === 'JSXExpressionContainer' && plainString(v.expression)) return replaceLiteral(code, v.expression, edit.value);
+  throw new EditError(`The ${edit.name} of <${label}> comes from ${code.slice(v.start!, v.end!)}, an expression (an import or a variable), so Brushup can't change it here. Change it in the code, or pin a note for Claude.`);
+}
+
 /* ---------- delete and duplicate ---------- */
 
 const LIST_METHODS = new Set(['map', 'flatMap', 'filter', 'reduce', 'forEach']);
@@ -488,6 +532,7 @@ function classSource(code: string, file: string, edit: Edit): string {
 /** Pure: apply an edit to the JSX file `file` (plus project css in `files` for rule edits). */
 export function applyJsxEdit(files: Files, file: string, edit: Edit, opts: JsxOptions): { files: Files; target: Target; warning?: string; select?: string } {
   if (edit.kind === 'text') return { files: { ...files, [file]: patchText(files[file], file, edit) }, target: 'text' };
+  if (edit.kind === 'attr') return { files: { ...files, [file]: patchAttr(files[file], file, edit) }, target: 'attribute' };
   if (edit.kind !== 'style') {
     const done = patchStructure(files[file], file, edit);
     return { files: { ...files, [file]: done.code }, target: 'structure', ...(done.warning ? { warning: done.warning } : {}), ...(done.movedTo === undefined ? {} : { select: refAt(done.code, done.movedTo, edit.id) }) };

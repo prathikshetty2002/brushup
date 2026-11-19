@@ -1000,6 +1000,133 @@ describe('the Layers tab on a big page', () => {
   });
 });
 
+describe('the Image section', () => {
+  const q = (sel: string) => o.root.querySelector(sel) as HTMLElement;
+  const field = (n: 'src' | 'alt') => q(`[data-img=${n}]`) as HTMLInputElement;
+  const deco = () => q('[data-img=decorative]') as HTMLInputElement;
+  const change = (input: HTMLInputElement, value: string) => ((input.value = value), input.dispatchEvent(new Event('change', { bubbles: true })));
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
+
+  beforeEach(() => {
+    document.body.insertAdjacentHTML('beforeend', '<img data-brushup-id="im" src="/old.png"><img data-brushup-id="im2" src="/b.png" alt="A cat"><img data-brushup-id="im3" src="/c.png" alt="">');
+  });
+
+  it('shows for an image only, filled in with what it has now, and says when there is no alt text', () => {
+    expect(q('.imgsec').hidden).toBe(true);
+    click(el('a1'));
+    expect(q('.imgsec').hidden).toBe(true); // a heading is not an image
+    click(el('im'));
+    expect(q('.imgsec').hidden).toBe(false);
+    expect(field('src').value).toBe('/old.png');
+    expect(field('alt').value).toBe('');
+    expect(q('.imgwarn').hidden).toBe(false);
+    click(el('im2'));
+    expect(field('alt').value).toBe('A cat');
+    expect(q('.imgwarn').hidden).toBe(true);
+    click(el('im3'));
+    expect(deco().checked).toBe(true); // alt="" is the decorative case
+    expect(field('alt').disabled).toBe(true);
+  });
+
+  it('changing the source writes it, shows it straight away and confirms with Undo', async () => {
+    click(el('im'));
+    change(field('src'), '/new.png');
+    await settle();
+    expect(o.last('edit').edit).toEqual({ kind: 'attr', id: 'im', tag: 'img', name: 'src', value: '/new.png' });
+    expect(el('im').getAttribute('src')).toBe('/new.png');
+    o.reply({ ok: true, hash: 'h1', target: 'attribute' });
+    await settle();
+    expect(status()).toBe('Saved · image source');
+  });
+
+  it('puts the old source back and says why when the server refuses', async () => {
+    click(el('im'));
+    change(field('src'), 'javascript:alert(1)');
+    await settle();
+    o.reply({ ok: false, error: 'That kind of address can\'t be an image source' });
+    await settle();
+    expect(el('im').getAttribute('src')).toBe('/old.png');
+    expect(status()).toContain("can't be an image source");
+    expect(field('src').value).toBe('/old.png');
+  });
+
+  it('writes alt text, ignores an empty box when there was none, and writes a decorative image only when asked', async () => {
+    click(el('im'));
+    change(field('alt'), '');
+    await settle();
+    expect(o.all('edit')).toHaveLength(0); // an empty box is not a choice to mark it decorative
+    change(field('alt'), 'A red bicycle');
+    await settle();
+    expect(o.last('edit').edit).toMatchObject({ name: 'alt', value: 'A red bicycle' });
+    o.reply({ ok: true, hash: 'h1', target: 'attribute' });
+    await settle();
+    expect(status()).toBe('Saved · alt text');
+    click(el('im2'));
+    deco().checked = true;
+    deco().dispatchEvent(new Event('change', { bubbles: true }));
+    await settle();
+    expect(o.last('edit').edit).toMatchObject({ name: 'alt', value: '' });
+    o.reply({ ok: true, hash: 'h2', target: 'attribute' });
+    await settle();
+    expect(status()).toBe('Saved · marked decorative');
+  });
+
+  it('uploads a chosen file, then points the image at it and asks for alt text', async () => {
+    click(el('im'));
+    const file = new File([png], 'Team Photo.png', { type: 'image/png' });
+    (file as any).arrayBuffer = async () => png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength);
+    const input = q('.imgfile') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    await settle();
+    const up = o.last('upload');
+    expect(up.name).toBe('Team Photo.png');
+    expect(atob(up.data)).toBe(String.fromCharCode(...png));
+    o.reply({ ok: true, src: '/team-photo.png', saved: 'public/team-photo.png' });
+    await settle();
+    expect(o.last('edit').edit).toMatchObject({ kind: 'attr', name: 'src', value: '/team-photo.png' });
+    o.reply({ ok: true, hash: 'h1', target: 'attribute' });
+    await settle();
+    expect(status()).toBe('Saved public/team-photo.png and set it as the source. Now describe it in Alt text.');
+    expect(o.root.activeElement).toBe(field('alt'));
+  });
+
+  it('turns away a file that is too big without sending it, and shows the server\'s reason for one it refuses', async () => {
+    click(el('im'));
+    const big = new File([png], 'huge.png', { type: 'image/png' });
+    Object.defineProperty(big, 'size', { value: 3 * 1024 * 1024 });
+    const input = q('.imgfile') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [big], configurable: true });
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    await settle();
+    expect(status()).toMatch(/3\.0 MB; the limit here is 2\.5 MB/);
+    expect(o.all('upload')).toHaveLength(0);
+    const odd = new File([png], 'odd.png', { type: 'image/png' });
+    (odd as any).arrayBuffer = async () => png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength);
+    Object.defineProperty(input, 'files', { value: [odd], configurable: true });
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    await settle();
+    o.reply({ ok: false, error: "That doesn't look like a png, jpeg, gif, webp or avif image." });
+    await settle();
+    expect(status()).toContain("doesn't look like");
+    expect(o.all('edit')).toHaveLength(0);
+  });
+
+  it('offers Write alt text on a missing-alt check, and it jumps to the field', async () => {
+    document.documentElement.lang = 'en';
+    document.title = 'Test';
+    layout(el('im'), { x: 0, y: 0, width: 50, height: 50 });
+    q('[data-tab=a11y]').click();
+    const btn = [...o.root.querySelectorAll('.a11yitem .acts button')].find((b) => b.textContent === 'Write alt text') as HTMLButtonElement;
+    expect(btn).toBeTruthy();
+    btn.click();
+    await new Promise((r) => setTimeout(r, 120));
+    expect(o.last('select').selection).toEqual({ id: 'im', tag: 'img' });
+    expect(q('[data-tab=style]').getAttribute('aria-selected')).toBe('true');
+    expect(o.root.activeElement).toBe(field('alt'));
+  });
+});
+
 describe('move and wrap', () => {
   const q = (sel: string) => o.root.querySelector(sel) as HTMLButtonElement;
   const press = (init: KeyboardEventInit) => window.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }));
