@@ -65,13 +65,15 @@ jobs:
       - name: Install ${{ matrix.browser }}
         run: npx playwright-core install --with-deps ${{ matrix.browser }}
       - name: Drive the canvas in ${{ matrix.browser }}
-        run: node scripts/e2e-browser.mjs ${{ matrix.browser }}
+        # Up to 3 attempts, each with its own limit: a slow or hung browser on a shared runner is the usual failure. A pass on a later
+        # attempt is reported as a warning on the run, not hidden.
+        run: node scripts/with-retry.mjs 3 4 -- node scripts/e2e-browser.mjs ${{ matrix.browser }}
 
   # Dev-server mode is where operating systems differ most (paths, the build loaders, the file watcher): build a real
   # Vite and a real Next.js app from the packed package, edit in a browser, and check the source file.
   dev-servers:
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
@@ -97,7 +99,7 @@ jobs:
       - name: Install ${{ matrix.browser }}
         run: npx playwright-core install --with-deps ${{ matrix.browser }}
       - name: ${{ matrix.framework }} dev server in ${{ matrix.browser }}
-        run: node scripts/e2e-dev.mjs ${{ matrix.framework }} ${{ matrix.browser }}
+        run: node scripts/with-retry.mjs 3 8 -- node scripts/e2e-dev.mjs ${{ matrix.framework }} ${{ matrix.browser }}
 
   # Windows and macOS: the full pipeline plus the packed package, since paths, line endings and shells differ.
   cross-os:

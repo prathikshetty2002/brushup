@@ -61,7 +61,8 @@ if (framework === 'vite') {
 }
 const sourceFile = path.join(dir, framework === 'vite' ? 'src/App.jsx' : 'app/page.jsx');
 
-const run = (cmd, args, opts = {}) => spawnSync(cmd, args, { cwd: dir, encoding: 'utf8', shell: win && cmd === 'npm', ...opts });
+// spawnSync blocks the whole process, so the watchdog timer above can't fire during it: give every child its own limit.
+const run = (cmd, args, opts = {}) => spawnSync(cmd, args, { cwd: dir, encoding: 'utf8', shell: win && cmd === 'npm', timeout: 6 * 60_000, killSignal: 'SIGKILL', ...opts });
 const deps = framework === 'vite' ? ['vite', '@vitejs/plugin-react', 'react', 'react-dom'] : ['next', 'react', 'react-dom'];
 let server;
 let browser;
@@ -70,8 +71,9 @@ let page;
 let failureDetails = () => '';
 let serverPort = 0;
 try {
-  const install = run('npm', ['install', ...deps, tarball, '--no-audit', '--no-fund']);
-  check('installs the framework and the packed Brushup', install.status === 0, install.stderr.slice(-400));
+  let install = run('npm', ['install', ...deps, tarball, '--no-audit', '--no-fund']);
+  if (install.status !== 0) install = run('npm', ['install', ...deps, tarball, '--no-audit', '--no-fund']); // one retry: a registry or network hiccup
+  check('installs the framework and the packed Brushup', install.status === 0, install.error ? String(install.error) : install.stderr.slice(-400));
   if (install.status !== 0) throw new Error('install failed');
 
   const init = control ? { status: 0, stdout: 'skipped (control run)', stderr: '' } : run(process.execPath, [path.join(dir, 'node_modules/brushup/dist/cli.js'), 'init', '.', '--mcp']);

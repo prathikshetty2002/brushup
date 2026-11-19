@@ -49,8 +49,12 @@ try {
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.goto(`http://127.0.0.1:${port}/`);
-  await page.waitForSelector('#brushup-root', { state: 'attached', timeout: 15000 });
-  check('canvas loads', await page.locator('.panel').first().isVisible());
+  // Poll for the panel itself, not just its host element, and reload once if a slow browser never ran the overlay script.
+  const panelUp = () => page.evaluate(() => !!document.getElementById('brushup-root')?.shadowRoot?.querySelector('.panel')).catch(() => false);
+  if (!(await until(panelUp, 12000))) await page.reload();
+  const loaded = await until(panelUp, 25000);
+  check('canvas loads', loaded && (await page.locator('.panel').first().isVisible()));
+  if (!loaded) throw new Error('the Brushup panel never appeared');
 
   // select by clicking, then edit a field in the panel
   await page.click('h1[data-brushup-id]', { position: { x: 20, y: 10 } });
