@@ -1,0 +1,49 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/fraunces';
+
+/* The design tokens. Edit these and the whole page follows. */
+@theme {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Fraunces Variable', Georgia, serif;
+
+  --color-canvas: #fbfaf7;
+  --color-sand: #f3efe6;
+  --color-ink: #16181d;
+  --color-muted: #566074;
+  --color-line: #e8e4da;
+  --color-accent: #3b4de0;
+  --color-accent-strong: #2e3ec2;
+  --color-accent-soft: #eceefe;
+  --color-good: #1f8a5b;
+
+  --radius-card: 1rem;
+  --shadow-card: 0 1px 2px rgb(22 24 29 / 0.04), 0 12px 32px -12px rgb(22 24 29 / 0.12);
+}
+
+@layer base {
+  html {
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 3px;
+    border-radius: 6px;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .rise {
+    animation: rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+  }
+}
