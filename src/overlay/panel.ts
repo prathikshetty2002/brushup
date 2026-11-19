@@ -510,7 +510,7 @@ export function createPanel(hooks: PanelHooks) {
     </aside>
     <div class="tour-ring" hidden></div>
     <div class="tour" role="dialog" aria-label="Brushup tour" hidden><h3></h3><p></p><div class="foot"><span class="n"></span><button class="skip" type="button">Skip</button><button class="back skip" type="button">Back</button><button class="next" type="button"></button></div></div>
-    <div class="toast" role="status" aria-live="polite" hidden><span class="bar"></span><span class="status"></span><button class="undo" data-act="toast-undo" hidden>Undo</button><button class="x" data-act="toast-x" aria-label="Dismiss">&times;</button></div>`;
+    <div class="toast" role="status" aria-live="polite" hidden><span class="bar"></span><span class="status"></span><button class="undo" data-act="toast-undo" hidden>Undo</button><button class="pinnote" data-act="toast-note" hidden>Pin as note</button><button class="x" data-act="toast-x" aria-label="Dismiss">&times;</button></div>`;
   document.documentElement.appendChild(host);
 
   const $ = <T extends Element>(sel: string) => root.querySelector(sel) as T;
@@ -528,6 +528,8 @@ export function createPanel(hooks: PanelHooks) {
   const statusEl = $<HTMLSpanElement>('.status');
   const toastEl = $<HTMLDivElement>('.toast');
   const undoBtn = $<HTMLButtonElement>('.toast .undo');
+  const pinBtn = $<HTMLButtonElement>('.toast .pinnote');
+  let pinRun: (() => void) | null = null;
   const info = $<HTMLDivElement>('[data-pane=style] .info');
   const fieldsEl = $<HTMLDivElement>('.fields');
   /* The page's theme colours, as swatches under the Color field. */
@@ -740,6 +742,12 @@ export function createPanel(hooks: PanelHooks) {
   root.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((b) => b.addEventListener('click', () => hooks.onMode(b.dataset.mode as Mode)));
   root.querySelector('[data-act=undo]')!.addEventListener('click', () => hooks.onUndo());
   undoBtn.addEventListener('click', () => ((toastEl.hidden = true), hooks.onUndo()));
+  pinBtn.addEventListener('click', () => {
+    toastEl.hidden = true;
+    const run = pinRun;
+    pinRun = null;
+    run?.();
+  });
   root.querySelector('[data-act=toast-x]')!.addEventListener('click', () => ((statusEl.textContent = ''), (toastEl.hidden = true)));
   root.querySelector('[data-act=redo]')!.addEventListener('click', () => hooks.onRedo());
   root.querySelector('[data-act=parent]')!.addEventListener('click', () => hooks.onParent());
@@ -1509,13 +1517,15 @@ export function createPanel(hooks: PanelHooks) {
     setRoot(root: string) {
       projectRoot = root;
     },
-    /** A short toast at the bottom of the page. `undo` adds an Undo button; errors stay until dismissed. */
-    setStatus(text: string, kind: 'ok' | 'warn' | 'err' | '' = '', opts: { undo?: boolean } = {}) {
+    /** A short toast at the bottom of the page. `undo` adds an Undo button and `pinNote` a Pin as note one; errors stay until dismissed. */
+    setStatus(text: string, kind: 'ok' | 'warn' | 'err' | '' = '', opts: { undo?: boolean; pinNote?: () => void } = {}) {
       statusEl.textContent = text;
       statusEl.className = `status ${kind}`;
       toastEl.className = `toast ${kind}`;
       toastEl.hidden = !text;
       undoBtn.hidden = !opts.undo;
+      pinRun = opts.pinNote ?? null;
+      pinBtn.hidden = !opts.pinNote;
       toastEl.style.animation = 'none';
       void toastEl.offsetWidth;
       toastEl.style.animation = '';

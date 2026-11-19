@@ -30,6 +30,8 @@ interface Result {
   stale?: boolean;
   /** The server couldn't find where this text is written in the source. */
   textSource?: boolean;
+  /** The server understood the edit and declined to write it (a `.map()` item, a computed className, …), with the reason in `error`. */
+  refused?: boolean;
   /** Answer to a `changes` request. */
   changes?: ChangesView;
   savings?: SavingsView;
@@ -641,8 +643,51 @@ function reportSaved(el: HTMLElement | null, r: Result, count = 1) {
 
 async function send(edit: Edit): Promise<Result> {
   const r = await enqueue(() => rpc({ type: 'edit', edit, hash: state.hash }));
-  if (!r.ok) panel.setStatus(r.error ?? 'Edit failed', 'err');
+  if (!r.ok) failed(r, [edit]);
   return r;
+}
+
+/**
+ * Say an edit failed. When the server declined it on purpose, the toast also offers to pin the change as a note, with the
+ * wish already written and the reason attached, so the person never has to describe it or take a screenshot.
+ */
+function failed(r: Result, edits: Edit[]) {
+  const el = selected();
+  const wish = r.refused && el ? describeWish(edits, el) : null;
+  panel.setStatus(r.error ?? 'Edit failed', 'err', wish ? { pinNote: () => void noteForRefusal(el!, wish, r.error ?? 'Brushup could not write it') } : {});
+}
+
+/** What the page showed for an edit's properties before the quick preview changed it, for the note a refusal can become. */
+const wasValues = new WeakMap<Edit, Record<string, string>>();
+
+/** What an edit asked for, in a sentence a person (or an agent) can act on. */
+function describeWish(edits: Edit[], el: HTMLElement): string | null {
+  const e = edits[0];
+  const more = edits.length > 1 ? ` (and the same for the other ${edits.length - 1} selected elements)` : '';
+  const what = (() => {
+    if (e.kind === 'style') {
+      const cs = getComputedStyle(el);
+      const was = wasValues.get(e) ?? {};
+      const parts = Object.entries(e.props).map(([prop, value]) => `${prop} to ${value}${(was[prop] ?? cs.getPropertyValue(prop)) ? ` (it is ${was[prop] ?? cs.getPropertyValue(prop)})` : ''}`);
+      const size = e.variant ? ` for screens ${e.variant.replace(/^(dark:)?/, '')} and wider` : '';
+      return `set ${parts.join(', ')}${size}`;
+    }
+    if (e.kind === 'delete') return 'delete this element';
+    if (e.kind === 'duplicate') return 'duplicate this element';
+    if (e.kind === 'moveUp') return 'move this element up (swap it with the one before it)';
+    if (e.kind === 'moveDown') return 'move this element down (swap it with the one after it)';
+    if (e.kind === 'wrap') return 'wrap this element in a <div>';
+    if (e.kind === 'attr') return `set this image's ${e.name} to “${e.value}”`;
+    return null; // text edits have their own note
+  })();
+  return what ? `${what}${more}` : null;
+}
+
+async function noteForRefusal(el: HTMLElement, wish: string, why: string) {
+  const text = `Please ${wish}.\nBrushup couldn't write it into the source: ${why}`.slice(0, 3900);
+  if (notes.some((n) => n.status === 'open' && n.text === text)) return panel.setStatus('There is already a note for this change', 'warn');
+  await saveNote({ kind: suggestKind(el), label: 'Change to make', text }, null, 'open', el);
+  panel.setStatus('Pinned as a note for Claude', 'ok');
 }
 
 /** Line-height as a unitless ratio, read before a font-size change so the server can keep spacing intact. */
@@ -655,7 +700,7 @@ function lineHeightRatio(el: HTMLElement): string | undefined {
 async function sendMany(edits: Edit[]): Promise<Result> {
   if (edits.length === 1) return send(edits[0]);
   const r = await enqueue(() => rpc({ type: 'edits', edits, hash: state.hash }));
-  if (!r.ok) panel.setStatus(r.error ?? 'Edit failed', 'err');
+  if (!r.ok) failed(r, edits);
   return r;
 }
 
@@ -720,6 +765,14 @@ async function commitStyles(items: { el: HTMLElement; props: Record<string, stri
     seen.add(ref);
     const hints = { ...(Number.isFinite(rootPx) ? { rootPx } : {}), ...('font-size' in props ? { lineHeight: lineHeightRatio(el) } : {}), ...('color' in props ? { colorTokens: themeColors().map((c) => c.name) } : {}) };
     edits.push({ kind: 'style', id: ref, tag: tagOf(el), props, scope: variant ? 'element' : scope, ...(variant ? { variant } : {}), hints, ...(DEV ? { ident: identOf(el), ver: verOf(el) } : {}) });
+  }
+  if (edits[0]?.kind === 'style') {
+    try {
+      const cs = getComputedStyle(items[0].el);
+      wasValues.set(edits[0], Object.fromEntries(Object.keys(items[0].props).map((p) => [p, cs.getPropertyValue(p)])));
+    } catch {
+      /* the note then reads the value as it is when the edit fails */
+    }
   }
   const previewed = items.map((i) => preview(i.el, i.props));
   const r = await sendMany(edits);

@@ -867,6 +867,61 @@ describe('the Changes tab', () => {
   });
 });
 
+describe('a refused edit offers to become a note', () => {
+  const pin = () => o.root.querySelector('.toast .pinnote') as HTMLButtonElement;
+  beforeEach(async () => {
+    o.destroy();
+    document.body.innerHTML = '<ul><li data-brushup-src="src/List.tsx:3:2" style="margin-left: 8px">a</li><li data-brushup-src="src/List.tsx:3:2">b</li></ul>';
+    o = await loadOverlay({ mode: 'dev' });
+  });
+
+  it('writes the wish and the reason into a note when the server declined a style edit, and says so', async () => {
+    click(document.querySelector('li')!);
+    key('ArrowRight');
+    await settle();
+    o.reply({ ok: false, refused: true, error: 'It is drawn by a .map(), so one change would hit every item' });
+    await settle();
+    expect(pin().hidden).toBe(false);
+    pin().click();
+    await settle();
+    const note = o.last('note-save').note;
+    expect(note.text).toContain('Please set margin-left to 9px (it is 8px).');
+    expect(note.text).toContain("Brushup couldn't write it into the source: It is drawn by a .map()");
+    expect(note.label).toBe('Change to make');
+  });
+
+  it('describes a delete, a move and a wrap in words', async () => {
+    const cases: [string, string][] = [
+      ['Delete', 'Please delete this element.'],
+      ['ArrowDown', 'Please move this element down'],
+    ];
+    click(document.querySelector('li')!);
+    key('Delete');
+    await settle();
+    o.reply({ ok: false, refused: true, error: 'no' });
+    await settle();
+    pin().click();
+    await settle();
+    expect(o.last('note-save').note.text).toContain(cases[0][1]);
+    key('ArrowDown', { altKey: true });
+    await settle();
+    o.reply({ ok: false, refused: true, error: 'no' });
+    await settle();
+    pin().click();
+    await settle();
+    expect(o.last('note-save').note.text).toContain(cases[1][1]);
+  });
+
+  it('offers nothing when the failure is not a refusal (a stale page, a lost connection)', async () => {
+    click(document.querySelector('li')!);
+    key('ArrowRight');
+    await settle();
+    o.reply({ ok: false, error: 'Unexpected error: boom' });
+    await settle();
+    expect(pin().hidden).toBe(true);
+  });
+});
+
 describe('editing for a screen size', () => {
   const q = (sel: string) => o.root.querySelector(sel) as HTMLElement;
   const btn = (which: string) => q(`[data-vary=${which}]`) as HTMLButtonElement;

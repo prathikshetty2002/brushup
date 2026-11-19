@@ -144,7 +144,7 @@ export function createHub(session: FileSession, notes?: NotesStore, ignored?: Ig
       await reload(out.files);
     } catch (err) {
       const message = err instanceof EditError ? err.message : `Unexpected error: ${(err as Error).message}`;
-      send(ws, { type: 'result', n: msg.n, ok: false, error: message, stale: err instanceof StaleElement, textSource: err instanceof TextNotHere, hash: await session.hash().catch(() => '') });
+      send(ws, { type: 'result', n: msg.n, ok: false, error: message, stale: err instanceof StaleElement, textSource: err instanceof TextNotHere, refused: (msg.type === 'edit' || msg.type === 'edits') && err instanceof EditError && !(err instanceof StaleElement) && !(err instanceof TextNotHere), hash: await session.hash().catch(() => '') });
     }
   };
 

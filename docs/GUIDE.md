@@ -173,6 +173,8 @@ The aim: the small things never cost a prompt, and the prompts you do send are s
 
 Brushup writes small, exact edits, and refuses when it can't be sure. These are the messages you may see:
 
+**You never have to describe a refused change.** When Brushup declines a text edit it pins the note for Claude automatically. For every other refusal (a style change, delete, duplicate, move, wrap or image change) the message has a **Pin as note** button: one click saves a note on that element saying what you wanted (for example *Please delete this element*, or *Please set margin-left to 24px (it is 16px)*), why Brushup couldn't write it, and where the element lives. Claude reads it like any other note. No screenshot, no typing.
+
 | Message | Meaning | What to do |
 | --- | --- | --- |
 | *The text in `<X>` comes from an expression or nested elements, so it can't be edited here.* | The text isn't a plain literal in JSX (e.g. `{f.title}`) | Brushup searches for where the text is written and edits that; if it's in several places, or in a database, it pins a note for Claude instead |
