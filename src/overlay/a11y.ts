@@ -26,7 +26,7 @@ export type A11yRule =
 const WCAG = 'https://www.w3.org/WAI/WCAG22/Understanding/';
 
 /** Every check, in the order the tab lists them: what it looks for, and where the standard explains why. */
-export const RULES: { rule: A11yRule; label: string; what: string; basis: string; learn?: string }[] = [
+const RAW_RULES: { rule: A11yRule; label: string; what: string; basis: string; learn?: string }[] = [
   { rule: 'contrast', label: 'Contrast', what: 'Text that is hard to read against its background (4.5:1, or 3:1 for large text)', basis: 'WCAG 1.4.3 (level AA) requires 4.5:1 for normal text and 3:1 for large text (24px, or 18.66px bold).', learn: `${WCAG}contrast-minimum.html` },
   { rule: 'target-size', label: 'Tap size', what: 'Buttons, links and inputs smaller than 24×24px', basis: 'WCAG 2.2 (2.5.8, level AA) requires at least 24×24 CSS px. Apple recommends 44×44pt and Material 48×48dp, with 8dp between targets, for primary controls, so passing this is the floor.', learn: `${WCAG}target-size-minimum.html` },
   { rule: 'small-text', label: 'Small text', what: 'Text under 11px, below the smallest size Apple allows', learn: 'https://developer.apple.com/design/human-interface-guidelines/accessibility', basis: 'Apple’s guidelines set 11pt as the minimum text size on iOS (10pt on macOS, 12pt on visionOS and watchOS). This flags text under 11px and suggests 12px.' },
@@ -43,6 +43,9 @@ export const RULES: { rule: A11yRule; label: string; what: string; basis: string
   { rule: 'autoplay', label: 'Autoplay', what: 'Audio or video that starts playing by itself', basis: 'WCAG 1.4.2 (level A) requires a way to pause or stop audio that plays for more than 3 seconds.', learn: `${WCAG}audio-control.html` },
   { rule: 'page-structure', label: 'Page structure', what: 'No main landmark, or no h1', basis: 'WCAG 1.3.1 and 2.4.1 call for landmarks and a clear heading structure so people can jump to the main content.', learn: `${WCAG}info-and-relationships.html` },
 ];
+
+/** WCAG requirements are standards; the minimum text size is Apple's guideline. */
+export const RULES: (typeof RAW_RULES[number] & { strength: 'standard' | 'guideline' })[] = RAW_RULES.map((r) => ({ ...r, strength: r.rule === 'small-text' ? ('guideline' as const) : ('standard' as const) }));
 
 export interface A11yIssue {
   id: string;
@@ -152,7 +155,7 @@ export function nearestPassing(fg: { r: number; g: number; b: number }, bg: { r:
 }
 
 /** What is actually behind an element's text, or null when it can't be known (an image or gradient). */
-function backdrop(el: Element): { r: number; g: number; b: number } | null {
+export function backdrop(el: Element): { r: number; g: number; b: number } | null {
   const layers: Rgba[] = [];
   for (let node: Element | null = el; node; node = node.parentElement) {
     const cs = getComputedStyle(node);
@@ -170,7 +173,7 @@ function backdrop(el: Element): { r: number; g: number; b: number } | null {
 
 const hasOwnText = (el: Element) => [...el.childNodes].some((n) => n.nodeType === 3 && (n.textContent ?? '').trim());
 
-function accessibleName(el: Element): string {
+export function accessibleName(el: Element): string {
   const attr = (n: string) => (el.getAttribute(n) ?? '').trim();
   if (attr('aria-label')) return attr('aria-label');
   const by = attr('aria-labelledby');

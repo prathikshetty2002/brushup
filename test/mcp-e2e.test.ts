@@ -55,13 +55,15 @@ afterEach(async () => {
 });
 
 describe('brushup-mcp over stdio', () => {
-  it('lists its five tools with read-only hints where they apply', async () => {
+  it('lists its seven tools with read-only hints where they apply', async () => {
     const c = await connect();
     const { tools } = await c.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual(['brushup_get_notes', 'brushup_get_selection', 'brushup_inspect', 'brushup_recent_edits', 'brushup_update_note']);
+    expect(tools.map((t) => t.name).sort()).toEqual(['brushup_check', 'brushup_console', 'brushup_get_notes', 'brushup_get_selection', 'brushup_inspect', 'brushup_recent_edits', 'brushup_update_note']);
     const hint = (n: string) => tools.find((t) => t.name === n)!.annotations?.readOnlyHint;
     expect(hint('brushup_get_notes')).toBe(true);
     expect(hint('brushup_inspect')).toBe(true);
+    expect(hint('brushup_check')).toBe(true);
+    expect(hint('brushup_console')).toBe(true);
     expect(hint('brushup_update_note')).toBe(false);
     const instructions = c.getInstructions() ?? '';
     expect(instructions).toMatch(/brushup_get_notes/);

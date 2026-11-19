@@ -139,6 +139,8 @@ npx brushup init --mcp --agents  # also: the same instructions in AGENTS.md (Cod
 | `brushup_get_selection` | The element you have selected right now, to resolve "this" |
 | `brushup_recent_edits` | Your latest manual tweaks (newest first, batches flattened) so Claude keeps them. Each is marked `locked` (made on purpose, don't revert it), and `since` works here too |
 | `brushup_inspect` | How the selected element, or the element a note is pinned to, renders **right now**: position and size, computed layout / spacing / typography / colours, whether it overflows, its parent. Needs the app running and open in a browser |
+| `brushup_check` | The accessibility and design problems on the open page (contrast, tap size, alt text, headings, spacing, line length, stretched images…), each with where it is written, the standard or guideline behind it, and the style change that fixes it. Fixed rules: no screenshot, no tokens |
+| `brushup_console` | Errors, warnings, uncaught exceptions and unhandled promise rejections the page logged since the canvas loaded, newest first, with a short stack |
 
 Everything except `brushup_update_note` is read-only. Claude still changes your code with its normal file tools.
 
@@ -190,7 +192,7 @@ What it does not protect against: **other users or processes on the same machine
 - Vue, Svelte, Astro, SvelteKit (the instrumenter is JSX-only). React Router v7 works (tested by hand on 7 with Tailwind 4: text and style edits write back); Remix on Vite uses the same plugin and is expected to work, but is untested.
 - CSS-in-JS (styled-components, Emotion, vanilla-extract): their class names are generated at runtime, so there is no rule to find; elements styled that way get an inline style.
 - Resize handles on a flex item that sets `flex-basis` write `flex-basis` (a width would be ignored). When the page still refuses a size (a `max-width`, a `min-width`, `flex-grow`, a grid track, an inline element), the readout says why while you drag and the status says it again after saving; the class is still written.
-- MCP: no screenshot tool, no write tools for source (by design), and `brushup_inspect` answers one element at a time.
+- MCP: no screenshot tool, no write tools for source (by design), and `brushup_inspect` answers one element at a time (it now also reports the element's accessible name, contrast, and what covers or overlaps it).
 
 ## License
 

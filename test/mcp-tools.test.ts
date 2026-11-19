@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { findRoot } from '../src/mcp/server';
-import { getNotes, getRecentEdits, getSelection, inspect, updateNote } from '../src/mcp/tools';
+import { check, consoleMessages, getNotes, getRecentEdits, getSelection, inspect, updateNote } from '../src/mcp/tools';
 import { NotesStore } from '../src/server/notes';
 
 let dir: string;
@@ -234,5 +234,23 @@ describe('the agent inbox', () => {
     expect(recent.edits).toHaveLength(2);
     expect(Date.parse(recent.cursor)).not.toBeNaN();
     expect((await getRecentEdits(ctx(), { since: 'nope' })).ok).toBe(false);
+  });
+});
+
+describe('brushup_check and brushup_console', () => {
+  it('pass the question to the open canvas as it was asked, and return its answer', async () => {
+    const asked: Record<string, unknown>[] = [];
+    const ask = async (q: Record<string, unknown>) => (asked.push(q), { ok: true as const, data: { issues: [] } });
+    const a = await check({ root: dir, ask }, { category: 'design', rule: 'spacing-grid', limit: 5 });
+    const b = await consoleMessages({ root: dir, ask }, { level: 'error' });
+    expect(asked).toEqual([{ kind: 'check', category: 'design', rule: 'spacing-grid', limit: 5 }, { kind: 'console', level: 'error' }]);
+    expect(a).toEqual({ ok: true, data: { issues: [] } });
+    expect(b.ok).toBe(true);
+  });
+
+  it('relay the canvas\'s own error, such as no browser being open', async () => {
+    const ask = async () => ({ ok: false as const, error: 'No Brushup canvas is open in a browser.' });
+    expect(await check({ root: dir, ask }, {})).toEqual({ ok: false, error: 'No Brushup canvas is open in a browser.' });
+    expect(await consoleMessages({ root: dir, ask }, {})).toEqual({ ok: false, error: 'No Brushup canvas is open in a browser.' });
   });
 });

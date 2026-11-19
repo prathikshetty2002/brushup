@@ -497,6 +497,62 @@ describe('questions from the MCP server', () => {
     expect(a.data.spacing['margin-left']).toBe('8px');
   });
 
+  it('adds what a screenshot would have shown: accessible name, contrast, what covers it and what overlaps it', () => {
+    el('a2').setAttribute('style', 'color:#aaa;background:#fff;font-size:16px');
+    layout(el('a2'), { x: 0, y: 100, width: 200, height: 40 });
+    layout(el('a3'), { x: 100, y: 110, width: 200, height: 40 });
+    document.elementFromPoint = () => el('a3'); // what is on top at a2's centre
+    click(el('a2'));
+    o.receive({ type: 'ask', id: 'q20', ask: { kind: 'inspect' } });
+    const d = answer('q20').data;
+    expect(d.handle).toEqual({ selector: 'body > p.lede', mappedToSource: true });
+    expect(d.accessibility).toMatchObject({ role: 'p', name: 'World', focusable: false, hidden: false });
+    expect(d.contrast).toMatchObject({ required: 4.5, passes: false, largeText: false });
+    expect(d.contrast.ratio).toBeCloseTo(2.32, 1);
+    expect(d.coveredAtCenterBy).toMatchObject({ tag: 'div' });
+    expect(d.overlappedBy).toEqual([{ el: expect.objectContaining({ tag: 'div' }), coversPercent: 38 }]);
+  });
+
+  it('says so when the background is an image, instead of guessing a contrast ratio', () => {
+    el('a2').setAttribute('style', 'background-image:linear-gradient(#000,#fff);color:#999');
+    click(el('a2'));
+    o.receive({ type: 'ask', id: 'q21', ask: { kind: 'inspect' } });
+    expect(answer('q21').data.contrast.note).toMatch(/image or gradient/);
+  });
+
+  it('runs the checks for an agent: counts, where each problem is written, why, and the fix', () => {
+    el('a2').setAttribute('style', 'color:#aaa;background:#fff;font-size:16px');
+    layout(el('a2'), { x: 0, y: 0, width: 100, height: 20 });
+    o.receive({ type: 'ask', id: 'q22', ask: { kind: 'check', category: 'accessibility' } });
+    const d = answer('q22').data;
+    expect(d.counts.accessibility).toBeGreaterThanOrEqual(1);
+    const contrast = d.issues.find((i: any) => i.rule === 'contrast');
+    expect(contrast).toMatchObject({ category: 'accessibility', element: { tag: 'p', text: 'World' }, suggestedFix: { color: expect.stringMatching(/^#[0-9a-f]{6}$/) }, strength: 'standard' });
+    expect(contrast.basis).toMatch(/WCAG 1\.4\.3/);
+    expect(d.note).toMatch(/not proof/);
+    expect(d.issues.every((i: any) => i.category === 'accessibility')).toBe(true);
+    o.receive({ type: 'ask', id: 'q23', ask: { kind: 'check', rule: 'contrast', limit: 1 } });
+    expect(answer('q23').data.issues.map((i: any) => i.rule)).toEqual(['contrast']);
+  });
+
+  it('returns what the page logged to the console, newest first, and can filter by level', () => {
+    console.warn('careful now');
+    console.error(new Error('Boom: x is undefined'));
+    window.dispatchEvent(new ErrorEvent('error', { message: 'Uncaught TypeError: y is not a function' }));
+    o.receive({ type: 'ask', id: 'q24', ask: { kind: 'console' } });
+    const d = answer('q24').data;
+    expect(d.entries.map((e: any) => [e.level, e.message])).toEqual([
+      ['error', 'Uncaught TypeError: y is not a function'],
+      ['error', 'Boom: x is undefined'],
+      ['warn', 'careful now'],
+    ]);
+    expect(d.entries[1].stack).toContain('Boom');
+    o.receive({ type: 'ask', id: 'q25', ask: { kind: 'console', level: 'warn' } });
+    expect(answer('q25').data.entries.map((e: any) => e.message)).toEqual(['careful now']);
+    o.receive({ type: 'ask', id: 'q26', ask: { kind: 'console', limit: 1 } });
+    expect(answer('q26').data.count).toBe(1);
+  });
+
   it('inspects the element a note is pinned to', () => {
     o.receive({ type: 'notes', notes: [{ id: 'n9', kind: 'element', label: '', text: 'x', status: 'open', createdAt: '', updatedAt: '', anchor: { tag: 'p', classes: ['lede'], text: 'World', index: 0, page: '/' } }] });
     o.receive({ type: 'ask', id: 'q3', ask: { kind: 'inspect', noteId: 'n9' } });

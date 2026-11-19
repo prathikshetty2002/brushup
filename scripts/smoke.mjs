@@ -54,7 +54,7 @@ await sleep(1500);
 mcp.kill();
 const lines = out.split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } });
 const tools = lines.find((l) => l?.id === 2)?.result?.tools?.map((t) => t.name).sort() ?? [];
-check('MCP server lists its 5 tools', tools.length === 5 && tools.every((t) => t.startsWith('brushup_')), JSON.stringify(tools));
+check('MCP server lists its 7 tools', tools.length === 7 && tools.every((t) => t.startsWith('brushup_')), JSON.stringify(tools));
 
 // static server
 writeFileSync(path.join(dir, 'index.html'), '<!doctype html><title>t</title><h1>Hello</h1>');

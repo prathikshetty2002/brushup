@@ -3,7 +3,7 @@ import type { Note } from '../server/notes';
 import { moveBase, moveProps, type MoveBase } from './drag';
 import { explainSize, handleLabel, handleProps, sizeProps, type BoxStart, type HandleKind, type SizeStyle } from './handles-math';
 import { morphPage, refreshStylesheets } from './morph';
-import { RULES, scanPage, type A11yIssue } from './a11y';
+import { accessibleName, backdrop, contrastRatio, parseColor, RULES, scanPage, type A11yIssue } from './a11y';
 import { DESIGN_RULES, scanDesign } from './design';
 import { createPanel, type HandleInfo, type Mode, type NoteDraft, type NoteKind, type NoteView, type ChangesView, type A11yView, type LayerView } from './panel';
 
@@ -437,12 +437,110 @@ function inspectElement(el: HTMLElement) {
     appearance: styleOf(cs, ['background-color', 'border', 'border-radius', 'box-shadow', 'opacity']),
     parent: parent && pcs ? { tag: tagOf(parent), classes: [...parent.classList].slice(0, 8), display: pcs.display, width: pcs.width } : null,
     childElementCount: el.childElementCount,
+    ...inspectMore(el, cs, r),
   };
 }
 
-function answerAsk(msg: { id: string; ask?: { kind?: string; noteId?: string } }) {
+/** A short, human-readable path to the element, for when source tags are missing: `main > section.hero > h1`. */
+function selectorOf(el: Element): string {
+  const parts: string[] = [];
+  for (let n: Element | null = el; n && n !== document.documentElement && parts.length < 4; n = n.parentElement) {
+    const cls = [...n.classList].slice(0, 2).map((c) => `.${c}`).join('');
+    parts.unshift(`${n.tagName.toLowerCase()}${n.id ? `#${n.id}` : cls}`);
+  }
+  return parts.join(' > ');
+}
+
+/** What an agent usually asks a screenshot for, as numbers: what it is called, how readable it is, and what is on top of it. */
+function inspectMore(el: HTMLElement, cs: CSSStyleDeclaration, r: DOMRect) {
+  const out: Record<string, unknown> = {};
+  out.handle = { selector: selectorOf(el), mappedToSource: DEV ? el.hasAttribute(SRC) || el.hasAttribute(USE) : el.hasAttribute(SID) };
+  const name = accessibleName(el);
+  out.accessibility = { role: el.getAttribute('role') ?? el.tagName.toLowerCase(), name: name || null, focusable: el.matches('a[href], button, input, select, textarea, [tabindex]'), hidden: el.closest('[aria-hidden=true]') !== null };
+  if (ownText(el)) {
+    const fg = parseColor(cs.color);
+    const bg = backdrop(el);
+    if (fg && bg) {
+      const text = { r: fg.r * fg.a + bg.r * (1 - fg.a), g: fg.g * fg.a + bg.g * (1 - fg.a), b: fg.b * fg.a + bg.b * (1 - fg.a) };
+      const size = parseFloat(cs.fontSize);
+      const large = size >= 24 || (size >= 18.66 && parseInt(cs.fontWeight, 10) >= 700);
+      const ratio = contrastRatio(text, bg);
+      out.contrast = { ratio: Math.round(ratio * 100) / 100, required: large ? 3 : 4.5, passes: ratio >= (large ? 3 : 4.5), largeText: large };
+    } else out.contrast = { note: 'The background is an image or gradient, so the ratio can’t be measured.' };
+  }
+  if (r.width && r.height) {
+    // The element at its centre: if it isn't this one (or something inside it), something is on top of it.
+    const top = typeof document.elementFromPoint === 'function' ? document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) : null;
+    if (top && top !== el && !el.contains(top) && !top.contains(el) && !panel.host.contains(top)) out.coveredAtCenterBy = describeEl(top as HTMLElement);
+    // Other elements overlapping its box that are not its ancestors or descendants.
+    const area = r.width * r.height;
+    const overlaps: { el: ReturnType<typeof describeEl>; coversPercent: number }[] = [];
+    for (const o of document.querySelectorAll<HTMLElement>(TAGGED)) {
+      if (o === el || o.contains(el) || el.contains(o) || panel.host.contains(o) || overlaps.length > 40) continue;
+      const b = o.getBoundingClientRect();
+      const w = Math.min(r.right, b.right) - Math.max(r.left, b.left);
+      const h = Math.min(r.bottom, b.bottom) - Math.max(r.top, b.top);
+      if (w > 0 && h > 0 && (w * h) / area > 0.08) overlaps.push({ el: describeEl(o), coversPercent: Math.round(((w * h) / area) * 100) });
+    }
+    if (overlaps.length) out.overlappedBy = overlaps.sort((a, b) => b.coversPercent - a.coversPercent).slice(0, 3);
+  }
+  return out;
+}
+
+/** An element in a few words, with where it is written, for answers that name other elements. */
+function describeEl(el: HTMLElement) {
+  return { tag: tagOf(el), classes: [...el.classList].slice(0, 4), text: (ownText(el) || (el.textContent ?? '').replace(/\s+/g, ' ').trim()).slice(0, 60) || undefined, source: el.getAttribute(SRC) ?? el.getAttribute(USE) ?? undefined };
+}
+
+/* ---------- console (for agents) ---------- */
+
+interface ConsoleEntry {
+  level: 'error' | 'warn';
+  at: string;
+  message: string;
+  stack?: string;
+}
+const consoleLog: ConsoleEntry[] = [];
+const note = (level: ConsoleEntry['level'], message: string, stack?: string) => {
+  consoleLog.push({ level, at: new Date().toISOString(), message: message.slice(0, 600), ...(stack ? { stack: stack.split('\n').slice(0, 4).join('\n').slice(0, 500) } : {}) });
+  if (consoleLog.length > 100) consoleLog.shift();
+};
+const argsText = (args: unknown[]) => args.map((a) => (a instanceof Error ? a.message : typeof a === 'string' ? a : (() => { try { return JSON.stringify(a); } catch { return String(a); } })())).join(' ');
+for (const level of ['error', 'warn'] as const) {
+  const original = console[level].bind(console);
+  console[level] = (...args: unknown[]) => {
+    note(level, argsText(args), args.find((a): a is Error => a instanceof Error)?.stack);
+    original(...args);
+  };
+}
+window.addEventListener('error', (e) => note('error', e.message || 'Script error', e.error?.stack));
+window.addEventListener('unhandledrejection', (e) => note('error', `Unhandled promise rejection: ${e.reason instanceof Error ? e.reason.message : String(e.reason)}`, e.reason instanceof Error ? e.reason.stack : undefined));
+
+/** The Checks tab's findings, for an agent: where each is written, what is wrong, and the edit that would fix it. */
+function checkPage(ask: { category?: string; rule?: string; limit?: number }) {
+  const ignore = (el: Element) => el === panel.host || panel.host.contains(el) || el.closest('#brushup-root') !== null;
+  const all = [...scanPage(document, ignore), ...scanDesign(document, ignore)];
+  const category = (i: A11yIssue) => (DESIGN_RULES.some((r) => r.rule === i.rule) ? 'design' : 'accessibility');
+  const wanted = all.filter((i) => (!ask.category || ask.category === 'all' || category(i) === ask.category) && (!ask.rule || i.rule === ask.rule));
+  const limit = Math.min(Math.max(Math.floor(ask.limit ?? 30), 1), 100);
+  return {
+    page: location.pathname,
+    counts: { accessibility: all.filter((i) => category(i) === 'accessibility').length, design: all.filter((i) => category(i) === 'design').length },
+    shown: Math.min(wanted.length, limit),
+    note: 'Fixed rules read from the rendered page, no screenshot. A clean result is not proof the page is accessible. Design checks are guidelines.',
+    issues: wanted.slice(0, limit).map((i) => ({ category: category(i), rule: i.rule, problem: i.title, detail: i.detail, element: describeEl(i.el), ...(i.fix ? { suggestedFix: i.fix.props } : {}), ...ruleSource(i.rule) })),
+  };
+}
+
+function answerAsk(msg: { id: string; ask?: { kind?: string; noteId?: string; category?: string; rule?: string; limit?: number; level?: string } }) {
   const reply = (ok: boolean, data?: unknown, error?: string) => ws.send(JSON.stringify({ type: 'answer', id: msg.id, ok, data, error }));
   try {
+    if (msg.ask?.kind === 'check') return reply(true, checkPage(msg.ask));
+    if (msg.ask?.kind === 'console') {
+      const level = msg.ask.level === 'error' || msg.ask.level === 'warn' ? msg.ask.level : null;
+      const entries = consoleLog.filter((e) => !level || e.level === level).slice(-Math.min(Math.max(Math.floor(msg.ask.limit ?? 20), 1), 100)).reverse();
+      return reply(true, { page: location.pathname, count: entries.length, note: 'Errors and warnings logged since the canvas loaded on this page, newest first.', entries });
+    }
     if (msg.ask?.kind !== 'inspect') return reply(false, undefined, 'Unknown question');
     const noteId = msg.ask.noteId;
     const el = noteId ? (resolved.get(noteId) ?? null) : selected();

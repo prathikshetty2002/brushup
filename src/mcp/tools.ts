@@ -124,6 +124,23 @@ export async function getRecentEdits(ctx: ToolContext, input: { limit?: number; 
 }
 
 /**
+ * Accessibility and design problems found on the page the canvas is showing, each with where it is written, why it
+ * matters (and from which standard or guideline) and the style edit that would fix it. Fixed rules, no screenshot.
+ */
+export async function check(ctx: ToolContext, input: { category?: 'accessibility' | 'design' | 'all'; rule?: string; limit?: number }): Promise<ToolResult> {
+  const ask = ctx.ask ?? ((q) => askCanvas(ctx.root, q));
+  const answer = await ask({ kind: 'check', ...input });
+  return answer.ok ? ok(answer.data) : fail(answer.error);
+}
+
+/** Errors and warnings the open page has logged since the canvas loaded, newest first. */
+export async function consoleMessages(ctx: ToolContext, input: { level?: 'error' | 'warn' | 'all'; limit?: number }): Promise<ToolResult> {
+  const ask = ctx.ask ?? ((q) => askCanvas(ctx.root, q));
+  const answer = await ask({ kind: 'console', ...input });
+  return answer.ok ? ok(answer.data) : fail(answer.error);
+}
+
+/**
  * How an element renders right now (computed styles, size, overflow), straight from the open canvas. `note_ids`
  * inspects several notes' elements in one call; each answers on its own, so one that can't be found doesn't hide the rest.
  */

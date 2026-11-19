@@ -70,7 +70,7 @@ npx brushup page.html        # serves http://127.0.0.1:4321
 ## 3. Connect Claude Code
 
 1. Open Claude Code in your project folder. It asks you to approve the project's `brushup` MCP server (from `.mcp.json`). Approve it. (`/mcp` lists it and shows whether it's connected.)
-2. That's it. Claude Code now sees five tools, and reads the `CLAUDE.md` block automatically.
+2. That's it. Claude Code now sees seven tools, and reads the `CLAUDE.md` block automatically.
 
 You can add the server by hand instead: `claude mcp add brushup -- npx brushup-mcp`.
 
@@ -145,11 +145,13 @@ You can also ask about a note's element without selecting it: *"Inspect the elem
 | `brushup_update_note` | marks a note done or reopens it, with a one-line reply on what was done | `.brushup/notes.json` only |
 | `brushup_get_selection` | the element you have selected right now | nothing |
 | `brushup_recent_edits` | your latest manual tweaks, newest first, so Claude keeps them (each marked locked); `since` works here too | nothing |
-| `brushup_inspect` | how the selected (or a note's) element renders right now | nothing |
+| `brushup_inspect` | how the selected (or a note's) element renders right now: size, colours, contrast, accessible name, what overlaps or covers it | nothing |
+| `brushup_check` | the accessibility and design problems on the open page, with where each is written and how to fix it | nothing |
+| `brushup_console` | errors and warnings the page has logged, newest first | nothing |
 
 Claude still changes your code with its normal file tools. The `CLAUDE.md` block tells it to keep your manual edits, not to redo trivial tweaks, and to use these tools when available. In the demo's second half, Claude's own summary says it "left your manual canvas edits alone".
 
-`brushup_inspect` needs the app running and open in a browser tab. If it isn't, Claude gets a clear message saying so, and the other four tools still work (they read `.brushup/` directly).
+`brushup_inspect`, `brushup_check` and `brushup_console` need the app running and open in a browser tab. If it isn't, Claude gets a clear message saying so, and the other four tools still work (they read `.brushup/` directly).
 
 ## 6. Which loop should I use?
 
