@@ -706,14 +706,24 @@ const fileOf = (el: HTMLElement) => el.getAttribute(SRC)?.replace(/:\d+:\d+$/, '
 /**
  * The component an element's markup lives in, named after its file, when that differs from its parent's. A component does not
  * have to forward props for this to show: its root element is written in `FeatureCard.tsx`, its parent in `Features.tsx`.
- * Files named in lower case (`page.tsx`, `index.tsx`, `route.tsx`) say nothing about the component, so they are left out.
+ * Generic names (`page.tsx`, `index.tsx`) use their folder instead, and `app/page.tsx` itself gets no name.
  */
+const GENERIC_FILES = new Set(['index', 'page', 'layout', 'route', 'default', 'template', 'main', 'app']);
+const GENERIC_FOLDERS = new Set(['app', 'src', 'pages', 'routes', 'components', 'component', 'ui', 'lib', 'views', 'public', 'main', 'app', 'index']);
+
 function componentFrom(el: HTMLElement, parent: HTMLElement | null): string | undefined {
   if (!DEV) return undefined;
   const file = fileOf(el);
   if (!file || (parent && fileOf(parent) === file)) return undefined;
-  const base = file.split('/').pop()!.replace(/\.[^.]+$/, '');
-  return /^[A-Z]/.test(base) ? base : undefined;
+  const parts = file.split('/');
+  let base = parts.pop()!.replace(/\.[^.]+$/, '');
+  // `index.tsx`, `page.tsx` and the like are named by their folder (`hero/index.tsx` is Hero); in a folder that says nothing too, there is no name.
+  if (GENERIC_FILES.has(base)) {
+    base = parts.pop() ?? '';
+    if (GENERIC_FOLDERS.has(base.toLowerCase())) return undefined;
+  }
+  if (!base) return undefined;
+  return base.replace(/(^|[-_. ])([a-z0-9])/g, (_, __, c: string) => c.toUpperCase()).replace(/[-_. ]/g, '');
 }
 
 function layerRows(): LayerView[] {

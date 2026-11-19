@@ -294,7 +294,7 @@ export function scanDesign(doc: Document, ignore: (el: Element) => boolean = () 
     const cutX = /^(hidden|clip)$/.test(cs.overflowX) && el.scrollWidth - el.clientWidth > 2;
     const cutY = /^(hidden|clip)$/.test(cs.overflowY) && el.scrollHeight - el.clientHeight > 2;
     if (!cutX && !cutY) continue;
-    add({ rule: 'clipped-text', el, title: 'Text is cut off', detail: `${describe(el)} hides part of its content (${cutX ? `${el.scrollWidth - el.clientWidth}px sideways` : `${el.scrollHeight - el.clientHeight}px vertically`}) without an ellipsis, so people can't tell something is missing. Give it room, or truncate it visibly.` });
+    add({ rule: 'clipped-text', el, title: 'Text is cut off', detail: `${describe(el)} hides part of its content (${cutX ? `${el.scrollWidth - el.clientWidth}px sideways` : `${el.scrollHeight - el.clientHeight}px vertically`}) without an ellipsis, so people can't tell something is missing. Give it room, or truncate it visibly.`, ...(cutX && !cutY ? { fix: { label: 'Show an ellipsis where it is cut', props: { 'text-overflow': 'ellipsis', 'white-space': 'nowrap' } } } : {}) });
   }
 
   // The page scrolls sideways.

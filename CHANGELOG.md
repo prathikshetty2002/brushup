@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **Changes tab: one line of context** around each change instead of three, so a diff is short enough to show the edit without scrolling.
+- **Layers: `index.tsx`, `page.tsx`, `layout.tsx` and similar are named by their folder** (`components/hero/index.tsx` is `‹Hero›`), and lower-case files get a name too (`ui/pricing-card.tsx` is `‹PricingCard›`). `app/page.tsx` itself stays unnamed.
+- **Checks: a one-click fix for cut-off text.** Text that is clipped sideways gets "Show an ellipsis where it is cut" (`text-overflow: ellipsis; white-space: nowrap`), so it is visibly truncated. Other rules still have no fix button where the fix would need your words or a markup change.
+
 ## 0.1.8
 
 - **Changes tab: long lines wrap, and the part that changed is marked.** A line of JSX with a long Tailwind class list used to run off the edge of the panel, so the edit itself was often out of sight. Lines now wrap with a hanging indent, a removed line and the added line that replaced it have the differing characters highlighted, and a file's diff opens scrolled to the first change instead of the top of its context.

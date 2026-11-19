@@ -133,6 +133,7 @@ describe('boxes, images and clipping', () => {
     put('<div id="cut" style="overflow:hidden">Long label that is cut</div><div id="dots" style="overflow:hidden;text-overflow:ellipsis">Long label with dots</div><div id="scroll" style="overflow:auto">Scrolls fine</div>');
     for (const id of ['cut', 'dots', 'scroll']) Object.defineProperties(document.getElementById(id)!, { scrollWidth: { value: 300 }, clientWidth: { value: 100 }, scrollHeight: { value: 20 }, clientHeight: { value: 20 } });
     expect(of('clipped-text').map((i) => i.el.id)).toEqual(['cut']);
+    expect(of('clipped-text')[0].fix?.props).toEqual({ 'text-overflow': 'ellipsis', 'white-space': 'nowrap' });
   });
 });
 

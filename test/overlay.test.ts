@@ -851,7 +851,18 @@ describe('the Layers tab in dev mode: which component each element is written in
   const rows = () => [...o.root.querySelectorAll('.layers button.row')] as HTMLButtonElement[];
   const from = (r: HTMLElement) => r.querySelector('.lfrom')?.textContent ?? null;
 
-  it('names the component at its boundary even when it passes no props through, and skips lower-case file names', () => {
+  it('names generic files by their folder and lower-case files in kebab case', () => {
+    o.destroy();
+    document.body.innerHTML = `<main data-brushup-src="src/app/page.tsx:3:4"><section data-brushup-src="src/components/hero/index.tsx:2:2"><div data-brushup-src="src/ui/pricing-card.tsx:4:4"></div></section></main>`;
+    return loadOverlay({ mode: 'dev' }).then((ov) => {
+      o = ov;
+      q('[data-tab=layers]').click();
+      (q('[data-act=layers-expand]') as HTMLButtonElement).click();
+      expect(rows().map((r) => from(r))).toEqual([null, '‹Hero›', '‹PricingCard›']);
+    });
+  });
+
+  it('names the component at its boundary even when it passes no props through', () => {
     o.destroy();
     document.body.innerHTML = `
       <main data-brushup-src="src/app/page.tsx:3:4">
@@ -863,7 +874,7 @@ describe('the Layers tab in dev mode: which component each element is written in
       o = ov;
       q('[data-tab=layers]').click();
       (q('[data-act=layers-expand]') as HTMLButtonElement).click();
-      expect(rows().map((r) => from(r))).toEqual([null, '‹Features›', '‹FeatureCard›', null]); // page.tsx is a route file, h3 shares its parent's file
+      expect(rows().map((r) => from(r))).toEqual([null, '‹Features›', '‹FeatureCard›', null]); // app/page.tsx has no name of its own, h3 shares its parent's file
       const filter = q('.layfilter') as HTMLInputElement;
       filter.value = 'featurecard';
       filter.dispatchEvent(new Event('input', { bubbles: true }));

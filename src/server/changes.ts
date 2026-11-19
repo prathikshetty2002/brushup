@@ -73,7 +73,7 @@ export async function collectChanges(root: string): Promise<Changes> {
     const [branch, status, diffText, mine] = await Promise.all([
       git(root, ['rev-parse', '--abbrev-ref', 'HEAD']).catch(() => 'HEAD'),
       git(root, ['status', '-s', '--no-renames', '--', '.']),
-      git(root, ['diff', 'HEAD', '--no-color', '--no-ext-diff', '--no-textconv', '--relative', '--', '.']).catch(() => git(root, ['diff', '--no-color', '--no-ext-diff', '--no-textconv', '--relative', '--', '.'])),
+      git(root, ['diff', 'HEAD', '-U1', '--no-color', '--no-ext-diff', '--no-textconv', '--relative', '--', '.']).catch(() => git(root, ['diff', '-U1', '--no-color', '--no-ext-diff', '--no-textconv', '--relative', '--', '.'])),
       brushupFiles(root),
     ]);
     const diffs = splitDiff(diffText);
