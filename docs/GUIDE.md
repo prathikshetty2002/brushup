@@ -224,12 +224,14 @@ Each tweak is counted as the messages you did not have to send. Edits to the sam
 | :- | :- | :- |
 | Your sentence describing it | ~100 | typical short instruction |
 | The file the agent reads first | ~1,500 | public measurements put a ~300-line file at 1,200 to 2,000 tokens |
+| The agent's thinking | ~500 | [thinking is billed as output](https://platform.claude.com/docs/en/build-with-claude/extended-thinking); Anthropic publishes no average, its docs suggest a 1,024-token starting budget for simple tasks, and one small public test of a rename found only a handful. The least certain figure here |
+| Extra tool calls to find and check the file | ~850 | three calls at ~150 tokens of overhead each (public estimates run 50 to 200) plus ~400 tokens of search output |
 | The agent's edit and reply | ~300 | typical short edit |
 | A screenshot (style, move and wrap edits only) | 1,560 | [Anthropic's vision docs](https://platform.claude.com/docs/en/build-with-claude/vision): a 1920×1080 screenshot is 1,560 tokens (2,691 on the newest high-resolution tier) |
 
-So a text, delete, duplicate or image edit counts as about **1,900** tokens and a visual one as about **3,500**.
+So a text, delete, duplicate or image edit counts as about **3,250** tokens and a visual one as about **4,800**.
 
-What it leaves out, so the real saving is probably larger: Claude Code [sends the whole conversation with every request](https://code.claude.com/docs/en/costs) (one public logging-proxy test measured about 33,000 tokens of fixed overhead per request), the agent's thinking tokens, and the follow-up rounds visual tweaks usually take ("a bit more to the left"). The file-read and overhead figures come from public blog measurements, not controlled studies, so treat them as ballpark. For your own number, compare `/usage` in Claude Code for matching tasks.
+What it leaves out, so the real saving is probably larger: Claude Code [sends the whole conversation with every request](https://code.claude.com/docs/en/costs) (one public logging-proxy test measured about 33,000 tokens of fixed overhead per request, and Anthropic lists a 286 to 354 token tool-use system prompt on every request) and the follow-up rounds visual tweaks usually take ("a bit more to the left"). The file-read, tool-call and overhead figures come from public blog measurements, not controlled studies, so treat them as ballpark. If your agent thinks little on small edits, the real number is lower than the thinking line suggests; the figures live in `src/core/savings.ts` if you want to change them. For your own number, compare `/usage` in Claude Code for matching tasks.
 
 ## 11. Limits today
 

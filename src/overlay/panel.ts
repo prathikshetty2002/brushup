@@ -1,7 +1,7 @@
 import { RULES } from './a11y';
 import { DESIGN_RULES } from './design';
 import { markDiff } from './diff-marks';
-import { roundTokens } from '../core/savings';
+import { roundTokens, SIMPLE_TOKENS, TOKENS, VISUAL_TOKENS } from '../core/savings';
 import { HANDLE_KINDS, SIDES, type HandleKind, type Sides } from './handles-math';
 
 export type Mode = 'edit' | 'preview';
@@ -482,8 +482,8 @@ export function createPanel(hooks: PanelHooks) {
             <p class="savemain"></p>
             <p class="savesub"></p>
             <details class="savehow"><summary>How is this worked out?</summary>
-              <p>Each tweak you make on the canvas would otherwise have been a message to an agent: a sentence describing it, the file the agent has to read (about 1,500 tokens for a typical component), its reply, and for a visual tweak a screenshot (about 1,560 tokens, from Anthropic's image sizing). That is counted as about 1,900 tokens, or 3,500 with a screenshot. Edits to the same element within 30 seconds count once, and undone edits don't count.</p>
-              <p>It leaves out what an agent also spends: the whole conversation is re-sent with every request, plus its thinking and any follow-up rounds. So the real saving is probably larger. It is an estimate, not a measurement: Brushup can't see the agent's side.</p>
+              <p class="savehow1"></p>
+              <p>It leaves out what an agent also spends: the whole conversation is re-sent with every request, plus any follow-up rounds. The thinking figure is the least certain part: Anthropic publishes no average, and an easy request may use almost none. It is an estimate, not a measurement: Brushup can't see the agent's side.</p>
             </details>
           </div>
           <div class="chlist"></div>
@@ -739,7 +739,17 @@ export function createPanel(hooks: PanelHooks) {
     else (grid ?? fieldsEl.querySelector<HTMLElement>('.grid:last-of-type')!).append(field);
   }
 
-  root.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((b) => b.addEventListener('click', () => hooks.onMode(b.dataset.mode as Mode)));
+  root.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((b) =>
+    b.addEventListener('click', () => {
+      // The panel shrinks to its header when an element leaves no room beside it. Choosing Edit means the person wants the
+      // fields, so open it again, even though the mode itself is already Edit.
+      if (b.dataset.mode === 'edit' && panel.classList.contains('mini')) {
+        panel.style.top = panel.style.maxHeight = '';
+        setMini(false);
+      }
+      hooks.onMode(b.dataset.mode as Mode);
+    }),
+  );
   root.querySelector('[data-act=undo]')!.addEventListener('click', () => hooks.onUndo());
   undoBtn.addEventListener('click', () => ((toastEl.hidden = true), hooks.onUndo()));
   pinBtn.addEventListener('click', () => {
@@ -1411,6 +1421,8 @@ export function createPanel(hooks: PanelHooks) {
     );
   });
   const saveCard = $<HTMLElement>('.savecard');
+  const fmtTokens = (n: number) => n.toLocaleString('en');
+  $<HTMLElement>('.savehow1').textContent = `Each tweak you make on the canvas would otherwise have been a message to an agent: your sentence, the file it reads (about ${fmtTokens(TOKENS.fileRead)} tokens), its thinking (about ${fmtTokens(TOKENS.thinking)}), the extra tool calls to find and check the file (about ${fmtTokens(TOKENS.process)}), its reply, and for a visual tweak a screenshot (${fmtTokens(TOKENS.screenshot)} tokens, from Anthropic's image sizing). That is counted as about ${fmtTokens(SIMPLE_TOKENS)} tokens, or ${fmtTokens(VISUAL_TOKENS)} with a screenshot. Edits to the same element within 30 seconds count once, and undone edits don't count.`;
   const saveMain = $<HTMLElement>('.savemain');
   const saveSub = $<HTMLElement>('.savesub');
   const tokensText = roundTokens;

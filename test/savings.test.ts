@@ -5,8 +5,9 @@ const at = (s: number) => new Date(1_700_000_000_000 + s * 1000).toISOString();
 const edit = (s: number, kind: string, id = 'src/A.tsx:1:1'): LogEntry => ({ at: at(s), edit: { kind, id } });
 
 describe('estimateSavings', () => {
-  it('counts a described tweak at the cost of a prompt, a file read and a reply, and a visual one with a screenshot too', () => {
-    expect(SIMPLE_TOKENS).toBe(TOKENS.prompt + TOKENS.fileRead + TOKENS.reply);
+  it('counts a described tweak at the cost of a prompt, a file read, the agent thinking and extra tool calls and its reply, and a visual one with a screenshot too', () => {
+    expect(SIMPLE_TOKENS).toBe(TOKENS.prompt + TOKENS.fileRead + TOKENS.reply + TOKENS.thinking + TOKENS.process);
+    expect(SIMPLE_TOKENS).toBe(3250);
     expect(VISUAL_TOKENS).toBe(SIMPLE_TOKENS + TOKENS.screenshot);
     expect(estimateSavings([edit(0, 'text')])).toEqual({ changes: 1, edits: 1, tokens: SIMPLE_TOKENS });
     expect(estimateSavings([edit(0, 'style')])).toEqual({ changes: 1, edits: 1, tokens: VISUAL_TOKENS });

@@ -9,17 +9,25 @@
  *  - file read:  the agent reads the component first. Published estimates for a ~300-line file are 1,200 to 2,000 tokens
  *                (blog measurements, not controlled), so 1,500.
  *  - reply:      the edit itself and a short answer, about 300 tokens.
+ *  - thinking:   the agent reasons before acting, and thinking is billed as output. Anthropic publishes no average (adaptive
+ *                thinking decides per request, and on easy requests may skip it); its docs suggest starting a simple task's budget
+ *                at the 1,024-token minimum, and one small public test of a rename found only a handful of thinking tokens. 500
+ *                is a middle assumption, and the least certain figure here.
+ *  - process:    the extra tool calls an agent makes around the edit: finding the file and checking the result. Three calls at
+ *                about 150 tokens of call overhead each (public estimates run 50 to 200) plus about 400 tokens of search output.
  * Not counted, so the real saving is larger: the whole conversation is re-sent with every request (one logging-proxy test found
- * about 33k tokens of fixed overhead per request; Anthropic's cost docs describe the re-sending), thinking tokens, and the
- * follow-up "a bit more to the left" rounds that visual tweaks usually take.
+ * about 33k tokens of fixed overhead per request; Anthropic's cost docs describe the re-sending, and its tool-use docs list a
+ * 286 to 354 token tool-use system prompt per request), and the follow-up "a bit more to the left" rounds that visual tweaks
+ * usually take.
  *
- * Sources: platform.claude.com/docs/en/build-with-claude/vision (image tokens); code.claude.com/docs/en/costs (the full
- * conversation is sent with every request); the file-read and overhead figures are from public blog measurements.
+ * Sources: platform.claude.com/docs/en/build-with-claude/vision (image tokens); platform.claude.com/docs/en/build-with-claude/
+ * extended-thinking (thinking is billed as output; budgets); code.claude.com/docs/en/costs (the full conversation is sent with
+ * every request); the file-read, tool-call and overhead figures are from public blog measurements.
  */
-export const TOKENS = { prompt: 100, screenshot: 1560, fileRead: 1500, reply: 300 } as const;
+export const TOKENS = { prompt: 100, screenshot: 1560, fileRead: 1500, reply: 300, thinking: 500, process: 850 } as const;
 
-/** A text, delete, duplicate or image edit is described in words; a style, move or wrap one is described by looking. */
-export const SIMPLE_TOKENS = TOKENS.prompt + TOKENS.fileRead + TOKENS.reply;
+/** A text, delete, duplicate or image edit is described in words; a style, move or wrap one is described by looking (and needs a screenshot). */
+export const SIMPLE_TOKENS = TOKENS.prompt + TOKENS.fileRead + TOKENS.reply + TOKENS.thinking + TOKENS.process;
 export const VISUAL_TOKENS = SIMPLE_TOKENS + TOKENS.screenshot;
 
 /** Edits to the same element this close together are one tweak (a nudge held down, a drag then a fix), not many prompts. */
@@ -107,7 +115,7 @@ export function estimateSavings(log: LogEntry[], since = 0): Savings {
   return { changes, edits, tokens };
 }
 
-/** `1,900` as `about 2k`, and anything under a thousand as is. */
+/** A token count as `1.9k` or `31k`, and anything under a thousand to the nearest ten. */
 export function roundTokens(n: number): string {
   if (n < 1000) return String(Math.round(n / 10) * 10);
   return n < 10_000 ? `${(n / 1000).toFixed(1).replace(/\.0$/, '')}k` : `${Math.round(n / 1000)}k`;

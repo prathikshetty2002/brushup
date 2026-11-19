@@ -1814,6 +1814,18 @@ describe('panel stays off the selection', () => {
     expect(panelEl().style.maxHeight).toBe('');
   });
 
+  it('clicking Edit opens a collapsed panel, since choosing Edit means wanting the fields', async () => {
+    panelEl().getBoundingClientRect = () => rect(750, 1010);
+    layout(el('a2'), { x: 10, y: 20, width: 1000, height: innerHeight - 40 });
+    click(el('a2'));
+    await frame();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(panelEl().classList.contains('mini')).toBe(true);
+    (o.root.querySelector('[data-mode=edit]') as HTMLButtonElement).click(); // already in Edit mode, and it still expands
+    expect(panelEl().classList.contains('mini')).toBe(false);
+    expect(panelEl().style.top).toBe('');
+  });
+
   it('collapses to its header when no band is tall enough, and the chevron expands it', async () => {
     panelEl().getBoundingClientRect = () => rect(750, 1010);
     layout(el('a2'), { x: 10, y: 20, width: 1000, height: innerHeight - 40 });
