@@ -879,28 +879,31 @@ describe('editing for a screen size', () => {
     await ok('h1');
     btn('here').click();
     expect(q('.varynote').textContent).toContain('screens 768px wide and wider');
-    expect(q('.varynote').textContent).toContain('Written as md:');
+    expect(q('.varynote').textContent).toContain('written as md: classes');
     key('ArrowRight');
     await settle();
     expect(o.last('edit').edit).toMatchObject({ variant: 'md', scope: 'element' });
   });
 
-  it('writes hover, focus and dark, stacked with the screen size, and shows no inline preview for them', async () => {
+  it('is collapsed by default, and closing it puts edits back to every screen', async () => {
     setWidth(900);
     click(document.querySelector('p')!);
-    (q('[data-state=hover]') as HTMLButtonElement).click();
-    expect(q('.varynote').textContent).toContain('hover:');
-    key('ArrowRight');
-    await settle();
-    expect(o.last('edit').edit).toMatchObject({ variant: 'hover', scope: 'element' });
-    expect(document.querySelector('p')!.style.marginLeft).toBe(''); // the page can't show hover yet, so nothing is faked
-    await ok('h1');
+    const row = q('.vary') as HTMLDetailsElement;
+    expect(row.open).toBe(false);
+    row.open = true;
     btn('here').click();
-    (q('[data-state=dark]') as HTMLButtonElement).click();
+    expect(btn('here').getAttribute('aria-pressed')).toBe('true');
+    row.open = false;
+    row.dispatchEvent(new Event('toggle'));
+    expect(btn('all').getAttribute('aria-pressed')).toBe('true');
     key('ArrowRight');
     await settle();
-    expect(o.last('edit').edit.variant).toBe('dark:md');
-    (q('[data-state=""]') as HTMLButtonElement).click();
+    expect(o.last('edit').edit.variant).toBeUndefined();
+  });
+
+  it('has no hover, focus or dark-mode control: that is a job for a note to Claude', () => {
+    click(document.querySelector('p')!);
+    expect(o.root.querySelector('[data-state]')).toBeNull();
   });
 
   it('is off below the smallest breakpoint, where "and up" would mean every size', () => {

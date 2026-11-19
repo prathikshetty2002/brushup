@@ -76,8 +76,6 @@ export interface PanelHooks {
   onStyle(props: Record<string, string>, scope: PanelScope): void;
   /** The user chose whether edits apply to every screen size or only from the current one up. */
   onVariant?(here: boolean): void;
-  /** The state chosen next to it: '' for none, `hover`, `focus` or `dark`. */
-  onState?(state: string): void;
   /** Live, unsaved preview while a field is being scrubbed; null drops it. */
   onScrub(props: Record<string, string> | null): void;
   /** The user typed something a field can't take. */
@@ -234,7 +232,7 @@ input:hover, select:hover, textarea:hover { border-color: var(--faint); } input:
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
 .vary { margin: 0 0 12px; } .tokens { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin: 6px 0 2px; } .tokenlbl { flex: 0 0 100%; color: var(--faint); font-size: 10.5px; }
 .tokensw { width: 18px; height: 18px; padding: 0; border: 1px solid var(--line-strong, rgba(0,0,0,.25)); border-radius: 2px; cursor: pointer; } .tokensw:hover { outline: 2px solid var(--accent); outline-offset: 1px; }
-.varylbl2 { margin-top: 8px; } .varylbl { display: block; margin-bottom: 4px; color: var(--muted); font-size: 11px; }
+.vary summary { cursor: pointer; color: var(--muted); font-size: 11px; list-style: none; } .vary summary::-webkit-details-marker { display: none; } .vary summary::before { content: '▸ '; } .vary[open] summary::before { content: '▾ '; } .vary[open] summary { margin-bottom: 5px; }
 .varyseg { display: flex; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; } .varyseg button { flex: 1; padding: 5px 6px; border: 0; background: transparent; color: var(--muted); font: 500 11px var(--sans); cursor: pointer; } .varyseg button + button { border-left: 1px solid var(--line); }
 .varyseg button[aria-pressed=true] { background: var(--accent); color: var(--on-accent); } .varyseg button:disabled { opacity: .45; cursor: default; }
 .varynote { margin: 6px 0 0; color: var(--faint); font-size: 10.5px; line-height: 1.45; }
@@ -454,13 +452,11 @@ export function createPanel(hooks: PanelHooks) {
             <label class="imgchk"><input type="checkbox" data-img="decorative" /> Decorative: nothing to describe</label>
             <p class="imgwarn" hidden>No alt text yet. People using a screen reader get nothing for this image.</p>
           </div>
-          <div class="vary" hidden role="group" aria-label="Which screens and states these edits apply to">
-            <span class="varylbl">Screen size</span>
-            <div class="varyseg"><button type="button" data-vary="all" aria-pressed="true" title="Phones, tablets and desktops all get the change">Every screen</button><button type="button" data-vary="here" aria-pressed="false">This size and up</button></div>
-            <span class="varylbl varylbl2">When</span>
-            <div class="varyseg"><button type="button" data-state="" aria-pressed="true" title="Always">Always</button><button type="button" data-state="hover" aria-pressed="false" title="Only while the pointer is over it">On hover</button><button type="button" data-state="focus" aria-pressed="false" title="Only while it has keyboard focus">On focus</button><button type="button" data-state="dark" aria-pressed="false" title="Only when dark mode is on">Dark mode</button></div>
-            <p class="varynote" hidden></p>
-          </div>
+          <details class="vary" hidden>
+            <summary>Only on wider screens…</summary>
+            <div class="varyseg" role="group" aria-label="Which screens these edits apply to"><button type="button" data-vary="all" aria-pressed="true" title="Phones, tablets and desktops all get the change">Every screen</button><button type="button" data-vary="here" aria-pressed="false">This size and wider</button></div>
+            <p class="varynote"></p>
+          </details>
           <div class="fields" hidden></div>
           <label class="shared" hidden title="Off: only the selected element changes. On: the CSS rule is edited, so every element it matches changes."><input type="checkbox" /><span><b>Edit the shared CSS rule</b><small class="why">Off: only this element changes.</small></span></label>
           <dl class="keys" aria-label="Shortcuts"><div><dt><kbd>drag</kbd></dt><dd>Move</dd></div><div><dt><kbd>↑ ↓ ← →</kbd></dt><dd>Nudge 1px, <kbd>⇧</kbd> for 10</dd></div><div><dt><kbd>double-click</kbd></dt><dd>Edit text</dd></div><div><dt><kbd>Ctrl D</kbd></dt><dd>Duplicate</dd></div><div><dt><kbd>Alt ↑ ↓</kbd></dt><dd>Move up or down</dd></div><div><dt><kbd>Delete</kbd></dt><dd>Delete element</dd></div><div><dt><kbd>N</kbd></dt><dd>Add a note</dd></div><div><dt><kbd>Esc</kbd></dt><dd>Deselect</dd></div></dl>
@@ -522,31 +518,17 @@ export function createPanel(hooks: PanelHooks) {
   tokenBox.className = 'tokens';
   tokenBox.hidden = true;
   let tokenKey = '';
-  const varyEl = $<HTMLElement>('.vary');
+  const varyEl = $<HTMLDetailsElement>('.vary');
   const varyBtns = [...varyEl.querySelectorAll<HTMLButtonElement>('[data-vary]')];
-  const stateBtns = [...varyEl.querySelectorAll<HTMLButtonElement>('[data-state]')];
-  let varyState = '';
   let varyBp = '';
   let varyFrom = 0;
   /** What the choices mean, in plain words, so nobody has to guess what will be written. */
   const noteVary = () => {
-    const prefix = [varyState === 'dark' ? 'dark' : '', varyHere ? varyBp : '', varyState && varyState !== 'dark' ? varyState : ''].filter(Boolean).join(':');
-    const who = varyHere && varyBp ? `screens ${varyFrom}px wide and wider` : 'every screen size';
-    const when = varyState === 'hover' ? ' while the pointer is over it' : varyState === 'focus' ? ' while it has keyboard focus' : varyState === 'dark' ? ' in dark mode' : '';
-    const see = varyState === 'hover' ? 'You will see it when you hover the element.' : varyState === 'focus' ? 'You will see it when the element has focus.' : varyState === 'dark' ? 'You will see it once dark mode is on.' : '';
-    const size = varyHere && varyBp ? `Narrower screens keep their current look. Your window is ${window.innerWidth}px wide: resize it, or use your browser’s device mode, to check other sizes.` : '';
-    varyNote.hidden = false;
-    varyNote.textContent = [`Your next edits apply to ${who}${when}.`, prefix ? `Written as ${prefix}: classes.` : '', see, size].filter(Boolean).join(' ');
+    const wide = varyHere && varyBp;
+    varyNote.textContent = wide
+      ? `Your next edits apply to screens ${varyFrom}px wide and wider, and are written as ${varyBp}: classes. Narrower screens keep their current look. Your window is ${window.innerWidth}px wide: resize it, or use your browser’s device mode, to check other sizes.`
+      : 'Your next edits apply to every screen size.';
   };
-  stateBtns.forEach((b) =>
-    b.addEventListener('click', () => {
-      varyState = b.dataset.state ?? '';
-      stateBtns.forEach((o) => o.setAttribute('aria-pressed', String(o === b)));
-      noteVary();
-      hooks.onState?.(varyState);
-      b.blur();
-    }),
-  );
   const varyNote = $<HTMLElement>('.varynote');
   let varyAvailable = false;
   let varyHere = false;
@@ -560,6 +542,14 @@ export function createPanel(hooks: PanelHooks) {
       b.blur(); // keep the arrow keys working on the page
     }),
   );
+  // Closing the row puts it back to every screen, so a hidden choice never decides where an edit goes.
+  varyEl.addEventListener('toggle', () => {
+    if (varyEl.open || !varyHere) return;
+    varyHere = false;
+    varyBtns.forEach((o, n) => o.setAttribute('aria-pressed', String(n === 0)));
+    noteVary();
+    hooks.onVariant?.(false);
+  });
   const sharedLabel = $<HTMLLabelElement>('.shared');
   const shared = $<HTMLInputElement>('.shared input');
   const sharedWhy = $<HTMLElement>('.shared .why');

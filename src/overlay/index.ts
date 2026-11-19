@@ -700,11 +700,8 @@ const BREAKPOINTS: [string, number][] = [['2xl', 1536], ['xl', 1280], ['lg', 102
 /** The breakpoint the window is at now, or '' below the smallest. */
 const breakpointNow = () => BREAKPOINTS.find(([, min]) => window.innerWidth >= min)?.[0] ?? '';
 let editHere = false;
-let editState = '';
-/** The variant an edit is written under: dark mode, the current breakpoint when "this size and up" is chosen, and hover or focus. None means every size, always. */
-const variantNow = () => [editState === 'dark' ? 'dark' : '', editHere ? breakpointNow() : '', editState === 'hover' || editState === 'focus' ? editState : ''].filter(Boolean).join(':');
-/** Hover, focus and dark can't be shown on the page as it is now, so the quick inline preview would show them at the wrong time. */
-const previewable = (variant: string) => !/(^|:)(hover|focus|dark)(:|$)/.test(variant);
+/** The variant an edit is written under: the current breakpoint when "this size and wider" is chosen, else none (every size). */
+const variantNow = () => (editHere ? breakpointNow() : '');
 function refreshVariants() {
   const bp = breakpointNow();
   panel.setVariants(DEV, bp, BREAKPOINTS.find(([name]) => name === bp)?.[1] ?? 0);
@@ -723,7 +720,7 @@ async function commitStyles(items: { el: HTMLElement; props: Record<string, stri
     const hints = { ...(Number.isFinite(rootPx) ? { rootPx } : {}), ...('font-size' in props ? { lineHeight: lineHeightRatio(el) } : {}), ...('color' in props ? { colorTokens: themeColors().map((c) => c.name) } : {}) };
     edits.push({ kind: 'style', id: ref, tag: tagOf(el), props, scope: variant ? 'element' : scope, ...(variant ? { variant } : {}), hints, ...(DEV ? { ident: identOf(el), ver: verOf(el) } : {}) });
   }
-  const previewed = previewable(variant) ? items.map((i) => preview(i.el, i.props)) : [];
+  const previewed = items.map((i) => preview(i.el, i.props));
   const r = await sendMany(edits);
   if (!r.ok) {
     previewed.forEach((p) => p.revert());
@@ -1268,14 +1265,11 @@ const panel = createPanel({
   onInvalid: (message) => panel.setStatus(message, 'err'),
   onScrub(props) {
     scrubbing.forEach((p) => p.revert());
-    scrubbing = props && previewable(variantNow()) ? selectedAll().map((el) => preview(el, props)) : [];
+    scrubbing = props ? selectedAll().map((el) => preview(el, props)) : [];
   },
   onVariant(here) {
     editHere = here;
     refreshVariants();
-  },
-  onState(state) {
-    editState = state;
   },
   onStyle(props, scope) {
     void commitStyles(

@@ -96,12 +96,7 @@ Click an element to select it. The panel shows what it is and where it lives in 
 
 Drags snap to a 4px grid (Tailwind's spacing step). Hold **Shift** for 1px precision. A label shows the value as you drag.
 
-**Editing for one screen size, or for hover, focus and dark mode (Tailwind projects).** Two switches at the top of the Style tab say which screens and situations your next edits apply to; a sentence under them spells it out.
-
-- **Screen size.** *Every screen* writes a plain class like `ml-4`, so phones, tablets and desktops all get the change. The other button is named for how wide your window is right now (say *768px and wider*) and writes `md:ml-4`: only screens at least that wide get the change, and narrower ones keep their current look. (`md:` and `xl:` are Tailwind's names for 768px and 1280px.) The window decides which size you are looking at, so resize it, or open your browser's device mode (Ctrl/Cmd+Shift+M in Chrome) and pick a phone or tablet.
-- **When.** *Always*, *On hover*, *On focus* or *Dark mode* writes `hover:`, `focus:` or `dark:` classes, and combines with the screen size (`dark:md:hover:ml-4`). The page can't show a hover or focus change until you hover or focus the element, so Brushup skips its instant preview for those and the edit appears after your dev server reloads.
-
-Only Tailwind classes can carry these, so on a `className` built with `cn(...)`, or on a plain HTML page, Brushup refuses with the reason instead of writing the change for every size.
+**Editing only for wider screens (Tailwind projects).** Under the Style fields there is a closed row, *Only on wider screens…*. Open it and choose the second button, named for how wide your window is right now (say *768px and wider*), and your edits are written as `md:ml-4` instead of `ml-4`: only screens at least that wide get the change, and narrower ones keep their current look. (`md:` and `xl:` are Tailwind's names for 768px and 1280px.) The window decides which size you are looking at, so resize it, or open your browser's device mode (Ctrl/Cmd+Shift+M in Chrome) and pick a phone or tablet. Closing the row puts edits back to every screen. Only Tailwind classes can carry this, so on a `className` built with `cn(...)`, or on a plain HTML page, Brushup refuses with the reason instead of writing the change for every size. Hover, focus and dark-mode styles aren't edited on the canvas, since the page can't show them while you edit: leave a note for Claude instead.
 
 **Theme colours.** If your project defines colours as `--color-*` variables (Tailwind 4's `@theme` does), the Style tab shows them as swatches under Color. Click one and Brushup writes the theme's own class, such as `text-accent`, so the colour stays tied to your design system instead of becoming a one-off hex.
 
@@ -189,7 +184,7 @@ Brushup writes small, exact edits, and refuses when it can't be sure. These are 
 | *No Brushup canvas is open in a browser.* | `brushup_inspect` found no open page | Open the app in a browser |
 | *Brushup is not running for this project.* | No dev server | Start `npm run dev` |
 
-Also good to know: a `className` built with `cn(...)` or a template falls back to an **inline style**. Inline styles beat Tailwind responsive variants like `md:`, so Brushup shows an amber warning naming the variants it would override; check small screens after such an edit. (With the screen size or a state chosen it refuses instead, since an inline style can't be limited to one.)
+Also good to know: a `className` built with `cn(...)` or a template falls back to an **inline style**. Inline styles beat Tailwind responsive variants like `md:`, so Brushup shows an amber warning naming the variants it would override; check small screens after such an edit. (With *Only on wider screens* chosen it refuses instead, since an inline style can't be limited to one.)
 
 ## 8. Troubleshooting
 
