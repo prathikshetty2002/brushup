@@ -50,6 +50,8 @@ export interface LayerView {
   component: boolean;
   /** An id, a class or a piece of its text, to tell siblings apart. */
   hint: string;
+  /** Lower-case text the filter box searches: name, id, classes and the start of its text. */
+  search: string;
   hasChildren: boolean;
 }
 
@@ -232,6 +234,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .a11yitem { border: 1px solid var(--line); border-radius: 3px; padding: 8px 9px; margin-bottom: 6px; background: var(--bg); }
 .a11yitem .rule { display: inline-block; margin-bottom: 4px; padding: 1px 6px; border-radius: 2px; background: var(--raise); color: var(--muted); font: 600 10px var(--mono); text-transform: uppercase; letter-spacing: .04em; }
 .a11yitem b { display: block; color: var(--text); font-weight: 600; font-size: 12px; line-height: 1.4; } .a11yitem p { margin: 3px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.layfilter { width: 100%; height: 26px; margin: 0 0 6px; padding: 0 8px; border: 1px solid var(--fieldline); border-radius: 3px; background: var(--field); color: var(--text); font: 11.5px system-ui; } .layfilter::placeholder { color: var(--faint); }
+.layers .lm { color: var(--accent); background: rgba(var(--accent-rgb), .12); border-radius: 2px; }
 .layers { list-style: none; margin: 0; padding: 0; max-height: 340px; overflow: auto; border: 1px solid var(--line); border-radius: 3px; background: var(--bg); }
 .layers li { display: block; } .layers button.row { display: flex; align-items: center; gap: 4px; width: 100%; padding: 3px 6px; border-radius: 0; text-align: left; color: var(--muted); font: 11.5px/1.4 var(--mono); background: none; white-space: nowrap; overflow: hidden; }
 .layers button.row:hover { background: var(--raise); color: var(--text); } .layers button.row[aria-selected=true] { background: rgba(var(--accent-rgb), .14); color: var(--text); box-shadow: inset 2px 0 var(--accent); }
@@ -404,7 +408,8 @@ export function createPanel(hooks: PanelHooks) {
           <dl class="keys" aria-label="Shortcuts"><div><dt><kbd>drag</kbd></dt><dd>Move</dd></div><div><dt><kbd>↑ ↓ ← →</kbd></dt><dd>Nudge 1px, <kbd>⇧</kbd> for 10</dd></div><div><dt><kbd>double-click</kbd></dt><dd>Edit text</dd></div><div><dt><kbd>Ctrl D</kbd></dt><dd>Duplicate</dd></div><div><dt><kbd>Delete</kbd></dt><dd>Delete element</dd></div><div><dt><kbd>N</kbd></dt><dd>Add a note</dd></div><div><dt><kbd>Esc</kbd></dt><dd>Deselect</dd></div></dl>
         </div>
         <div data-pane="layers" role="tabpanel" id="brushup-pane-layers" aria-labelledby="brushup-tab-layers" hidden>
-          <div class="chbar"><span class="laysum">Open this tab to see the page's elements</span></div>
+          <div class="chbar"><span class="laysum">Open this tab to see the page's elements</span><span class="sp"></span><button class="ghost" data-act="layers-expand" title="Unfold everything">Expand</button><button class="ghost" data-act="layers-collapse" title="Fold everything">Collapse</button></div>
+          <input type="search" class="layfilter" placeholder="Find an element: a tag, class, component or text" aria-label="Filter the layers" autocomplete="off" spellcheck="false" />
           <ul class="layers" aria-label="Elements on the page"></ul>
         </div>
         <div data-pane="changes" role="tabpanel" id="brushup-pane-changes" aria-labelledby="brushup-tab-changes" hidden>
@@ -922,15 +927,45 @@ export function createPanel(hooks: PanelHooks) {
   /* ----- layers ----- */
   const laySum = $<HTMLElement>('.laysum');
   const layList = $<HTMLElement>('.layers');
+  const layFilter = $<HTMLInputElement>('.layfilter');
   let layRows: LayerView[] = [];
+  let layTotal = 0;
   let laySelected = new Set<string>();
-  const collapsed = new Set<string>();
+  /** Folded or unfolded by hand. Anything not listed follows the default: on a big page, everything below the top two levels starts folded. */
+  const layOverride = new Map<string, boolean>();
+  const BIG_PAGE = 60;
+  const isFolded = (row: LayerView) => layOverride.get(row.key) ?? (layRows.length > BIG_PAGE && row.depth >= 2);
+  /** Indexes of the rows above `i` that contain it, nearest first. */
+  const ancestorsOf = (i: number) => {
+    const out: number[] = [];
+    let depth = layRows[i].depth;
+    for (let j = i - 1; j >= 0 && depth > 0; j--) if (layRows[j].depth < depth) (out.push(j), (depth = layRows[j].depth));
+    return out;
+  };
   const renderLayers = () => {
     layList.textContent = '';
-    let hideBelow = Infinity; // while inside a collapsed row, skip rows deeper than it
-    for (const row of layRows) {
-      if (row.depth > hideBelow) continue;
-      hideBelow = Infinity;
+    const q = layFilter.value.trim().toLowerCase();
+    const show = new Set<number>();
+    if (q) {
+      // Search: the matches and every row above them, so each result is shown in its place in the tree.
+      layRows.forEach((row, i) => {
+        if (!row.search.includes(q)) return;
+        show.add(i);
+        ancestorsOf(i).forEach((a) => show.add(a));
+      });
+    }
+    let hideBelow = Infinity; // while inside a folded row, skip rows deeper than it
+    let shown = 0;
+    layRows.forEach((row, i) => {
+      if (q) {
+        if (!show.has(i)) return;
+      } else {
+        if (row.depth > hideBelow) return;
+        hideBelow = Infinity;
+      }
+      shown++;
+      const matched = !!q && row.search.includes(q);
+      const folded = !q && row.hasChildren && isFolded(row);
       const li = document.createElement('li');
       const b = document.createElement('button');
       b.type = 'button';
@@ -939,18 +974,17 @@ export function createPanel(hooks: PanelHooks) {
       b.style.paddingLeft = `${6 + row.depth * 12}px`;
       b.setAttribute('aria-selected', String(laySelected.has(row.key)));
       b.setAttribute('aria-level', String(row.depth + 1));
-      if (row.hasChildren) b.setAttribute('aria-expanded', String(!collapsed.has(row.key)));
+      if (row.hasChildren && !q) b.setAttribute('aria-expanded', String(!folded));
       const caret = document.createElement('span');
       caret.className = 'lcaret';
-      caret.textContent = row.hasChildren ? (collapsed.has(row.key) ? '▸' : '▾') : '';
+      caret.textContent = row.hasChildren && !q ? (folded ? '▸' : '▾') : '';
       caret.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (collapsed.has(row.key)) collapsed.delete(row.key);
-        else collapsed.add(row.key);
+        layOverride.set(row.key, !isFolded(row));
         renderLayers();
       });
       const name = document.createElement('span');
-      name.className = `lnm${row.component ? ' comp' : ''}`;
+      name.className = `lnm${row.component ? ' comp' : ''}${matched ? ' lm' : ''}`;
       name.textContent = row.component ? `<${row.name}>` : row.name; // text only: names and hints come from the page
       const hint = document.createElement('span');
       hint.className = 'lhint';
@@ -961,33 +995,64 @@ export function createPanel(hooks: PanelHooks) {
       b.addEventListener('pointerleave', () => hooks.onLayerHover(null));
       li.append(b);
       layList.append(li);
-      if (row.hasChildren && collapsed.has(row.key)) hideBelow = row.depth;
+      if (!q && folded) hideBelow = row.depth;
+    });
+    const total = layTotal > layRows.length ? ` (showing the first ${layRows.length} of ${layTotal})` : '';
+    const matchCount = q ? [...show].filter((i) => layRows[i].search.includes(q)).length : 0;
+    laySum.textContent = q ? `${matchCount} match${matchCount === 1 ? '' : 'es'}${total}` : layRows.length ? `${layRows.length} element${layRows.length === 1 ? '' : 's'}${total}` : 'No elements found';
+    if (q && !shown) {
+      const none = document.createElement('li');
+      none.className = 'empty';
+      none.textContent = 'Nothing on the page matches.';
+      layList.append(none);
     }
-    laySum.textContent = layRows.length ? `${layRows.length} element${layRows.length === 1 ? '' : 's'}` : 'No elements found';
   };
+  layFilter.addEventListener('input', renderLayers);
+  layFilter.addEventListener('keydown', (e) => {
+    e.stopPropagation(); // typing here must not trigger the canvas shortcuts
+    if (e.key === 'Escape' && layFilter.value) (layFilter.value = ''), renderLayers();
+    if (e.key === 'ArrowDown') (e.preventDefault(), layList.querySelector<HTMLButtonElement>('button.row')?.focus());
+  });
+  root.querySelector('[data-act=layers-expand]')!.addEventListener('click', () => {
+    layRows.forEach((r) => r.hasChildren && layOverride.set(r.key, false));
+    renderLayers();
+  });
+  root.querySelector('[data-act=layers-collapse]')!.addEventListener('click', () => {
+    layRows.forEach((r) => r.hasChildren && layOverride.set(r.key, true));
+    renderLayers();
+  });
   // Up and Down move between rows; Left and Right fold and unfold.
   layList.addEventListener('keydown', (e: KeyboardEvent) => {
     const rows = [...layList.querySelectorAll<HTMLButtonElement>('button.row')];
     const at = rows.indexOf(root.activeElement as HTMLButtonElement);
     if (at < 0) return;
     const key = rows[at].dataset.key!;
+    const row = layRows.find((r) => r.key === key);
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
+      if (e.key === 'ArrowUp' && at === 0) return layFilter.focus();
       rows[Math.min(rows.length - 1, Math.max(0, at + (e.key === 'ArrowDown' ? 1 : -1)))].focus();
-    } else if ((e.key === 'ArrowRight' && collapsed.has(key)) || (e.key === 'ArrowLeft' && rows[at].getAttribute('aria-expanded') === 'true')) {
+    } else if (row && !layFilter.value && ((e.key === 'ArrowRight' && isFolded(row)) || (e.key === 'ArrowLeft' && rows[at].getAttribute('aria-expanded') === 'true'))) {
       e.preventDefault();
-      if (collapsed.has(key)) collapsed.delete(key);
-      else collapsed.add(key);
+      layOverride.set(key, !isFolded(row));
       renderLayers();
       [...layList.querySelectorAll<HTMLButtonElement>('button.row')].find((b) => b.dataset.key === key)?.focus();
     }
   });
-  const setLayers = (rows: LayerView[]) => {
+  const setLayers = (rows: LayerView[], total = rows.length) => {
     layRows = rows;
+    layTotal = total;
     renderLayers();
   };
+  /** Highlight the selected rows, unfolding the tree down to them first so the selection is never hidden inside a folded branch. */
   const setLayerSelection = (keys: string[]) => {
     laySelected = new Set(keys);
+    let unfolded = false;
+    layRows.forEach((r, i) => {
+      if (!laySelected.has(r.key)) return;
+      for (const a of ancestorsOf(i)) if (isFolded(layRows[a])) (layOverride.set(layRows[a].key, false), (unfolded = true));
+    });
+    if (unfolded || layFilter.value) renderLayers();
     for (const b of layList.querySelectorAll<HTMLButtonElement>('button.row')) b.setAttribute('aria-selected', String(laySelected.has(b.dataset.key!)));
     layList.querySelector<HTMLElement>('button.row[aria-selected=true]')?.scrollIntoView?.({ block: 'nearest' });
   };

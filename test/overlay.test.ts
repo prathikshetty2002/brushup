@@ -873,6 +873,90 @@ describe('the Layers tab', () => {
   });
 });
 
+describe('the Layers tab on a big page', () => {
+  const q = (sel: string) => o.root.querySelector(sel) as HTMLElement;
+  const rows = () => [...o.root.querySelectorAll('.layers button.row')] as HTMLButtonElement[];
+  const names = () => rows().map((r) => r.querySelector('.lnm')!.textContent);
+  const filter = () => q('.layfilter') as HTMLInputElement;
+  const type = (v: string) => ((filter().value = v), filter().dispatchEvent(new Event('input', { bubbles: true })));
+
+  /** 30 groups of three nested divs with a span at the bottom: 120 elements, over the size where folding starts. */
+  const big = () => {
+    document.body.innerHTML = Array.from({ length: 30 }, (_, i) => `<div data-brushup-id="g${i}" class="group-${i}"><div data-brushup-id="m${i}"><div data-brushup-id="d${i}"><span data-brushup-id="s${i}">leaf ${i}${i === 17 ? ' needle' : ''}</span></div></div></div>`).join('');
+  };
+
+  it('starts with everything below the top two levels folded, so a long page is a short list', () => {
+    big();
+    q('[data-tab=layers]').click();
+    expect(rows()).toHaveLength(90); // 30 groups × (group, middle, inner) - the leaves are folded away
+    expect(q('.laysum').textContent).toBe('120 elements');
+    expect(rows()[2].getAttribute('aria-expanded')).toBe('false');
+    expect(rows()[1].getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('Expand and Collapse open and close every branch at once', () => {
+    big();
+    q('[data-tab=layers]').click();
+    (q('[data-act=layers-expand]') as HTMLButtonElement).click();
+    expect(rows()).toHaveLength(120);
+    (q('[data-act=layers-collapse]') as HTMLButtonElement).click();
+    expect(rows()).toHaveLength(30);
+  });
+
+  it('filters by text, tag, class or component, showing each match in its place under the rows above it', () => {
+    big();
+    q('[data-tab=layers]').click();
+    type('needle');
+    expect(names()).toEqual(['div', 'div', 'div', 'span']); // the leaf and the three rows it sits in
+    expect(q('.laysum').textContent).toBe('1 match');
+    expect(q('.layers .lm')!.parentElement!.querySelector('.lhint')!.textContent).toContain('leaf 17');
+    type('group-3');
+    expect(rows().map((r) => r.querySelector('.lhint')!.textContent)).toEqual(['.group-3']); // only that group matches, and nothing sits above it
+    type('SPAN');
+    expect(rows()).toHaveLength(30 * 4); // every span with the three rows above it, matched case-insensitively
+    type('');
+    expect(rows()).toHaveLength(90);
+  });
+
+  it('says when nothing matches, and Escape in the box clears the filter without clearing the selection', () => {
+    big();
+    q('[data-tab=layers]').click();
+    click(el('s4'));
+    type('zzz');
+    expect(q('.layers .empty')!.textContent).toBe('Nothing on the page matches.');
+    expect(rows()).toHaveLength(0);
+    filter().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true }));
+    expect(filter().value).toBe('');
+    expect(o.last('select').selection).toEqual({ id: 's4', tag: 'span' }); // the shortcut for deselecting never saw it
+  });
+
+  it('selecting something on the page unfolds the tree down to its row', () => {
+    big();
+    q('[data-tab=layers]').click();
+    expect(names()).not.toContain('span');
+    click(el('s22'));
+    const row = rows().find((r) => r.getAttribute('aria-selected') === 'true')!;
+    expect(row.querySelector('.lnm')!.textContent).toBe('span');
+    expect(row.getAttribute('aria-level')).toBe('4');
+    expect(rows()).toHaveLength(91); // just that one branch opened
+  });
+
+  it('says how many elements it left out when a page is huge', () => {
+    document.body.innerHTML = Array.from({ length: 2005 }, (_, i) => `<i data-brushup-id="x${i}"></i>`).join('');
+    q('[data-tab=layers]').click();
+    expect(q('.laysum').textContent).toBe('2000 elements (showing the first 2000 of 2005)');
+  });
+
+  it('typing in the filter box never triggers a canvas shortcut', () => {
+    big();
+    q('[data-tab=layers]').click();
+    click(el('s1'));
+    filter().dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true, composed: true }));
+    filter().dispatchEvent(new KeyboardEvent('keydown', { key: 'n', bubbles: true, composed: true }));
+    expect(o.all('edit')).toHaveLength(0);
+  });
+});
+
 describe('delete and duplicate', () => {
   const q = (sel: string) => o.root.querySelector(sel) as HTMLButtonElement;
 

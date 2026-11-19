@@ -651,30 +651,51 @@ const layerEls = new Map<string, HTMLElement>();
 const layerKey = (el: HTMLElement) => `${refOf(el)}#${Math.max(0, instances(refOf(el)).indexOf(el))}`;
 
 /** The page's tagged elements as a tree, in document order. Capped, so a huge page can't stall the panel. */
+const LAYER_CAP = 2000;
+let layerTotal = 0;
 function layerRows(): LayerView[] {
   const rows: LayerView[] = [];
   const depth = new Map<HTMLElement, number>();
+  const rowOf = new Map<HTMLElement, LayerView>();
+  const seen = new Map<string, number>();
   layerEls.clear();
+  layerTotal = 0;
   for (const el of document.querySelectorAll<HTMLElement>(TAGGED)) {
-    if (rows.length >= 600) break;
+    // The same counting `instances()` does, so a row's key matches `layerKey` (one pass instead of a scan per element).
+    const ref = refOf(el);
+    const n = seen.get(ref) ?? 0;
+    seen.set(ref, n + 1);
     if (el === document.documentElement || el === document.body || panel.host.contains(el) || el.closest('head')) continue; // the page itself, not its <head>
+    layerTotal++;
+    if (rows.length >= LAYER_CAP) continue;
     const parent = el.parentElement?.closest<HTMLElement>(TAGGED) ?? null;
     const d = parent && depth.has(parent) ? depth.get(parent)! + 1 : 0;
     depth.set(el, d);
     const use = DEV ? el.getAttribute(USE) : null;
-    const text = [...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent ?? '').join('').trim().replace(/\s+/g, ' ');
-    const cls = (el.getAttribute('class') ?? '').trim().split(/\s+/)[0];
-    const key = layerKey(el);
+    const text = [...el.childNodes].filter((c) => c.nodeType === 3).map((c) => c.textContent ?? '').join('').trim().replace(/\s+/g, ' ');
+    const classes = [...el.classList];
+    const key = `${ref}#${n}`;
     layerEls.set(key, el);
-    rows.push({ key, depth: d, name: use ? (use.split('#')[1] ?? tagOf(el)) : tagOf(el), component: !!use, hint: el.id ? `#${el.id}` : text ? `“${text.slice(0, 28)}”` : cls ? `.${cls}` : '', hasChildren: false });
-    const above = parent && layerEls.size ? rows.find((r) => r.key === layerKey(parent)) : null;
+    const name = use ? (use.split('#')[1] ?? tagOf(el)) : tagOf(el);
+    const row: LayerView = {
+      key,
+      depth: d,
+      name,
+      component: !!use,
+      hint: el.id ? `#${el.id}` : text ? `“${text.slice(0, 28)}”` : classes[0] ? `.${classes[0]}` : '',
+      search: `${name} ${el.id} ${classes.slice(0, 8).join(' ')} ${text.slice(0, 60)}`.toLowerCase(),
+      hasChildren: false,
+    };
+    rows.push(row);
+    rowOf.set(el, row);
+    const above = parent ? rowOf.get(parent) : null;
     if (above) above.hasChildren = true;
   }
   return rows;
 }
 
 function refreshLayers() {
-  panel.setLayers(layerRows());
+  panel.setLayers(layerRows(), layerTotal);
   panel.setLayerSelection(selectedAll().map(layerKey));
 }
 
