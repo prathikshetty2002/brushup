@@ -232,6 +232,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .chnote { margin: 8px 0; padding: 7px 9px; border-left: 2px solid var(--warn); background: var(--raise); color: var(--muted); font-size: 11px; line-height: 1.5; }
 .note .reply { margin: 6px 0 0; padding: 5px 8px; border-left: 2px solid var(--ok); background: var(--raise); color: var(--muted); font-size: 11px; line-height: 1.5; }
 .a11yitem { border: 1px solid var(--line); border-radius: 3px; padding: 8px 9px; margin-bottom: 6px; background: var(--bg); }
+.a11yitem { padding: 0; } .a11yhead { display: block; position: relative; width: 100%; padding: 8px 26px 8px 9px; text-align: left; border-radius: 3px; } .a11yhead::after { content: '▸'; position: absolute; right: 9px; top: 9px; color: var(--faint); font-size: 10px; } .a11yitem.open .a11yhead::after { content: '▾'; } .a11yhead b { margin-top: 0; } .a11ybody { padding: 0 9px 9px; } .a11ybody[hidden] { display: none; }
 .a11yitem .rule { display: inline-block; margin-bottom: 4px; padding: 1px 6px; border-radius: 2px; background: var(--raise); color: var(--muted); font: 600 10px var(--mono); text-transform: uppercase; letter-spacing: .04em; }
 .a11yitem b { display: block; color: var(--text); font-weight: 600; font-size: 12px; line-height: 1.4; } .a11yitem p { margin: 3px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .layfilter { width: 100%; height: 26px; margin: 0 0 6px; padding: 0 8px; border: 1px solid var(--fieldline); border-radius: 3px; background: var(--field); color: var(--text); font: 11.5px system-ui; } .layfilter::placeholder { color: var(--faint); }
@@ -931,10 +932,9 @@ export function createPanel(hooks: PanelHooks) {
   let layRows: LayerView[] = [];
   let layTotal = 0;
   let laySelected = new Set<string>();
-  /** Folded or unfolded by hand. Anything not listed follows the default: on a big page, everything below the top two levels starts folded. */
+  /** Folded or unfolded by hand. Anything not listed is folded: the tree always starts closed, so it never overwhelms. */
   const layOverride = new Map<string, boolean>();
-  const BIG_PAGE = 60;
-  const isFolded = (row: LayerView) => layOverride.get(row.key) ?? (layRows.length > BIG_PAGE && row.depth >= 2);
+  const isFolded = (row: LayerView) => layOverride.get(row.key) ?? true;
   /** Indexes of the rows above `i` that contain it, nearest first. */
   const ancestorsOf = (i: number) => {
     const out: number[] = [];
@@ -1082,6 +1082,8 @@ export function createPanel(hooks: PanelHooks) {
   }
   const LEARN_HOSTS = new Set(['www.w3.org', 'www.figma.com', 'm2.material.io', 'developer.apple.com', 'baymard.com', 'boia.org', 'developer.mozilla.org']);
   let a11yAll: A11yView[] = [];
+  const a11yOpened = new Set<string>();
+  let a11yCards = 0;
   let a11yFilter: 'all' | 'accessibility' | 'design' = 'all';
   const filterBtns = [...root.querySelectorAll<HTMLButtonElement>('.a11yfilter button')];
   root.querySelector('[data-act=a11y-scan]')!.addEventListener('click', () => {
@@ -1105,6 +1107,22 @@ export function createPanel(hooks: PanelHooks) {
     for (const issue of issues) {
       const item = document.createElement('div');
       item.className = 'a11yitem';
+      const key = `${issue.rule}|${issue.detail.slice(0, 80)}`;
+      const head = document.createElement('button');
+      head.type = 'button';
+      head.className = 'a11yhead';
+      const body = document.createElement('div');
+      body.className = 'a11ybody';
+      body.id = `a11y-${a11yCards++}`;
+      const setOpen = (open: boolean) => {
+        body.hidden = !open;
+        head.setAttribute('aria-expanded', String(open));
+        item.classList.toggle('open', open);
+        if (open) a11yOpened.add(key);
+        else a11yOpened.delete(key);
+      };
+      head.setAttribute('aria-controls', body.id);
+      head.addEventListener('click', () => setOpen(!!body.hidden));
       const rule = document.createElement('span');
       rule.className = `rule${issue.category === 'design' ? ' design' : ''}`;
       rule.textContent = `${issue.category === 'design' ? 'Design · ' : ''}${[...RULES, ...DESIGN_RULES].find((r) => r.rule === issue.rule)?.label ?? issue.rule}`;
@@ -1124,12 +1142,14 @@ export function createPanel(hooks: PanelHooks) {
       if (issue.fix) act(issue.fix, () => hooks.onA11yFix(issue.id), 'apply');
       act('Locate', () => hooks.onA11yLocate(issue.id));
       act('Send to Claude', () => hooks.onA11yNote(issue.id));
-      item.append(rule, title, detail, acts);
+      head.append(rule, title);
+      body.append(detail, acts);
+      item.append(head, body);
       if (issue.basis) {
         const basis = document.createElement('p');
         basis.className = 'basis';
         basis.textContent = `${issue.strength === 'convention' ? 'Common practice. ' : issue.strength === 'guideline' ? 'Guideline. ' : issue.strength === 'standard' ? 'Standard. ' : ''}${issue.basis}`;
-        item.append(basis);
+        body.append(basis);
       }
       if (issue.learn && LEARN_HOSTS.has(new URL(issue.learn).hostname)) {
         const learn = document.createElement('a');
@@ -1138,8 +1158,9 @@ export function createPanel(hooks: PanelHooks) {
         learn.target = '_blank';
         learn.rel = 'noopener noreferrer';
         learn.textContent = 'Learn more ↗';
-        item.append(learn);
+        body.append(learn);
       }
+      setOpen(a11yOpened.has(key)); // closed unless you opened it, and it stays as you left it when the page is checked again
       a11yList.append(item);
     }
   };
@@ -1226,7 +1247,6 @@ export function createPanel(hooks: PanelHooks) {
         pre.append(line);
       }
       d.append(pre);
-      if (f.byBrushup && mine.length === 1) d.open = true;
       chList.append(d);
     }
     if (view.truncated) note('Some diffs were too large to show.');

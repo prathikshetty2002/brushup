@@ -786,6 +786,15 @@ describe('the Changes tab', () => {
     expect((q('[data-act=changes-copy]') as HTMLButtonElement).disabled).toBe(false);
   });
 
+  it('lists the files closed, even when Brushup edited only one', async () => {
+    q('[data-tab=changes]').click();
+    await settle();
+    o.reply({ ok: true, changes: { ...changes, files: [changes.files[0]] } });
+    await settle();
+    expect(o.root.querySelectorAll('.chfile')).toHaveLength(1);
+    expect((o.root.querySelector('.chfile') as HTMLDetailsElement).open).toBe(false);
+  });
+
   it('says so for a project that is not in git, and for a clean tree', async () => {
     q('[data-tab=changes]').click();
     await settle();
@@ -814,18 +823,21 @@ describe('the Layers tab', () => {
   const rows = () => [...o.root.querySelectorAll('.layers button.row')] as HTMLButtonElement[];
   const name = (r: HTMLElement) => r.querySelector('.lnm')!.textContent;
 
-  it('lists the page as a tree: nested elements indented under their parent, with a hint to tell them apart', () => {
+  it('starts folded, so only the top level shows; nested elements are indented under their parent once opened', () => {
     q('[data-tab=layers]').click();
-    expect(rows().map((r) => [name(r), r.getAttribute('aria-level')])).toEqual([['h1', '1'], ['p', '1'], ['div', '1'], ['span', '2']]);
+    expect(rows().map((r) => [name(r), r.getAttribute('aria-level')])).toEqual([['h1', '1'], ['p', '1'], ['div', '1']]);
     expect(rows()[0].querySelector('.lhint')!.textContent).toBe('“Hello”');
     expect(rows()[1].querySelector('.lhint')!.textContent).toBe('“World”');
-    expect(rows()[2].getAttribute('aria-expanded')).toBe('true'); // only elements with children can fold
+    expect(rows()[2].getAttribute('aria-expanded')).toBe('false'); // only elements with children can fold
     expect(rows()[0].hasAttribute('aria-expanded')).toBe(false);
     expect(q('.laysum').textContent).toBe('4 elements');
+    (rows()[2].querySelector('.lcaret') as HTMLElement).click();
+    expect(rows().map((r) => [name(r), r.getAttribute('aria-level')])).toEqual([['h1', '1'], ['p', '1'], ['div', '1'], ['span', '2']]);
   });
 
   it('clicking a row selects that element, Shift adds, and the row follows the selection made on the page', () => {
     q('[data-tab=layers]').click();
+    (q('[data-act=layers-expand]') as HTMLButtonElement).click();
     rows()[1].click();
     expect(o.last('select').selection).toEqual({ id: 'a2', tag: 'p' });
     expect(rows()[1].getAttribute('aria-selected')).toBe('true');
@@ -835,25 +847,28 @@ describe('the Layers tab', () => {
     expect(rows().map((r) => r.getAttribute('aria-selected'))).toEqual(['true', 'false', 'false', 'false']);
   });
 
-  it('folding hides everything under a row, and unfolding brings it back', () => {
+  it('opening a row shows what is under it, and closing it hides it again', () => {
     q('[data-tab=layers]').click();
-    (rows()[2].querySelector('.lcaret') as HTMLElement).click();
     expect(rows().map(name)).toEqual(['h1', 'p', 'div']);
-    expect(rows()[2].getAttribute('aria-expanded')).toBe('false');
     (rows()[2].querySelector('.lcaret') as HTMLElement).click();
     expect(rows().map(name)).toEqual(['h1', 'p', 'div', 'span']);
+    expect(rows()[2].getAttribute('aria-expanded')).toBe('true');
+    (rows()[2].querySelector('.lcaret') as HTMLElement).click();
+    expect(rows().map(name)).toEqual(['h1', 'p', 'div']);
   });
 
-  it('the arrow keys move between rows, and Left folds an open row', () => {
+  it('the arrow keys move between rows, Right opens a closed row and Left closes an open one', () => {
     q('[data-tab=layers]').click();
     const first = rows()[0];
     first.focus();
     first.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
     expect(o.root.activeElement).toBe(rows()[1]);
     rows()[2].focus();
+    rows()[2].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    expect(rows().map(name)).toEqual(['h1', 'p', 'div', 'span']);
+    expect(o.root.activeElement).toBe(rows()[2]);
     rows()[2].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
     expect(rows().map(name)).toEqual(['h1', 'p', 'div']);
-    expect(o.root.activeElement).toBe(rows()[2]);
   });
 
   it('leaves out the page head and the overlay itself', () => {
@@ -861,6 +876,7 @@ describe('the Layers tab', () => {
     meta.setAttribute('data-brushup-id', 'm1');
     document.head.append(meta);
     q('[data-tab=layers]').click();
+    (q('[data-act=layers-expand]') as HTMLButtonElement).click();
     expect(rows().map(name)).toEqual(['h1', 'p', 'div', 'span']);
     meta.remove();
   });
@@ -885,13 +901,12 @@ describe('the Layers tab on a big page', () => {
     document.body.innerHTML = Array.from({ length: 30 }, (_, i) => `<div data-brushup-id="g${i}" class="group-${i}"><div data-brushup-id="m${i}"><div data-brushup-id="d${i}"><span data-brushup-id="s${i}">leaf ${i}${i === 17 ? ' needle' : ''}</span></div></div></div>`).join('');
   };
 
-  it('starts with everything below the top two levels folded, so a long page is a short list', () => {
+  it('always starts fully folded, so even a long page is a short list of its top level', () => {
     big();
     q('[data-tab=layers]').click();
-    expect(rows()).toHaveLength(90); // 30 groups × (group, middle, inner) - the leaves are folded away
+    expect(rows()).toHaveLength(30); // the 30 groups; everything inside them is folded away
     expect(q('.laysum').textContent).toBe('120 elements');
-    expect(rows()[2].getAttribute('aria-expanded')).toBe('false');
-    expect(rows()[1].getAttribute('aria-expanded')).toBe('true');
+    expect(rows().every((r) => r.getAttribute('aria-expanded') === 'false')).toBe(true);
   });
 
   it('Expand and Collapse open and close every branch at once', () => {
@@ -915,7 +930,7 @@ describe('the Layers tab on a big page', () => {
     type('SPAN');
     expect(rows()).toHaveLength(30 * 4); // every span with the three rows above it, matched case-insensitively
     type('');
-    expect(rows()).toHaveLength(90);
+    expect(rows()).toHaveLength(30); // clearing the filter goes back to the folded list
   });
 
   it('says when nothing matches, and Escape in the box clears the filter without clearing the selection', () => {
@@ -938,7 +953,7 @@ describe('the Layers tab on a big page', () => {
     const row = rows().find((r) => r.getAttribute('aria-selected') === 'true')!;
     expect(row.querySelector('.lnm')!.textContent).toBe('span');
     expect(row.getAttribute('aria-level')).toBe('4');
-    expect(rows()).toHaveLength(91); // just that one branch opened
+    expect(rows()).toHaveLength(33); // just that one branch opened, down to the selection
   });
 
   it('says how many elements it left out when a page is huge', () => {
@@ -1057,6 +1072,35 @@ describe('the A11y tab', () => {
     expect(learn.rel).toBe('noopener noreferrer');
     expect(o.root.querySelectorAll('.a11ywhat li').length).toBeGreaterThanOrEqual(15);
     expect(buttons()).toEqual([expect.stringMatching(/^Change color to #/), 'Locate', 'Send to Claude']);
+  });
+
+  it('shows each issue as one closed line, and opens the detail only when you ask', () => {
+    faint();
+    q('[data-tab=a11y]').click();
+    const head = q('.a11yhead');
+    const body = q('.a11ybody');
+    expect(head.querySelector('b')!.textContent).toMatch(/Text is hard to read/);
+    expect(head.getAttribute('aria-expanded')).toBe('false');
+    expect(body.hidden).toBe(true); // the explanation, the buttons and the source stay out of sight
+    expect(head.getAttribute('aria-controls')).toBe(body.id);
+    head.click();
+    expect(body.hidden).toBe(false);
+    expect(head.getAttribute('aria-expanded')).toBe('true');
+    expect(q('.a11yitem').classList.contains('open')).toBe(true);
+    head.click();
+    expect(body.hidden).toBe(true);
+  });
+
+  it('keeps a card as you left it when the page is checked again, and only that card', () => {
+    faint();
+    el('a3').setAttribute('style', 'padding-top:15px');
+    layout(el('a3'), { x: 0, y: 0, width: 100, height: 40 });
+    q('[data-tab=a11y]').click();
+    const heads = () => [...o.root.querySelectorAll('.a11yhead')] as HTMLElement[];
+    expect(heads()).toHaveLength(2);
+    heads()[1].click();
+    (q('[data-act=a11y-scan]') as HTMLButtonElement).click();
+    expect(heads().map((h) => h.getAttribute('aria-expanded'))).toEqual(['false', 'true']);
   });
 
   it('says so when the page is clean, and never claims it is a pass', () => {
