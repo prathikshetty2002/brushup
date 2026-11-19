@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **React Router v7 (and Remix on Vite) now loads the canvas.** These frameworks render the page on the server, so the Vite plugin's usual place to add the overlay (`index.html`) never runs and no canvas appeared, even though elements were being tagged. The plugin now loads the overlay from the root route (`app/root.tsx`, or `src/root.tsx`) instead, once and in the browser only. Verified by hand in a real React Router 7 + Tailwind 4 app: the canvas appears, a text edit rewrote the JSX, and a nudge wrote `ml-2.5` onto the right element. Remix on Vite uses the same code path but hasn't been tried.
+
 ## 0.1.6
 
 - **A Checks tab: 15 accessibility checks and 11 design checks, with no AI and no tokens.** Filter by All, Accessibility or Design. Accessibility: text contrast, tap targets, small text, missing alt text, unnamed controls, vague links, skipped or empty headings, things that look clickable but a keyboard can't reach, a custom `tabindex`, autoplaying media, duplicate ids, and page basics (language, title, zoom, `<main>`, `h1`). Design: spacing off a 4px grid, over-long or tightly packed paragraphs, long centered text, headings that don't stand out, too many font sizes, cramped buttons (measured from the real gap, so fixed-height shadcn buttons aren't flagged), stretched images, clipped text, sideways scrolling, and text against the screen edge. Contrast, tap-size, small-text and most design problems have an Apply button that writes a normal, undoable style edit; the rest have Send to Claude, which pins a note.

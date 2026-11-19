@@ -185,7 +185,7 @@ What it does not protect against: **other users or processes on the same machine
 
 ## Not yet
 
-- Vue, Svelte, Astro, Remix, SvelteKit (the instrumenter is JSX-only; Vite plugin works for Remix/React Router but is untested).
+- Vue, Svelte, Astro, SvelteKit (the instrumenter is JSX-only). React Router v7 works (tested by hand on 7 with Tailwind 4: text and style edits write back); Remix on Vite uses the same plugin and is expected to work, but is untested.
 - CSS-in-JS (styled-components, Emotion, vanilla-extract): their class names are generated at runtime, so there is no rule to find; elements styled that way get an inline style.
 - Resize handles on a flex item that sets `flex-basis` write `flex-basis` (a width would be ignored). When the page still refuses a size (a `max-width`, a `min-width`, `flex-grow`, a grid track, an inline element), the readout says why while you drag and the status says it again after saving; the class is still written.
 - MCP: no screenshot tool, no write tools for source (by design), and `brushup_inspect` answers one element at a time.
