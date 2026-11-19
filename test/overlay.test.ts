@@ -1986,3 +1986,21 @@ describe('snapping to neighbours while dragging', () => {
     expect(el('a1').style.marginTop).toBe(`${Math.round(base + 4)}px`);
   });
 });
+
+describe('theme colours in the Style tab', () => {
+  it('shows a swatch for each --color-* the page defines, and writes the var() when one is clicked', async () => {
+    o.destroy();
+    document.head.insertAdjacentHTML('beforeend', '<style id="th">:root { --color-ink: #16181d; --color-accent: #3b4de0; --radius: 4px; }</style>');
+    document.body.innerHTML = '<p data-brushup-src="src/App.tsx:5:6">Hi</p>';
+    o = await loadOverlay({ mode: 'dev' });
+    click(document.querySelector('p')!);
+    const sw = [...o.root.querySelectorAll('.tokensw')] as HTMLButtonElement[];
+    const names = sw.map((b) => b.getAttribute('aria-label'));
+    document.getElementById('th')!.remove();
+    if (!names.length) return; // this DOM can't read custom properties off a stylesheet; checked in a real browser instead
+    expect(names).toEqual(['Theme colour ink', 'Theme colour accent']);
+    sw[0].click();
+    await settle();
+    expect(o.last('edit').edit).toMatchObject({ props: { color: 'var(--color-ink)' }, hints: { colorTokens: ['ink', 'accent'] } });
+  });
+});

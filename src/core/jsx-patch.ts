@@ -415,7 +415,7 @@ function patchClass(code: string, file: string, edit: Edit, prop: string, value:
   const { el } = located(code, file, edit);
   const sent = edit.kind === 'style' ? edit.hints : undefined;
   // Only snap when the page says 1rem is 16px, otherwise `ml-10` wouldn't be the 40px the user saw.
-  const hints: ClassHints = { lineHeight: sent?.lineHeight, scale: sent?.rootPx === 16 ? scale : undefined };
+  const hints: ClassHints = { lineHeight: sent?.lineHeight, scale: sent?.rootPx === 16 ? scale : undefined, colorTokens: Array.isArray(sent?.colorTokens) ? sent!.colorTokens.filter((n) => typeof n === 'string').slice(0, 200) : undefined };
   const attr = attrNamed(el, 'className');
   if (!attr) {
     const classes = tailwindClasses('', prop, value, hints, variant);

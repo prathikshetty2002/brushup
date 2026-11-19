@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Pick a theme colour.** Under the Color field the Style tab shows a swatch for every colour the page's theme defines (`--color-*` custom properties on the root, which is what Tailwind 4's `@theme` produces). One click writes the theme's own class (`text-accent`) instead of a hex in brackets, replaces any colour class already on the element, and leaves the text size and weight alone. Projects with no `--color-*` variables simply show no swatches. The list is read from the page's own stylesheets, so nothing is guessed, and a token the page didn't list is never turned into a class.
+
 ## 0.1.9
 
 - **Edit for one screen size.** In a Tailwind project the Style tab has an **Applies to** switch: *All sizes*, or *md and up* (named for the breakpoint your window is at). The second writes your change as `md:ml-4` instead of `ml-4`, replacing only the class that already has that same prefix, so other sizes keep their values. It works for every edit that writes a style: fields, nudging with the arrow keys, dragging and resizing. Checks fixes always apply to every size. Brushup refuses, with the reason, rather than write for every size when it can't write a class (a computed `className`, a plain HTML page, a project without Tailwind). A warning names a larger-size class that will still win. The switch is the first piece of responsive editing; it uses your window width, so resize it or use your browser's device mode to look at other sizes.

@@ -39,6 +39,8 @@ export interface StyleEdit {
     lineHeight?: string;
     /** The page's root font size in px. Tailwind's spacing units are rem, so on-scale values are only written as plain utilities when this is 16. */
     rootPx?: number;
+    /** Names of the page's theme colours (`--color-ink` is `ink`), sent with a colour edit. */
+    colorTokens?: string[];
   };
 }
 

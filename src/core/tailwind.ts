@@ -35,6 +35,7 @@ const PREFIX: Record<string, string> = {
 const FONT_SIZE = /^!?text-(xs|sm|base|lg|xl|\d+xl|\[(?:length:|size:)?-?[\d.]+(?:px|rem|em|%)?\])(?:\/\S+)?$/;
 // Named sizes bundle a line-height; the arbitrary `text-[40px]` form does not.
 const NAMED_SIZE = /^!?text-(xs|sm|base|lg|xl|\d+xl)(?:\/\S+)?$/;
+const THEME_COLOR = /^var\(--color-([a-z0-9-]+)\)$/;
 const COLOR = /^!?text-(white|black|inherit|current|transparent|\[(?:color:)?(?:#|rgb|hsl|oklch|oklab|var\()[^\]]*\]|[a-z]+-\d{2,3}(?:\/\d+)?)$/;
 const WEIGHT_NAMES: Record<string, string> = {
   '100': 'thin',
@@ -49,14 +50,20 @@ const WEIGHT_NAMES: Record<string, string> = {
 };
 const WEIGHT = /^!?font-(thin|extralight|light|normal|medium|semibold|bold|extrabold|black|\[\d+\])$/;
 
-function mapping(prop: string, value: string, scale?: Scale): Mapping {
+function mapping(prop: string, value: string, scale?: Scale, tokens: string[] = []): Mapping {
   const prefix = PREFIX[prop];
   if (prefix) {
     const lookahead = prefix === 'gap' ? '(?!x-|y-)' : '';
     return { remove: new RegExp(`^!?-?${prefix}-${lookahead}`), make: (scale && snapped(prefix, value, scale)) || `${prefix}-${arb(value)}` };
   }
   if (prop === 'font-size') return { remove: FONT_SIZE, make: `text-${arb(value)}` };
-  if (prop === 'color') return { remove: COLOR, make: `text-${arb(value)}` };
+  if (prop === 'color') {
+    // A theme colour (`var(--color-ink)`) is the utility Tailwind makes from it (`text-ink`); and the ones already on the element are replaced too.
+    const theme = THEME_COLOR.exec(value.trim());
+    const known = tokens.filter((n) => /^[a-z0-9-]+$/.test(n));
+    const remove = known.length ? new RegExp(`${COLOR.source}|^!?text-(?:${known.join('|')})(?:/\\d+)?$`) : COLOR;
+    return { remove, make: theme && known.includes(theme[1]) ? `text-${theme[1]}` : `text-${arb(value)}` };
+  }
   if (prop === 'font-weight') return { remove: WEIGHT, make: WEIGHT_NAMES[value] ? `font-${WEIGHT_NAMES[value]}` : `font-${arb(value)}` };
   if (prop === 'line-height') return { remove: /^!?leading-/, make: `leading-${arb(value)}` };
   const escaped = prop.replace(/[^\w-]/g, '');
@@ -70,6 +77,8 @@ export interface ClassHints {
   lineHeight?: string;
   /** Set (by the server, after checking the page's root font size) to write on-scale values as plain utilities. */
   scale?: Scale;
+  /** The names of the page's theme colours (`ink` for `--color-ink`), so `text-ink` is known to be a colour and not a size. */
+  colorTokens?: string[];
 }
 
 const V3_STEPS = new Set([0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 72, 80, 96]);
@@ -100,7 +109,7 @@ function snapped(prefix: string, value: string, scale: Scale): string | null {
 export function tailwindClasses(classes: string, prop: string, value: string, hints: ClassHints = {}, variant = ''): string | null {
   if (/[\]\[{}"';\\]/.test(value) || (hints.lineHeight && !/^[\d.]+$/.test(hints.lineHeight))) return null;
   if (variant && !isVariant(variant)) return null;
-  const { remove, make } = mapping(prop.toLowerCase(), value, hints.scale);
+  const { remove, make } = mapping(prop.toLowerCase(), value, hints.scale, hints.colorTokens);
   const tokens = classes.split(/\s+/).filter(Boolean);
   // Only utilities under exactly this variant are the ones replaced: `md:ml-4` is not touched by an edit with no variant, and the reverse.
   const utility = (c: string) => {

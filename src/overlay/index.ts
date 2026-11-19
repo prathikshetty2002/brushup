@@ -230,6 +230,7 @@ const suggestKind = (el: HTMLElement): NoteKind => (el.hasAttribute(USE) ? 'comp
 function refreshPanel() {
   const el = selected();
   const detail = sels.length > 1 ? `${sels.length} elements selected` : '';
+  if (el) panel.setThemeColors(themeColors());
   panel.show(el, detail || undefined, el ? `<${tagOf(el)}>` : '', el ? suggestKind(el) : 'element', el && DEV ? sourceOf(el) : null);
 }
 
@@ -657,6 +658,41 @@ async function sendMany(edits: Edit[]): Promise<Result> {
   return r;
 }
 
+/* ---------- the page's theme colours ---------- */
+
+interface ThemeColor {
+  name: string;
+  value: string;
+}
+let themeCache: { at: number; colors: ThemeColor[] } | null = null;
+
+/**
+ * The colours the page's theme defines: `--color-*` custom properties declared on the root (Tailwind 4's `@theme`, or the same
+ * convention written by hand). They are read from the page's own stylesheets, so a project with none simply has no list.
+ */
+function themeColors(): ThemeColor[] {
+  if (themeCache && Date.now() - themeCache.at < 2000) return themeCache.colors;
+  const names = new Set<string>();
+  const visit = (rules: CSSRuleList) => {
+    for (const rule of rules) {
+      if (rule instanceof CSSStyleRule && /(^|,)\s*(:root|:host|html)\s*(,|$)/.test(rule.selectorText)) {
+        for (const prop of rule.style) if (/^--color-[a-z0-9-]+$/.test(prop)) names.add(prop.slice(8));
+      } else if ('cssRules' in rule) visit((rule as CSSGroupingRule).cssRules); // @layer theme { … }, @media, @supports
+    }
+  };
+  for (const sheet of document.styleSheets) {
+    try {
+      visit(sheet.cssRules);
+    } catch {
+      /* a stylesheet from another origin can't be read */
+    }
+  }
+  const style = getComputedStyle(document.documentElement);
+  const colors = [...names].map((name) => ({ name, value: style.getPropertyValue(`--color-${name}`).trim() })).filter((c) => c.value && !/^(inherit|initial|unset|revert)/.test(c.value));
+  themeCache = { at: Date.now(), colors };
+  return colors;
+}
+
 /* ---------- editing for a screen size ---------- */
 
 /** Tailwind's default breakpoints (v3 and v4 agree): the smallest width each prefix applies from. */
@@ -684,7 +720,7 @@ async function commitStyles(items: { el: HTMLElement; props: Record<string, stri
     const ref = refOf(el);
     if (seen.has(ref)) continue; // list items share one source line: a single edit covers them all
     seen.add(ref);
-    const hints = { ...(Number.isFinite(rootPx) ? { rootPx } : {}), ...('font-size' in props ? { lineHeight: lineHeightRatio(el) } : {}) };
+    const hints = { ...(Number.isFinite(rootPx) ? { rootPx } : {}), ...('font-size' in props ? { lineHeight: lineHeightRatio(el) } : {}), ...('color' in props ? { colorTokens: themeColors().map((c) => c.name) } : {}) };
     edits.push({ kind: 'style', id: ref, tag: tagOf(el), props, scope: variant ? 'element' : scope, ...(variant ? { variant } : {}), hints, ...(DEV ? { ident: identOf(el), ver: verOf(el) } : {}) });
   }
   const previewed = previewable(variant) ? items.map((i) => preview(i.el, i.props)) : [];

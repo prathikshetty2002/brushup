@@ -514,3 +514,23 @@ describe('editing for a screen size (a variant)', () => {
     expect(tailwindClasses('a', 'margin-left', '4px', {}, 'x y')).toBeNull();
   });
 });
+
+describe('theme colours', () => {
+  const tw = { tailwind: true };
+  const code = `export default function P() {\n  return <p className="text-lg text-muted font-medium">x</p>;\n}\n`;
+  const e = (value: string, tokens?: string[]): StyleEdit => ({ kind: 'style', id: idOf(code, 'p'), tag: 'p', props: { color: value }, ...(tokens ? { hints: { colorTokens: tokens } } : {}) });
+
+  it('writes the theme\'s own class for a theme colour, replacing the colour class already there but not the size', () => {
+    const out = run(code, e('var(--color-ink)', ['ink', 'muted']), tw).files[FILE];
+    expect(out).toContain('className="text-lg font-medium text-ink"');
+  });
+
+  it('replaces a theme colour class when a hex is chosen', () => {
+    const out = run(code, e('#112233', ['ink', 'muted']), tw).files[FILE];
+    expect(out).toContain('className="text-lg font-medium text-[#112233]"');
+  });
+
+  it('does not invent a utility for a token the page did not list', () => {
+    expect(run(code, e('var(--color-nope)', ['ink']), tw).files[FILE]).toContain('text-[var(--color-nope)]');
+  });
+});

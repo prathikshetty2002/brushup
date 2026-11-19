@@ -232,7 +232,9 @@ select { appearance: none; -webkit-appearance: none; padding-right: 20px; backgr
 input[type=color] { padding: 2px; cursor: pointer; } input[type=color]::-webkit-color-swatch-wrapper { padding: 0; } input[type=color]::-webkit-color-swatch { border: 0; border-radius: 1px; } input[type=color]::-moz-color-swatch { border: 0; border-radius: 1px; }
 input:hover, select:hover, textarea:hover { border-color: var(--faint); } input:disabled { opacity: .35; }
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
-.vary { margin: 0 0 12px; } .varylbl2 { margin-top: 8px; } .varylbl { display: block; margin-bottom: 4px; color: var(--muted); font-size: 11px; }
+.vary { margin: 0 0 12px; } .tokens { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin: 6px 0 2px; } .tokenlbl { flex: 0 0 100%; color: var(--faint); font-size: 10.5px; }
+.tokensw { width: 18px; height: 18px; padding: 0; border: 1px solid var(--line-strong, rgba(0,0,0,.25)); border-radius: 2px; cursor: pointer; } .tokensw:hover { outline: 2px solid var(--accent); outline-offset: 1px; }
+.varylbl2 { margin-top: 8px; } .varylbl { display: block; margin-bottom: 4px; color: var(--muted); font-size: 11px; }
 .varyseg { display: flex; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; } .varyseg button { flex: 1; padding: 5px 6px; border: 0; background: transparent; color: var(--muted); font: 500 11px var(--sans); cursor: pointer; } .varyseg button + button { border-left: 1px solid var(--line); }
 .varyseg button[aria-pressed=true] { background: var(--accent); color: var(--on-accent); } .varyseg button:disabled { opacity: .45; cursor: default; }
 .varynote { margin: 6px 0 0; color: var(--faint); font-size: 10.5px; line-height: 1.45; }
@@ -515,6 +517,11 @@ export function createPanel(hooks: PanelHooks) {
   const undoBtn = $<HTMLButtonElement>('.toast .undo');
   const info = $<HTMLDivElement>('[data-pane=style] .info');
   const fieldsEl = $<HTMLDivElement>('.fields');
+  /* The page's theme colours, as swatches under the Color field. */
+  const tokenBox = document.createElement('div');
+  tokenBox.className = 'tokens';
+  tokenBox.hidden = true;
+  let tokenKey = '';
   const varyEl = $<HTMLElement>('.vary');
   const varyBtns = [...varyEl.querySelectorAll<HTMLButtonElement>('[data-vary]')];
   const stateBtns = [...varyEl.querySelectorAll<HTMLButtonElement>('[data-state]')];
@@ -691,6 +698,7 @@ export function createPanel(hooks: PanelHooks) {
       row.className = 'colorrow';
       row.append(input, hexIn);
       label.append(row);
+      if (f.prop === 'color') label.append(tokenBox);
     } else label.append(input);
     return label;
   };
@@ -1524,6 +1532,31 @@ export function createPanel(hooks: PanelHooks) {
       varyFrom = from;
       noteVary();
       varyEl.hidden = !available || !hasSel;
+    },
+    /** Swatches for the page's theme colours (`--color-ink`), under Color: one click writes the theme's own class instead of a hex. */
+    setThemeColors(colors: { name: string; value: string }[]) {
+      const key = colors.map((c) => `${c.name}=${c.value}`).join('|');
+      if (key === tokenKey) return;
+      tokenKey = key;
+      tokenBox.hidden = !colors.length;
+      tokenBox.replaceChildren();
+      const lbl = document.createElement('span');
+      lbl.className = 'tokenlbl';
+      lbl.textContent = 'Theme colours';
+      tokenBox.append(lbl);
+      for (const c of colors.slice(0, 40)) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'tokensw';
+        b.style.background = c.value; // a colour the page's own stylesheet defined
+        b.title = `${c.name} (${c.value})`;
+        b.setAttribute('aria-label', `Theme colour ${c.name}`);
+        b.addEventListener('click', () => {
+          hooks.onStyle({ color: `var(--color-${c.name})` }, 'auto');
+          b.blur();
+        });
+        tokenBox.append(b);
+      }
     },
     /** Drop focus from any panel field so keyboard shortcuts and fresh values reach the canvas. */
     blur() {

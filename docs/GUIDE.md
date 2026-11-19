@@ -98,6 +98,8 @@ Drags snap to a 4px grid (Tailwind's spacing step). Hold **Shift** for 1px preci
 
 **Editing for one screen size, or for hover, focus and dark mode.** In a Tailwind project, the Style tab has an **Applies to** switch. *All sizes* writes `ml-4`; the other button is named for the breakpoint your window is at right now (say *md and up*) and writes `md:ml-4`, so the change applies from that width up and leaves smaller screens alone. The window decides which size you are looking at: resize it, or open your browser's device mode (Ctrl/Cmd+Shift+M in Chrome) and pick a phone or tablet. Below it, the **State** switch writes `hover:`, `focus:` or `dark:` classes the same way (and combines with a screen size, as in `dark:md:hover:ml-4`). The page can't show a hover or focus change until you hover or focus the element, so Brushup skips its instant preview for those and the edit appears after your dev server reloads. Only Tailwind classes can carry a variant, so on a `className` built with `cn(...)`, or on a plain HTML page, Brushup refuses with the reason instead of writing the change for every size.
 
+**Theme colours.** If your project defines colours as `--color-*` variables (Tailwind 4's `@theme` does), the Style tab shows them as swatches under Color. Click one and Brushup writes the theme's own class, such as `text-accent`, so the colour stays tied to your design system instead of becoming a one-off hex.
+
 **Three things worth knowing**
 
 - **One line of JSX can be many elements.** The three cards in a `.map()` are one `<Card>` in your source, so resizing one resizes all three. The status line tells you ("2 elements share this JSX").
