@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **Changes tab: long lines wrap, and the part that changed is marked.** A line of JSX with a long Tailwind class list used to run off the edge of the panel, so the edit itself was often out of sight. Lines now wrap with a hanging indent, a removed line and the added line that replaced it have the differing characters highlighted, and a file's diff opens scrolled to the first change instead of the top of its context.
+- **Layers: components are named at their boundary, whether or not they forward props.** Before, `<FeatureCard>` only appeared when the component passed extra props through to its root element. Now an element written in a different file from its parent shows the component it belongs to, taken from the file name (`‹FeatureCard›`, `‹Hero›`), and the filter box finds it by that name. Lower-case files such as `page.tsx` or `index.tsx` are left unnamed, since they say nothing about the component.
+
 ## 0.1.7
 
 - **Two new MCP tools, and a richer `brushup_inspect`: Claude can see the page without a screenshot.** `brushup_check` returns the Checks tab's findings as data: each problem, the element and where it is written, the standard or guideline behind it, and the style edit that fixes it. `brushup_console` returns the errors, warnings, uncaught exceptions and unhandled rejections the page has logged since the canvas loaded. `brushup_inspect` now also reports a stable handle (a short selector, and whether the element is mapped to source), its accessible name and role, its text contrast against the real background, what is on top of it at its centre, and which other elements overlap it. Seven tools in all. Checked end to end with a real MCP client against a running React Router app.

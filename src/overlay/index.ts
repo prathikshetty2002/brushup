@@ -700,6 +700,22 @@ const layerKey = (el: HTMLElement) => `${refOf(el)}#${Math.max(0, instances(refO
 /** The page's tagged elements as a tree, in document order. Capped, so a huge page can't stall the panel. */
 const LAYER_CAP = 2000;
 let layerTotal = 0;
+/** The file an element's markup was written in, from its source reference (`file:line:col`). */
+const fileOf = (el: HTMLElement) => el.getAttribute(SRC)?.replace(/:\d+:\d+$/, '') ?? null;
+
+/**
+ * The component an element's markup lives in, named after its file, when that differs from its parent's. A component does not
+ * have to forward props for this to show: its root element is written in `FeatureCard.tsx`, its parent in `Features.tsx`.
+ * Files named in lower case (`page.tsx`, `index.tsx`, `route.tsx`) say nothing about the component, so they are left out.
+ */
+function componentFrom(el: HTMLElement, parent: HTMLElement | null): string | undefined {
+  if (!DEV) return undefined;
+  const file = fileOf(el);
+  if (!file || (parent && fileOf(parent) === file)) return undefined;
+  const base = file.split('/').pop()!.replace(/\.[^.]+$/, '');
+  return /^[A-Z]/.test(base) ? base : undefined;
+}
+
 function layerRows(): LayerView[] {
   const rows: LayerView[] = [];
   const depth = new Map<HTMLElement, number>();
@@ -724,13 +740,15 @@ function layerRows(): LayerView[] {
     const key = `${ref}#${n}`;
     layerEls.set(key, el);
     const name = use ? (use.split('#')[1] ?? tagOf(el)) : tagOf(el);
+    const from = use ? undefined : componentFrom(el, parent);
     const row: LayerView = {
       key,
       depth: d,
       name,
       component: !!use,
+      from,
       hint: el.id ? `#${el.id}` : text ? `“${text.slice(0, 28)}”` : classes[0] ? `.${classes[0]}` : '',
-      search: `${name} ${el.id} ${classes.slice(0, 8).join(' ')} ${text.slice(0, 60)}`.toLowerCase(),
+      search: `${name} ${from ?? ''} ${el.id} ${classes.slice(0, 8).join(' ')} ${text.slice(0, 60)}`.toLowerCase(),
       hasChildren: false,
     };
     rows.push(row);

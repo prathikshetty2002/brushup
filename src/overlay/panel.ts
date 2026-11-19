@@ -1,5 +1,6 @@
 import { RULES } from './a11y';
 import { DESIGN_RULES } from './design';
+import { markDiff } from './diff-marks';
 import { HANDLE_KINDS, SIDES, type HandleKind, type Sides } from './handles-math';
 
 export type Mode = 'edit' | 'preview';
@@ -50,6 +51,8 @@ export interface LayerView {
   /** The tag, or the component's name when this is a component usage. */
   name: string;
   component: boolean;
+  /** The component this element's markup is written in (named after its file), when it is not the same as its parent's. */
+  from?: string;
   /** An id, a class or a piece of its text, to tell siblings apart. */
   hint: string;
   /** Lower-case text the filter box searches: name, id, classes and the start of its text. */
@@ -245,8 +248,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .chlist { min-width: 0; } .chfile { border: 1px solid var(--line); border-radius: 3px; margin-bottom: 6px; overflow: hidden; background: var(--bg); } .chfile summary { display: flex; gap: 8px; align-items: baseline; padding: 6px 8px; cursor: pointer; list-style: none; } .chfile summary::-webkit-details-marker { display: none; }
 .chfile .chnm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 11px var(--mono); color: var(--text); direction: rtl; text-align: left; } .chfile .chst { font: 600 10px var(--mono); color: var(--faint); }
 .chfile .chby { font-size: 10px; color: var(--accent); } .chfile .chadd { color: var(--ok); font: 11px var(--mono); } .chfile .chdel { color: var(--err); font: 11px var(--mono); }
-.chfile pre { margin: 0; padding: 6px 0; background: var(--bg); max-width: 100%; max-height: 240px; overflow: auto; border-top: 1px solid var(--line); font: 10.5px/1.5 var(--mono); } .chfile pre span { display: block; padding: 0 8px; white-space: pre; }
-.chfile pre .cha { background: rgba(76, 194, 168, .14); } .chfile pre .chd { background: rgba(240, 115, 92, .14); } .chfile pre .chh { color: var(--faint); }
+.chfile pre { margin: 0; padding: 6px 0; background: var(--bg); max-width: 100%; max-height: 240px; overflow: auto; border-top: 1px solid var(--line); font: 10.5px/1.5 var(--mono); } .chfile pre span { display: block; padding: 0 8px 0 22px; text-indent: -14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.chfile pre .cha { background: rgba(76, 194, 168, .14); } .chfile pre .chd { background: rgba(240, 115, 92, .14); } .chfile pre mark { color: inherit; border-radius: 2px; } .chfile pre .cha mark { background: rgba(76, 194, 168, .5); } .chfile pre .chd mark { background: rgba(240, 115, 92, .5); } .chfile pre .chh { color: var(--faint); }
 .chnote { margin: 8px 0; padding: 7px 9px; border-left: 2px solid var(--warn); background: var(--raise); color: var(--muted); font-size: 11px; line-height: 1.5; }
 .note .reply { margin: 6px 0 0; padding: 5px 8px; border-left: 2px solid var(--ok); background: var(--raise); color: var(--muted); font-size: 11px; line-height: 1.5; }
 .a11yitem { border: 1px solid var(--line); border-radius: 3px; padding: 8px 9px; margin-bottom: 6px; background: var(--bg); }
@@ -270,7 +273,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .layers li { display: block; } .layers button.row { display: flex; align-items: center; gap: 4px; width: 100%; padding: 3px 6px; border-radius: 0; text-align: left; color: var(--muted); font: 11.5px/1.4 var(--mono); background: none; white-space: nowrap; overflow: hidden; }
 .layers button.row:hover { background: var(--raise); color: var(--text); } .layers button.row[aria-selected=true] { background: rgba(var(--accent-rgb), .14); color: var(--text); box-shadow: inset 2px 0 var(--accent); }
 .layers .lcaret { width: 14px; flex: none; text-align: center; color: var(--faint); font-size: 9px; cursor: pointer; } .layers .lcaret:hover { color: var(--text); }
-.layers .lnm { color: var(--text); } .layers .lnm.comp { color: var(--accent); } .layers .lhint { color: var(--faint); overflow: hidden; text-overflow: ellipsis; }
+.layers .lnm { color: var(--text); } .layers .lnm.comp { color: var(--accent); } .layers .lfrom { color: var(--accent); opacity: .75; font-size: 10px; white-space: nowrap; } .layers .lhint { color: var(--faint); overflow: hidden; text-overflow: ellipsis; }
 .a11yfilter { display: flex; gap: 4px; margin: 0 0 8px; } .a11yfilter button { padding: 3px 9px; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); font-size: 11px; } .a11yfilter button[aria-pressed=true] { background: var(--raise-2); color: var(--text); border-color: var(--fieldline); }
 .a11yitem .rule.design { color: var(--pad); }
 .a11yitem .basis { margin: 5px 0 0; padding-left: 7px; border-left: 2px solid var(--line); color: var(--faint); font-size: 10.5px; line-height: 1.5; }
@@ -1051,7 +1054,15 @@ export function createPanel(hooks: PanelHooks) {
       const hint = document.createElement('span');
       hint.className = 'lhint';
       hint.textContent = row.hint;
-      b.append(caret, name, hint);
+      b.append(caret, name);
+      if (row.from) {
+        const from = document.createElement('span');
+        from.className = 'lfrom';
+        from.textContent = `‹${row.from}›`;
+        from.title = `Written in ${row.from}`;
+        b.append(from);
+      }
+      b.append(hint);
       b.addEventListener('click', (e) => hooks.onLayerSelect(row.key, e.shiftKey));
       b.addEventListener('pointerenter', () => hooks.onLayerHover(row.key));
       b.addEventListener('pointerleave', () => hooks.onLayerHover(null));
@@ -1372,15 +1383,28 @@ export function createPanel(hooks: PanelHooks) {
         line.textContent = f.status === '?' ? 'New file, not tracked by git yet.' : 'No diff shown (binary, or too large).';
         pre.append(line);
       }
-      for (const raw of f.diff.split('\n')) {
-        if (!raw || /^(diff --git|index |--- |\+\+\+ |new file|deleted file|similarity|rename )/.test(raw)) continue;
+      const rawLines = f.diff.split('\n').filter((raw) => raw && !/^(diff --git|index |--- |\+\+\+ |new file|deleted file|similarity|rename )/.test(raw));
+      for (const l of markDiff(rawLines)) {
         const line = document.createElement('span');
-        line.className = raw.startsWith('@@') ? 'chh' : raw[0] === '+' ? 'cha' : raw[0] === '-' ? 'chd' : '';
-        line.textContent = raw;
+        line.className = l.kind === 'hunk' ? 'chh' : l.kind === 'add' ? 'cha' : l.kind === 'del' ? 'chd' : '';
+        const sign = l.kind === 'add' ? '+ ' : l.kind === 'del' ? '- ' : l.kind === 'ctx' ? '  ' : '';
+        if (l.mark) {
+          // text only: this is the project's source. The part that changed is marked so it can be found in a long line.
+          const mark = document.createElement('mark');
+          mark.textContent = l.text.slice(l.mark.start, l.mark.end);
+          line.append(sign + l.text.slice(0, l.mark.start), mark, l.text.slice(l.mark.end));
+        } else line.textContent = sign + l.text;
         pre.append(line);
       }
       d.append(pre);
+      // Open on the change itself: a few lines of context can wrap to fill the box and push it out of sight.
+      const toChange = () => {
+        const first = pre.querySelector<HTMLElement>('.cha, .chd');
+        if (first) pre.scrollTop = Math.max(0, first.offsetTop - 28);
+      };
+      d.addEventListener('toggle', () => d.open && toChange());
       chList.append(d);
+      if (d.open) toChange();
     }
     if (view.truncated) note('Some diffs were too large to show.');
     if (mine.length && other) note(`${other} other file${other === 1 ? '' : 's'} changed outside Brushup. They're listed here too, so a commit of everything would include them.`);
