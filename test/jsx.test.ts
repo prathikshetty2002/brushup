@@ -203,7 +203,7 @@ describe('tailwind', () => {
   });
 
   it('falls back to inline style when className is dynamic', () => {
-    const dynamic = '<div className={cn("a", on && "b")}>x</div>';
+    const dynamic = '<div className={cn(base("a"), on && "b")}>x</div>';
     const out = run(dynamic, style(dynamic, 'div', { margin: '4px' }), tw).files[FILE];
     expect(out).toContain('style={{ margin: 4 }}');
   });
@@ -309,7 +309,7 @@ describe('variant warnings', () => {
 }
 `;
   const dyn = `export default function P({ on }) {
-  return <div className={cn('ml-4 md:ml-8', on && 'font-bold')}>x</div>;
+  return <div className={cn(base('ml-4 md:ml-8'), on && 'font-bold')}>x</div>;
 }
 `;
   const e = (c: string): Edit => ({ kind: 'style', id: idOf(c, 'div'), tag: 'div', props: { 'margin-left': '40px' } });
@@ -485,7 +485,7 @@ describe('editing for a screen size (a variant)', () => {
   });
 
   it('refuses rather than write for every size when it cannot write a class', () => {
-    const dyn = `export default function P({ on }) {\n  return <div className={cn('a', on && 'b')}>x</div>;\n}\n`;
+    const dyn = `export default function P({ on }) {\n  return <div className={cn(base('a'), on && 'b')}>x</div>;\n}\n`;
     expect(() => run(dyn, e({ 'margin-left': '40px' }, 'md', dyn), tw)).toThrow(/computed/);
     expect(() => run(code, e({ 'margin-left': '40px' }, 'md'), { tailwind: false })).toThrow(/needs Tailwind/);
   });
@@ -532,5 +532,87 @@ describe('theme colours', () => {
 
   it('does not invent a utility for a token the page did not list', () => {
     expect(run(code, e('var(--color-nope)', ['ink']), tw).files[FILE]).toContain('text-[var(--color-nope)]');
+  });
+});
+
+describe('class helpers: cn(), clsx() and friends', () => {
+  const tw = { tailwind: true };
+  const make = (cls: string) => `export default function P({ active, className }) {\n  return <div className={${cls}}>x</div>;\n}\n`;
+  const e = (code: string, props: Record<string, string>, variant?: string): StyleEdit => ({ kind: 'style', id: idOf(code, 'div'), tag: 'div', props, ...(variant ? { variant } : {}) });
+  const attr = (out: string) => /className=\{(.*)\}>x</.exec(out)![1];
+
+  it('writes into the plain string and leaves the conditional parts alone', () => {
+    const code = make(`cn('px-4 ml-2 py-2', active && 'bg-blue-500', className)`);
+    const r = run(code, e(code, { 'margin-left': '40px' }), tw);
+    expect(r.target).toBe('class');
+    expect(attr(r.files[FILE])).toBe(`cn('px-4 py-2 ml-[40px]', active && 'bg-blue-500', className)`);
+  });
+
+  it('works for clsx, classNames, cx and twMerge, and with a template literal or double quotes', () => {
+    for (const fn of ['clsx', 'classNames', 'cx', 'twMerge']) {
+      const code = make(`${fn}("p-4", active && "b")`);
+      expect(attr(run(code, e(code, { 'font-weight': '600' }), tw).files[FILE])).toBe(`${fn}("p-4 font-semibold", active && "b")`);
+    }
+    const tpl = make('cn(`p-4 ml-1`, active && "b")');
+    expect(attr(run(tpl, e(tpl, { 'margin-left': '8px' }), tw).files[FILE])).toContain('`p-4 ml-[8px]`');
+  });
+
+  it('removes the old class from a second plain string, so it can not linger', () => {
+    const code = make(`cn('p-4', 'ml-2 text-sm')`);
+    expect(attr(run(code, e(code, { 'margin-left': '40px' }), tw).files[FILE])).toBe(`cn('p-4 ml-[40px]', 'text-sm')`);
+  });
+
+  it('warns when a conditional class sets the same property and may still win', () => {
+    const code = make(`cn('p-4', active && 'ml-8', { 'ml-12': className })`);
+    const r = run(code, e(code, { 'margin-left': '40px' }), tw);
+    expect(r.warning).toMatch(/ml-8, ml-12 is set under a condition in cn\(\)/);
+    expect(attr(r.files[FILE])).toContain(`active && 'ml-8'`); // left as it was
+  });
+
+  it('writes under a screen size too, replacing only the class with that prefix', () => {
+    const code = make(`cn('p-4 md:ml-2 ml-1', active && 'b')`);
+    expect(attr(run(code, e(code, { 'margin-left': '40px' }, 'md'), tw).files[FILE])).toBe(`cn('p-4 ml-1 md:ml-[40px]', active && 'b')`);
+  });
+
+  it('declines when there is no plain string to write into, since the order of the pieces would decide', () => {
+    const code = make(`cn(buttonVariants(), className)`);
+    const r = run(code, e(code, { 'margin-left': '40px' }), tw);
+    expect(r.target).toBe('inline'); // the old fallback, with its warning
+    expect(() => run(code, e(code, { 'margin-left': '40px' }, 'md'), tw)).toThrow(/computed/);
+  });
+
+  it('leaves a call to some other function alone', () => {
+    const code = make(`pickClasses('p-4', active)`);
+    expect(run(code, e(code, { 'margin-left': '40px' }), tw).target).toBe('inline');
+  });
+});
+
+describe('template-literal classNames', () => {
+  const tw = { tailwind: true };
+  const make = (cls: string) => `export default function P({ active, className = '' }) {\n  return <span className={${cls}}>x</span>;\n}\n`;
+  const e = (code: string, props: Record<string, string>): StyleEdit => ({ kind: 'style', id: idOf(code, 'span'), tag: 'span', props });
+  const attr = (out: string) => /className=\{(.*)\}>x</.exec(out)![1];
+
+  it('writes into the fixed classes and keeps the space before `${className}`', () => {
+    const code = make('`inline-flex gap-2 ml-1 px-3 ${className}`');
+    expect(attr(run(code, e(code, { 'margin-left': '40px' }), tw).files[FILE])).toBe('`inline-flex gap-2 px-3 ml-[40px] ${className}`');
+  });
+
+  it('finds the classes when the template starts with an expression, and puts nothing against it', () => {
+    const code = make('`${className} p-4 ml-2`');
+    expect(attr(run(code, e(code, { 'margin-left': '40px' }), tw).files[FILE])).toBe('`${className} p-4 ml-[40px]`');
+    const mid = make('`p-4 ${className} ml-2`');
+    // The new class joins the first run, and the stale one in the later run is dropped (a harmless space is left behind).
+    expect(attr(run(mid, e(mid, { 'margin-left': '40px' }), tw).files[FILE])).toBe('`p-4 ml-[40px] ${className} `');
+  });
+
+  it('warns about a class the expressions may still add', () => {
+    const code = make("`p-4 ${active ? 'ml-8' : ''}`");
+    expect(run(code, e(code, { 'margin-left': '40px' }), tw).warning).toMatch(/ml-8 is set under a condition in the template/);
+  });
+
+  it('declines a template that is only expressions', () => {
+    const code = make('`${className}`');
+    expect(run(code, e(code, { 'margin-left': '40px' }), tw).target).toBe('inline');
   });
 });

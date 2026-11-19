@@ -23,7 +23,7 @@ const refOf = (code: string, needle: string, nth = 0) => {
 const page = `export default function P({ on }) {
   return (
     <div>
-      <p className={cn('a', on && 'b')}>Hello</p>
+      <p className={cn(base('a'), on && 'b')}>Hello</p>
       <p className={on ? 'x' : 'y'}>World</p>
     </div>
   );

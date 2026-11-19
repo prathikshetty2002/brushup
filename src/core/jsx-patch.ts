@@ -8,7 +8,7 @@ import { readRules, splice } from './css-patch';
 import { afterName, findElement, fingerprint, jsxName, parseSource, parseSrc, parseVer, walk } from './jsx';
 import { matches, parseSelector, specificity } from './selector';
 import type { SourceElement } from './html-map';
-import { tailwindClasses, variantConflicts, isVariant, type ClassHints, type Scale } from './tailwind';
+import { conflictingClasses, stripClasses, tailwindClasses, variantConflicts, isVariant, type ClassHints, type Scale } from './tailwind';
 
 export interface JsxOptions {
   /** Express style edits as Tailwind utilities instead of inline styles. */
@@ -411,7 +411,7 @@ function patchInline(code: string, file: string, edit: Edit, prop: string, value
 /* ---------- Tailwind className ---------- */
 
 /** Returns patched code, or null if className isn't a plain string we can safely rewrite. */
-function patchClass(code: string, file: string, edit: Edit, prop: string, value: string, scale?: Scale, variant = ''): string | null {
+function patchClass(code: string, file: string, edit: Edit, prop: string, value: string, scale?: Scale, variant = '', warnings?: string[]): string | null {
   const { el } = located(code, file, edit);
   const sent = edit.kind === 'style' ? edit.hints : undefined;
   // Only snap when the page says 1rem is 16px, otherwise `ml-10` wouldn't be the 40px the user saw.
@@ -424,12 +424,79 @@ function patchClass(code: string, file: string, edit: Edit, prop: string, value:
     return code.slice(0, at) + ` className="${classes}"` + code.slice(at);
   }
   const range = classNameRange(attr);
-  if (!range) return null;
+  if (!range) return patchClassCall(code, attr, prop, value, hints, variant, warnings);
   const current = code.slice(range.start, range.end);
   if (current.includes('\\')) return null;
   const next = tailwindClasses(current, prop, value, hints, variant);
   if (next === null) return null;
   return code.slice(0, range.start) + next + code.slice(range.end);
+}
+
+/** The helpers projects use to build a className from pieces; their string arguments are class lists. */
+const CLASS_HELPERS = new Set(['cn', 'clsx', 'classNames', 'classnames', 'cx', 'twMerge', 'twJoin']);
+
+/** Every string literal inside `node`, however deeply nested (the branches of `cond && '…'`, the keys of `{ '…': on }`). */
+function stringsIn(node: unknown, out: string[] = []): string[] {
+  if (!node || typeof node !== 'object') return out;
+  const n = node as { type?: string; value?: unknown; quasis?: { value: { cooked?: string | null } }[] };
+  if (n.type === 'StringLiteral' && typeof n.value === 'string') out.push(n.value);
+  else if (n.type === 'TemplateLiteral') for (const q of n.quasis ?? []) out.push(q.value.cooked ?? '');
+  for (const [key, child] of Object.entries(node)) {
+    if (key === 'loc' || key === 'extra' || key === 'leadingComments' || key === 'trailingComments') continue;
+    if (Array.isArray(child)) child.forEach((c) => stringsIn(c, out));
+    else if (child && typeof child === 'object') stringsIn(child, out);
+  }
+  return out;
+}
+
+/**
+ * `className={cn('px-4 py-2', active && 'bg-blue-500', className)}` or `` className={`px-4 py-2 ${className}`} ``: write into the plain
+ * string parts, the classes that always apply, and leave the conditional and passed-in parts alone. It needs a plain string with
+ * classes in it; with none (`cn(buttonVariants(), className)`) the order of the pieces decides what wins, so it declines rather
+ * than guess. Classes in the conditional parts that set the same property still win when their condition holds, and the edit says so.
+ */
+function patchClassCall(code: string, attr: t.JSXAttribute, prop: string, value: string, hints: ClassHints, variant: string, warnings?: string[]): string | null {
+  const v = attr.value;
+  const expr = v?.type === 'JSXExpressionContainer' ? v.expression : null;
+  if (!expr) return null;
+  const literals: { start: number; end: number }[] = [];
+  const conditional: string[] = [];
+  let helper = '';
+  if (expr.type === 'CallExpression' && expr.callee.type === 'Identifier' && CLASS_HELPERS.has(expr.callee.name)) {
+    helper = `${expr.callee.name}()`;
+    for (const arg of expr.arguments) {
+      if (arg.type === 'StringLiteral' || (arg.type === 'TemplateLiteral' && arg.expressions.length === 0)) literals.push({ start: arg.start! + 1, end: arg.end! - 1 });
+      else stringsIn(arg, conditional);
+    }
+  } else if (expr.type === 'TemplateLiteral') {
+    helper = 'the template';
+    for (const q of expr.quasis) literals.push({ start: q.start!, end: q.end! });
+    for (const e of expr.expressions) stringsIn(e, conditional);
+  } else return null;
+  // The string that gets the new class: the first with classes in it (a template may start with `${…}`). None means decline.
+  const target = literals.findIndex((l) => code.slice(l.start, l.end).trim() !== '' || expr.type === 'CallExpression');
+  if (target < 0) return null;
+  if (literals.some((l) => code.slice(l.start, l.end).includes('\\'))) return null;
+  // Keep the whitespace around the classes: in a template it is what separates them from a `${…}` next to them.
+  const rewrite = (current: string, fn: (core: string) => string | null): string | null => {
+    const lead = /^\s*/.exec(current)![0];
+    const trail = /\s*$/.exec(current)![0];
+    const next = fn(current.trim());
+    if (next === null) return null;
+    return next === '' ? (lead || trail ? ' ' : '') : lead + next + trail;
+  };
+  // Splice back to front so the earlier positions stay valid.
+  let out = code;
+  for (let i = literals.length - 1; i >= 0; i--) {
+    const l = literals[i];
+    const current = code.slice(l.start, l.end);
+    const next = rewrite(current, (core) => (i === target ? tailwindClasses(core, prop, value, hints, variant) : stripClasses(core, prop, hints, variant)));
+    if (next === null) return null;
+    out = out.slice(0, l.start) + next + out.slice(l.end);
+  }
+  const still = conflictingClasses(conditional.join(' '), prop, hints, variant);
+  if (still.length && warnings) warnings.push(`${[...new Set(still)].join(', ')} is set under a condition in ${helper}, so ${prop} may look unchanged while it applies`);
+  return out;
 }
 
 /** Inner range of a className that is a plain string literal (or an expression-free template literal). */
@@ -560,7 +627,7 @@ export function applyJsxEdit(files: Files, file: string, edit: Edit, opts: JsxOp
     }
     const variants = opts.tailwind ? variantConflicts(classSource(out[file], file, edit), p, variant) : [];
     if (opts.tailwind) {
-      const next = patchClass(out[file], file, edit, p, rawValue, opts.scale, variant);
+      const next = patchClass(out[file], file, edit, p, rawValue, opts.scale, variant, warnings);
       if (next !== null) {
         out = { ...out, [file]: next };
         target = 'class';

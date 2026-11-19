@@ -141,6 +141,28 @@ export function isVariant(v: string): boolean {
   return i === parts.length && parts.length > 0 && v !== '';
 }
 
+/** `classes` without the utilities that set `prop` under exactly this variant: the removal half of an edit, for a class list the edit doesn't write into. */
+export function stripClasses(classes: string, prop: string, hints: ClassHints = {}, variant = ''): string {
+  const { remove } = mapping(prop.toLowerCase(), '0', hints.scale, hints.colorTokens);
+  return classes
+    .split(/\s+/)
+    .filter(Boolean)
+    .filter((c) => {
+      const at = c.lastIndexOf(':');
+      return !((at < 0 ? '' : c.slice(0, at)) === variant && remove.test(c.slice(at + 1)));
+    })
+    .join(' ');
+}
+
+/** The utilities in `classes` that set `prop` under exactly this variant. */
+export function conflictingClasses(classes: string, prop: string, hints: ClassHints = {}, variant = ''): string[] {
+  const { remove } = mapping(prop.toLowerCase(), '0', hints.scale, hints.colorTokens);
+  return classes.split(/\s+/).filter((c) => {
+    const at = c.lastIndexOf(':');
+    return c && (at < 0 ? '' : c.slice(0, at)) === variant && remove.test(c.slice(at + 1));
+  });
+}
+
 /**
  * Variant utilities (`md:ml-4`, `hover:w-full`) in `text` that set the same property as `prop`. They keep
  * applying under their condition and win over a plain class or an inline style, so an edit made at the

@@ -21,6 +21,24 @@ Before changing UI:
 ${END}
 `;
 
+const COMMAND_MARK = '<!-- brushup:command -->';
+
+/** `/brushup-notes`: one word for "do the notes I pinned", so nobody has to work out how to ask. */
+export const NOTES_COMMAND = `---
+description: Handle the notes pinned in Brushup (and optionally a focus, e.g. /brushup-notes pricing page)
+---
+${COMMAND_MARK}
+Handle my open Brushup notes. $ARGUMENTS
+
+1. Get the open notes: use \`brushup_get_notes\` if the brushup MCP tools are available, otherwise read \`.brushup/notes.md\`. If I gave a focus above, only take the notes that match it.
+2. Read \`.brushup/edits.jsonl\` (or \`brushup_recent_edits\`): the manual tweaks I made on the canvas. Keep them; do not revert or redo them.
+3. For each note, make the change it asks for in the source file it points to. Use \`brushup_inspect\` to see how an element renders now instead of asking me for a screenshot.
+4. Mark each note done with a one-line reply saying what you changed (\`brushup_update_note\`, or set its \`"status"\` to \`"done"\` in \`.brushup/notes.json\`).
+5. If a note is unclear or you can't do it, leave it open and say why in one line. Don't guess.
+
+Finish with a short list: which notes you handled, which you left, and the files you touched.
+`;
+
 async function exists(file: string) {
   try {
     await readFile(file);
@@ -33,6 +51,8 @@ async function exists(file: string) {
 export interface InitResult {
   claudeMd: 'created' | 'updated' | 'unchanged';
   gitignore: 'updated' | 'unchanged' | 'absent';
+  /** The `/brushup-notes` command in `.claude/commands`. `kept` means a file of that name already exists that is not ours, so it was left alone. */
+  command: 'created' | 'updated' | 'unchanged' | 'kept';
   /** Only set when `mcp` was requested. */
   mcp?: 'created' | 'updated' | 'unchanged' | 'invalid-json';
   /** Only set when `agents` was requested: the rules file and MCP entry for other agents. */
@@ -80,6 +100,21 @@ async function upsertBlock(file: string): Promise<InitResult['claudeMd']> {
   return 'updated';
 }
 
+/** Write `.claude/commands/brushup-notes.md`: ours is created or refreshed, a file of that name that we didn't write is never touched. */
+async function initCommand(root: string): Promise<InitResult['command']> {
+  const file = path.join(root, '.claude', 'commands', 'brushup-notes.md');
+  if (!(await exists(file))) {
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, NOTES_COMMAND);
+    return 'created';
+  }
+  const current = await readFile(file, 'utf8');
+  if (!current.includes(COMMAND_MARK)) return 'kept';
+  if (current === NOTES_COMMAND) return 'unchanged';
+  await writeFile(file, NOTES_COMMAND);
+  return 'updated';
+}
+
 /** Idempotent project setup: CLAUDE.md block, optional AGENTS.md and Cursor MCP entry, `.brushup/` in .gitignore, optional MCP entry, and the Next/Vite wiring. */
 export async function initProject(root: string, options: { mcp?: boolean; wire?: boolean; agents?: boolean } = {}): Promise<InitResult> {
   await mkdir(path.join(root, '.brushup'), { recursive: true });
@@ -97,5 +132,5 @@ export async function initProject(root: string, options: { mcp?: boolean; wire?:
     }
   }
   const agents = options.agents ? { agentsMd: await upsertBlock(path.join(root, 'AGENTS.md')), cursor: await initMcp(path.join(root, '.cursor', 'mcp.json')) } : undefined;
-  return { claudeMd, gitignore: ignore, ...(options.mcp ? { mcp: await initMcp(path.join(root, '.mcp.json')) } : {}), ...(agents ? { agents } : {}), ...(options.wire === false ? {} : { wire: await wireProject(root) }) };
+  return { claudeMd, command: await initCommand(root), gitignore: ignore, ...(options.mcp ? { mcp: await initMcp(path.join(root, '.mcp.json')) } : {}), ...(agents ? { agents } : {}), ...(options.wire === false ? {} : { wire: await wireProject(root) }) };
 }

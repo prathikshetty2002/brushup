@@ -86,3 +86,30 @@ describe('brushup init --agents', () => {
     await expect(readFile(path.join(dir, 'AGENTS.md'), 'utf8')).rejects.toThrow();
   });
 });
+
+describe('the /brushup-notes command', () => {
+  const file = () => path.join(dir, '.claude', 'commands', 'brushup-notes.md');
+
+  it('is created with a description and an arguments slot, and a second run changes nothing', async () => {
+    expect((await initProject(dir)).command).toBe('created');
+    const text = await readFile(file(), 'utf8');
+    expect(text).toMatch(/^---\ndescription: /);
+    expect(text).toContain('$ARGUMENTS');
+    expect(text).toContain('brushup_get_notes');
+    expect((await initProject(dir)).command).toBe('unchanged');
+  });
+
+  it('refreshes our own file when it is out of date', async () => {
+    await initProject(dir);
+    await writeFile(file(), '<!-- brushup:command -->\nold wording');
+    expect((await initProject(dir)).command).toBe('updated');
+    expect(await readFile(file(), 'utf8')).toContain('brushup_get_notes');
+  });
+
+  it('never overwrites a command of that name that is not ours', async () => {
+    await mkdir(path.dirname(file()), { recursive: true });
+    await writeFile(file(), 'my own notes command');
+    expect((await initProject(dir)).command).toBe('kept');
+    expect(await readFile(file(), 'utf8')).toBe('my own notes command');
+  });
+});

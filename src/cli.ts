@@ -29,6 +29,7 @@ if (args[0] === 'init') {
     if (installed.status === 'no-package-json') console.log('No package.json here, so brushup was not installed. For a plain HTML page you do not need to: run  npx brushup <page.html>.');
   }
   const r = await initProject(root, { mcp, wire, agents });
+  console.log(`/brushup-notes command: ${r.command === 'kept' ? 'a file of that name already exists, left alone' : r.command}`);
   console.log(`CLAUDE.md: ${r.claudeMd}   .gitignore: ${r.gitignore === 'absent' ? 'no .gitignore found' : r.gitignore}${r.mcp ? `   .mcp.json: ${r.mcp}` : ''}`);
   if (r.wire?.next) {
     console.log(`next.config: ${r.wire.next.config}   root layout / _document: ${r.wire.next.layout}`);

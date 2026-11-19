@@ -146,7 +146,7 @@ Notes show as numbered pins on the page and in the **Notes** tab (Locate, Edit, 
 - `.brushup/notes.json`: the data. Claude (or you) can set a note's `"status"` to `"done"` and the canvas updates.
 - `.brushup/edits.jsonl`: every manual edit you made, so Claude keeps them. `.brushup/selection.json` is what is selected right now.
 
-`npx brushup init` adds a short block to `CLAUDE.md` telling Claude Code to read these before changing UI. It only touches the block between its `<!-- brushup:start -->` / `<!-- brushup:end -->` markers and is safe to re-run.
+`npx brushup init` adds a short block to `CLAUDE.md` telling Claude Code to read these before changing UI. It only touches the block between its `<!-- brushup:start -->` / `<!-- brushup:end -->` markers and is safe to re-run. It also writes a `/brushup-notes` command, so in Claude Code you type that one word to have Claude handle your open notes (`/brushup-notes pricing page` narrows it).
 
 Notes are anchored by the build's source tags when present and by a fingerprint (tag, classes, text) otherwise, so they survive code moves and also work on pages with no plugin.
 
@@ -184,7 +184,7 @@ Source files are the single source of truth; the canvas holds no state of its ow
 - **Text from data:** double-click text that is rendered from a literal list in the same file (`items.map((f) => <p>{f.body}</p>)`, or a destructured `({ body })`) and the string in that item of the list is edited, not the JSX. The canvas sends which item it was and what the text was; if the page doesn't show what the data says (a filter, a sort) the edit is refused. `{"Save"}` and `{`Save`}` are edited in place. Text from props, state, a constant, a filtered list or a translation file is found by its value: if exactly one place in the project writes it, that place is edited (with a warning that everything using it changes); if several do, the edit is refused and lists them. Text from a database, an API or a CMS can't live in source, so the canvas restores it and pins a note for Claude instead.
 - **shadcn/ui and other component libraries:** the build tags both host elements (`data-brushup-src`) and component usages (`data-brushup-use="file:line:col#Button"`), and the tag reaches the DOM through the component's `{...props}`. Edits go to the **usage site** (`<Button className="h-[40px]">`), so tweaking one button doesn't change every button; the component's own `cn()`/tailwind-merge resolves the conflict. Text written in the usage (`<Button>Save</Button>`) is edited there.
 - Fragments, `Suspense`, context providers and other components that take no props are never tagged.
-- **Dynamic code is never guessed at.** `className={cn(...)}` falls back to an inline style; a `style` variable, or text that comes from `{expression}`, is refused with the reason.
+- **Dynamic code is never guessed at.** `className={cn('p-4', active && 'ml-2', className)}` (also `clsx`, `classNames`, `cx`, `twMerge`) and template literals are edited in their plain string parts, and the conditional parts are left alone with a warning if they set the same property. With no plain string to write into (`cn(buttonVariants(), className)`) it falls back to an inline style. A `style` variable, or text that comes from `{expression}`, is refused with the reason.
 - Elements rendered from one JSX line (a `.map()`, a reused component) change together; the canvas says how many share it. Tick *Edit the shared CSS rule* to change a CSS rule on purpose.
 
 **HTML / CSS**

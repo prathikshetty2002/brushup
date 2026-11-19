@@ -37,6 +37,7 @@ That one command is the whole setup. `init` is idempotent and does all of this (
 
 - wires Brushup into your project: wraps the export in `next.config.*` with `withBrushup(...)` and adds `<BrushupScript />` inside `<body>` of the root layout (Next), or adds `brushup()` to `plugins` in `vite.config.*` (Vite);
 - adds a short block to `CLAUDE.md` (between `<!-- brushup:start -->` markers) telling Claude Code how to use Brushup's notes;
+- writes a `/brushup-notes` command (`.claude/commands/brushup-notes.md`): type it in Claude Code to have it handle your open notes, or add a focus such as `/brushup-notes pricing page`;
 - adds `.brushup/` to `.gitignore` (if you have one);
 - adds an `brushup` entry to `.mcp.json` without touching your other servers (that is the `--mcp` part).
 
@@ -185,7 +186,7 @@ Brushup writes small, exact edits, and refuses when it can't be sure. These are 
 | *No Brushup canvas is open in a browser.* | `brushup_inspect` found no open page | Open the app in a browser |
 | *Brushup is not running for this project.* | No dev server | Start `npm run dev` |
 
-Also good to know: a `className` built with `cn(...)` or a template falls back to an **inline style**. Inline styles beat Tailwind responsive variants like `md:`, so Brushup shows an amber warning naming the variants it would override; check small screens after such an edit. (With *Only on wider screens* chosen it refuses instead, since an inline style can't be limited to one.)
+Also good to know: a `className` built with `cn(...)`, `clsx(...)`, `twMerge(...)` or a template literal is edited **in its plain string parts**: `cn('px-4 ml-2', active && 'bg-blue-500', className)` gets the new class in `'px-4 ml-2'` and the conditional part is left as it is, with a warning if it sets the same property (it still wins while its condition holds). Only a `className` with no plain string to write into, such as `cn(buttonVariants(), className)`, falls back to an **inline style**. Inline styles beat Tailwind responsive variants like `md:`, so Brushup shows an amber warning naming the variants it would override; check small screens after such an edit. (With *Only on wider screens* chosen it refuses instead, since an inline style can't be limited to one.)
 
 ## 8. Troubleshooting
 
