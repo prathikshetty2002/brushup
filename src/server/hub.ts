@@ -3,6 +3,7 @@ import type { Duplex } from 'node:stream';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { EditError, StaleElement, type Edit } from '../core/edit-types';
 import { collectChanges } from './changes';
+import type { IgnoredStore } from './ignored';
 import { TextNotHere } from '../core/jsx-patch';
 import type { EditOutcome, FileSession, Selection } from './file-session';
 import type { NotesStore } from './notes';
@@ -12,6 +13,8 @@ type ClientMessage =
   | { type: 'edits'; n: number; edits: Edit[]; hash: string }
   | { type: 'undo' | 'redo'; n: number }
   | { type: 'changes'; n: number }
+  | { type: 'ignore-add'; n: number; item: unknown }
+  | { type: 'ignore-remove'; n: number; key: string }
   | { type: 'select'; selection: Selection | null }
   | { type: 'note-save'; n: number; note: unknown }
   | { type: 'note-delete'; n: number; id: string }
@@ -33,7 +36,7 @@ const MAX_ASK_BYTES = 8 * 1024;
  * canvas edits come in, results and "files changed" notices go out. The caller
  * authenticates the HTTP upgrade (host/origin/token) before handing it over.
  */
-export function createHub(session: FileSession, notes?: NotesStore) {
+export function createHub(session: FileSession, notes?: NotesStore, ignored?: IgnoredStore) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 4 * 1024 * 1024 });
   const clients = new Map<WebSocket, ClientInfo>();
   /** Questions an agent asked the canvas that are still waiting for an answer. */
@@ -83,6 +86,18 @@ export function createHub(session: FileSession, notes?: NotesStore) {
       if (info?.role === 'canvas') finish(msg.id, { ok: !!msg.ok, data: msg.data, error: msg.error });
       return;
     }
+    if (msg.type === 'ignore-add' || msg.type === 'ignore-remove') {
+      if (info?.role !== 'canvas') return;
+      if (!ignored) return void send(ws, { type: 'result', n: msg.n, ok: false, error: 'Ignoring checks is not available here.' });
+      try {
+        const list = msg.type === 'ignore-add' ? await ignored.add(msg.item) : await ignored.remove(String(msg.key));
+        send(ws, { type: 'result', n: msg.n, ok: true });
+        broadcast({ type: 'ignored', items: list });
+      } catch (err) {
+        send(ws, { type: 'result', n: msg.n, ok: false, error: (err as Error).message });
+      }
+      return;
+    }
     if (msg.type === 'changes') {
       if (info?.role !== 'canvas') return;
       return void send(ws, { type: 'result', n: msg.n, ok: true, changes: await collectChanges(session.root) });
@@ -129,6 +144,7 @@ export function createHub(session: FileSession, notes?: NotesStore) {
         send(ws, { type: 'info', root: session.root }); // lets the canvas build open-in-editor links
         // An agent says hello right after connecting; canvas pages get the notes straight away.
         void notes?.list().then((list) => clients.get(ws)?.role === 'canvas' && send(ws, { type: 'notes', notes: list }));
+        void ignored?.list().then((items) => clients.get(ws)?.role === 'canvas' && send(ws, { type: 'ignored', items }));
         ws.on('close', () => {
           clients.delete(ws);
           for (const [id, entry] of pending) if (entry.agent === ws) (clearTimeout(entry.timer), pending.delete(id));

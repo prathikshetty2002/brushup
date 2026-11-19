@@ -57,6 +57,12 @@ export interface LayerView {
   hasChildren: boolean;
 }
 
+/** A check the user dismissed, as the Ignored list shows it. */
+export interface IgnoredView {
+  key: string;
+  label: string;
+}
+
 export interface NoteDraft {
   kind: NoteKind;
   label: string;
@@ -90,6 +96,9 @@ export interface PanelHooks {
   onA11yLocate(id: string): void;
   onA11yFix(id: string): void;
   onA11yNote(id: string): void;
+  /** Dismiss one finding, or every finding of its kind. */
+  onA11yIgnore(id: string, scope: 'one' | 'kind'): void;
+  onA11yRestore(key: string): void;
   onHandleDown(kind: HandleKind, e: PointerEvent): void;
 }
 
@@ -237,6 +246,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .a11yitem { padding: 0; } .a11yhead { display: block; position: relative; width: 100%; padding: 7px 26px 7px 9px; text-align: left; border-radius: 3px; } .a11yhead::after { content: '▸'; position: absolute; right: 9px; top: 9px; color: var(--faint); font-size: 10px; } .a11yitem.open .a11yhead::after { content: '▾'; }
 .a11yhead b { display: block; margin: 0; font: 600 11.5px/1.4 var(--mono); color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .a11yhead .sub { display: block; margin-top: 1px; color: var(--muted); font-size: 11px; line-height: 1.4; }
 .a11ybody { padding: 0 9px 9px; } .a11ybody[hidden], .a11ygroupbody[hidden] { display: none; }
+.a11yignored { margin: 8px 0; font-size: 11px; color: var(--muted); } .a11yignored summary { cursor: pointer; } .a11yignored ul { list-style: none; margin: 6px 0 0; padding: 0; } .a11yignored li { display: flex; align-items: center; gap: 8px; padding: 3px 0; border-bottom: 1px solid var(--line); } .a11yignored li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .a11yignored li button { padding: 2px 8px; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); font-size: 11px; }
+.a11ygroupacts { margin: 2px 0 6px; } .a11ygroupacts button { padding: 2px 8px; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); font-size: 11px; }
 .a11ygroup { margin-bottom: 8px; } .a11ygrouphead { display: flex; align-items: center; gap: 8px; width: 100%; padding: 4px 2px; text-align: left; border-radius: 3px; } .a11ygrouphead::before { content: '▸'; color: var(--faint); font-size: 10px; width: 10px; } .a11ygroup.open .a11ygrouphead::before { content: '▾'; }
 .a11ygrouphead .rule { margin: 0; } .a11ygrouphead .gcount { margin-left: auto; color: var(--faint); font: 600 11px var(--mono); }
 .a11yitem .rule { display: inline-block; margin-bottom: 4px; padding: 1px 6px; border-radius: 2px; background: var(--raise); color: var(--muted); font: 600 10px var(--mono); text-transform: uppercase; letter-spacing: .04em; }
@@ -427,6 +438,7 @@ export function createPanel(hooks: PanelHooks) {
           <div class="chbar"><span class="a11ysum">Open this tab to check the page</span><span class="sp"></span><button class="ghost" data-act="a11y-scan">Check again</button></div>
           <div class="a11yfilter" role="group" aria-label="Show checks"><button data-filter="all" aria-pressed="true">All</button><button data-filter="accessibility" aria-pressed="false">Accessibility</button><button data-filter="design" aria-pressed="false">Design</button></div>
           <div class="a11ylist"></div>
+          <details class="a11yignored" hidden><summary>Ignored <span class="gcount">0</span></summary><ul></ul></details>
           <details class="a11ywhat"><summary>What's checked</summary><div></div></details>
           <p class="chnote a11ynote" hidden>These checks catch some problems, not all of them. A clean accessibility result doesn't mean the page is accessible: also try it with only a keyboard, and with a screen reader. Design checks are guidelines, so a deliberate choice can be right: ignore any that don't fit.</p>
         </div>
@@ -1150,6 +1162,7 @@ export function createPanel(hooks: PanelHooks) {
       if (issue.fix) act(issue.fix, () => hooks.onA11yFix(issue.id), 'apply');
       act('Locate', () => hooks.onA11yLocate(issue.id));
       act('Send to Claude', () => hooks.onA11yNote(issue.id));
+      act('Ignore', () => hooks.onA11yIgnore(issue.id, 'one'));
       head.append(name, sub);
       body.append(detail, acts);
       item.append(head, body);
@@ -1174,7 +1187,14 @@ export function createPanel(hooks: PanelHooks) {
     // Group by kind of problem, under a heading that names it and counts it. A group with more than a few starts folded.
     const groups = new Map<string, A11yView[]>();
     for (const issue of issues) (groups.get(issue.rule) ?? groups.set(issue.rule, []).get(issue.rule)!).push(issue);
-    for (const [ruleKey, list] of groups) {
+    // Most serious first: accessibility before design, and within each, published standards before guidelines before conventions.
+    const ranked = [...RULES, ...DESIGN_RULES];
+    const rank = (rule: string) => {
+      const at = ranked.findIndex((r) => r.rule === rule);
+      const r = ranked[at] as { strength?: string } | undefined;
+      return (at >= RULES.length ? 100 : 0) + ({ standard: 0, guideline: 20, convention: 40 } as Record<string, number>)[r?.strength ?? 'convention'] + at / 100;
+    };
+    for (const [ruleKey, list] of [...groups].sort((a, b) => rank(a[0]) - rank(b[0]))) {
       const section = document.createElement('div');
       section.className = 'a11ygroup';
       const gh = document.createElement('button');
@@ -1201,15 +1221,40 @@ export function createPanel(hooks: PanelHooks) {
       count.className = 'gcount';
       count.textContent = String(list.length);
       gh.append(rule, count);
+      if (list[0].category === 'design') {
+        const acts = document.createElement('div');
+        acts.className = 'a11ygroupacts';
+        const all = document.createElement('button');
+        all.textContent = `Ignore all “${DESIGN_RULES.find((r) => r.rule === ruleKey)?.label ?? ruleKey}” suggestions`;
+        all.addEventListener('click', () => hooks.onA11yIgnore(list[0].id, 'kind'));
+        acts.append(all);
+        gb.append(acts);
+      }
       gb.append(...list.map(card));
       apply(open);
       section.append(gh, gb);
       a11yList.append(section);
     }
   };
-  const setA11y = (issues: A11yView[]) => {
+  const ignoredEl = $<HTMLElement>('.a11yignored');
+  const setA11y = (issues: A11yView[], ignored: IgnoredView[] = []) => {
     a11yAll = issues;
     renderA11y();
+    ignoredEl.hidden = ignored.length === 0;
+    ignoredEl.querySelector('.gcount')!.textContent = String(ignored.length);
+    const ul = ignoredEl.querySelector('ul')!;
+    ul.textContent = '';
+    for (const item of ignored) {
+      const li = document.createElement('li');
+      const label = document.createElement('span');
+      label.textContent = item.label; // text only
+      label.title = item.label;
+      const restore = document.createElement('button');
+      restore.textContent = 'Restore';
+      restore.addEventListener('click', () => hooks.onA11yRestore(item.key));
+      li.append(label, restore);
+      ul.append(li);
+    }
   };
   filterBtns.forEach((b) =>
     b.addEventListener('click', () => {

@@ -5,6 +5,7 @@ import path from 'node:path';
 import { createHub } from './hub';
 import { removeHostFile, writeHostFile } from './host-file';
 import { overlaySource } from './overlay-bundle';
+import { IgnoredStore } from './ignored';
 import { NotesStore } from './notes';
 import { Project } from './project';
 import { watchProject } from './watcher';
@@ -36,7 +37,7 @@ export interface RunningServer {
 export async function startServer(entry: string, preferredPort = 4321): Promise<RunningServer> {
   const project = new Project(path.resolve(entry));
   const overlay = await overlaySource();
-  const hub = createHub(project, new NotesStore(project.root));
+  const hub = createHub(project, new NotesStore(project.root), new IgnoredStore(project.root));
   const token = randomBytes(16).toString('hex');
   let port = preferredPort;
 

@@ -1073,7 +1073,7 @@ describe('the A11y tab', () => {
     expect(learn.href).toBe('https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html');
     expect(learn.rel).toBe('noopener noreferrer');
     expect(o.root.querySelectorAll('.a11ywhat li').length).toBeGreaterThanOrEqual(15);
-    expect(buttons()).toEqual([expect.stringMatching(/^Change color to #/), 'Locate', 'Send to Claude']);
+    expect(buttons()).toEqual([expect.stringMatching(/^Change color to #/), 'Locate', 'Send to Claude', 'Ignore']);
   });
 
   it('shows each issue as one closed line, and opens the detail only when you ask', () => {
@@ -1091,6 +1091,82 @@ describe('the A11y tab', () => {
     expect(q('.a11yitem').classList.contains('open')).toBe(true);
     head.click();
     expect(body.hidden).toBe(true);
+  });
+
+  describe('ordering and ignoring', () => {
+    const groupNames = () => [...o.root.querySelectorAll('.a11ygrouphead .rule')].map((r) => r.textContent);
+    const ignoreBtn = () => [...o.root.querySelectorAll('.a11yitem .acts button')].find((b) => b.textContent === 'Ignore') as HTMLButtonElement;
+
+    it('lists the most serious kinds first: accessibility standards, then design guidelines, then conventions', () => {
+      // One of each: a design guideline (spacing), a design convention (image), an accessibility standard (contrast).
+      el('a3').setAttribute('style', 'padding-top:15px');
+      layout(el('a3'), { x: 0, y: 0, width: 100, height: 40 });
+      faint();
+      document.querySelector('main')!.insertAdjacentHTML('beforeend', '<img data-brushup-id="im" src="a.png" alt="x">');
+      const img = el('im') as HTMLImageElement;
+      Object.defineProperties(img, { naturalWidth: { value: 100 }, naturalHeight: { value: 100 } });
+      layout(img, { x: 0, y: 0, width: 200, height: 100 });
+      q('[data-tab=a11y]').click();
+      expect(groupNames()).toEqual(['Contrast', 'Design · Spacing', 'Design · Image']);
+    });
+
+    it('Ignore sends the finding to the server, and it leaves the list once the server confirms', async () => {
+      faint();
+      q('[data-tab=a11y]').click();
+      ignoreBtn().click();
+      await settle();
+      const sent = o.last('ignore-add');
+      expect(sent.item).toMatchObject({ scope: 'one', rule: 'contrast', label: '<p> “World”', page: '/' });
+      expect(sent.item.key).toBe('contrast|<p> “World”|/');
+      o.reply({ ok: true });
+      o.receive({ type: 'ignored', items: [{ ...sent.item, at: '' }] });
+      expect(o.root.querySelectorAll('.a11yitem')).toHaveLength(0);
+      expect(q('.a11ysum').textContent).toBe('No issues found');
+      const ignored = q('.a11yignored');
+      expect(ignored.hidden).toBe(false);
+      expect(ignored.querySelector('.gcount')!.textContent).toBe('1');
+      expect(ignored.querySelector('li span')!.textContent).toBe('Contrast: <p> “World”');
+    });
+
+    it('Restore asks the server to forget it, and the finding comes back', async () => {
+      faint();
+      q('[data-tab=a11y]').click();
+      o.receive({ type: 'ignored', items: [{ key: 'contrast|<p> “World”|/', scope: 'one', rule: 'contrast', label: '<p> “World”', page: '/', at: '' }] });
+      expect(o.root.querySelectorAll('.a11yitem')).toHaveLength(0);
+      (q('.a11yignored li button') as HTMLButtonElement).click();
+      await settle();
+      expect(o.last('ignore-remove').key).toBe('contrast|<p> “World”|/');
+      o.receive({ type: 'ignored', items: [] });
+      expect(o.root.querySelectorAll('.a11yitem')).toHaveLength(1);
+      expect(q('.a11yignored').hidden).toBe(true);
+    });
+
+    it('a design group can be ignored as a whole, and says what it is hiding; an accessibility group cannot', async () => {
+      el('a3').setAttribute('style', 'padding-top:15px');
+      layout(el('a3'), { x: 0, y: 0, width: 100, height: 40 });
+      faint();
+      q('[data-tab=a11y]').click();
+      const groupButtons = [...o.root.querySelectorAll('.a11ygroupacts button')];
+      expect(groupButtons.map((b) => b.textContent)).toEqual(['Ignore all “Spacing” suggestions']); // none for Contrast
+      (groupButtons[0] as HTMLButtonElement).click();
+      await settle();
+      const sent = o.last('ignore-add').item;
+      expect(sent).toMatchObject({ key: 'kind|spacing-grid', scope: 'kind', rule: 'spacing-grid', label: 'Spacing', page: '' });
+      o.receive({ type: 'ignored', items: [{ ...sent, at: '' }] });
+      expect(groupNames()).toEqual(['Contrast']);
+      expect(q('.a11yignored li span').textContent).toBe('All “Spacing” suggestions');
+    });
+
+    it('the agent\'s check leaves out what you ignored, and says how many it left out', () => {
+      faint();
+      el('a3').setAttribute('style', 'padding-top:15px');
+      layout(el('a3'), { x: 0, y: 0, width: 100, height: 40 });
+      o.receive({ type: 'ignored', items: [{ key: 'kind|spacing-grid', scope: 'kind', rule: 'spacing-grid', label: 'Spacing', page: '', at: '' }] });
+      o.receive({ type: 'ask', id: 'qi', ask: { kind: 'check' } });
+      const d = o.all('answer').find((m) => m.id === 'qi')!.data;
+      expect(d.issues.map((i: any) => i.rule)).toEqual(['contrast']);
+      expect(d.ignoredByUser).toBe(1);
+    });
   });
 
   describe('grouping', () => {

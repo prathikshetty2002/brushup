@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { DevProject, type DevOptions } from './dev-project';
 import { createHub } from './hub';
 import { removeHostFile, writeHostFile } from './host-file';
+import { IgnoredStore } from './ignored';
 import { NotesStore } from './notes';
 import { overlaySource } from './overlay-bundle';
 import { watchProject } from './watcher';
@@ -25,7 +26,7 @@ export interface DevHost {
  */
 export async function startDevHost(root: string, options: DevOptions = {}): Promise<DevHost> {
   const session = new DevProject(root, options);
-  const hub = createHub(session, new NotesStore(root));
+  const hub = createHub(session, new NotesStore(root), new IgnoredStore(root));
   const overlay = await overlaySource();
   const token = randomBytes(16).toString('hex');
   let port = 0;

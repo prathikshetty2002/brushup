@@ -5,7 +5,7 @@ import { explainSize, handleLabel, handleProps, sizeProps, type BoxStart, type H
 import { morphPage, refreshStylesheets } from './morph';
 import { accessibleName, backdrop, contrastRatio, parseColor, RULES, scanPage, type A11yIssue } from './a11y';
 import { DESIGN_RULES, scanDesign } from './design';
-import { createPanel, type HandleInfo, type Mode, type NoteDraft, type NoteKind, type NoteView, type ChangesView, type A11yView, type LayerView } from './panel';
+import { createPanel, type HandleInfo, type Mode, type NoteDraft, type NoteKind, type NoteView, type ChangesView, type A11yView, type IgnoredView, type LayerView } from './panel';
 
 interface Boot {
   /** 'static': Brushup serves one HTML page. 'dev': a framework dev server serves the app. */
@@ -110,6 +110,9 @@ function connect() {
     } else if (msg.type === 'notes') {
       notes = msg.notes as Note[];
       refreshNotes(true);
+    } else if (msg.type === 'ignored') {
+      ignoredChecks = msg.items as typeof ignoredChecks;
+      if (panel.a11yOpen()) scanA11y(); // otherwise the next time the tab opens, which scans anyway
     } else if (msg.type === 'info') {
       panel.setRoot(String(msg.root ?? ''));
       refreshPanel();
@@ -358,12 +361,37 @@ const ruleSource = (rule: string) => {
   const r = [...RULES, ...DESIGN_RULES].find((x) => x.rule === rule) as { learn?: string; basis?: string; strength?: 'standard' | 'guideline' | 'convention' } | undefined;
   return { learn: r?.learn, basis: r?.basis, strength: r?.strength };
 };
+/** Checks the user dismissed, kept with the project by the server. */
+let ignoredChecks: { key: string; scope: 'one' | 'kind'; rule: string; label: string; page: string }[] = [];
+const ruleLabel = (rule: string) => [...RULES, ...DESIGN_RULES].find((r) => r.rule === rule)?.label ?? rule;
+const ignoreKey = (i: A11yIssue) => `${i.rule}|${labelOf(i.el)}|${location.pathname}`;
+const kindKey = (rule: string) => `kind|${rule}`;
+const isIgnored = (i: A11yIssue) => {
+  const keys = new Set(ignoredChecks.map((c) => c.key));
+  return keys.has(kindKey(i.rule)) || keys.has(ignoreKey(i));
+};
+
 function scanA11y() {
   const ignore = (el: Element) => el === panel.host || panel.host.contains(el) || el.closest('#brushup-root') !== null;
-  const found = [...scanPage(document, ignore), ...scanDesign(document, ignore)];
+  const found = [...scanPage(document, ignore), ...scanDesign(document, ignore)].filter((i) => !isIgnored(i));
   a11yIssues = new Map(found.map((i) => [i.id, i]));
   const views: A11yView[] = found.map((i) => ({ id: i.id, element: labelOf(i.el), category: DESIGN_RULES.some((r) => r.rule === i.rule) ? ('design' as const) : ('accessibility' as const), rule: i.rule, title: i.title, detail: i.detail, fix: i.fix?.label, ...ruleSource(i.rule) }));
-  panel.setA11y(views);
+  const ignoredViews: IgnoredView[] = ignoredChecks.map((c) => ({ key: c.key, label: c.scope === 'kind' ? `All “${ruleLabel(c.rule)}” suggestions` : `${ruleLabel(c.rule)}: ${c.label}` }));
+  panel.setA11y(views, ignoredViews);
+}
+
+async function ignoreCheck(id: string, scope: 'one' | 'kind') {
+  const issue = a11yIssues.get(id);
+  if (!issue) return;
+  const item = scope === 'kind' ? { key: kindKey(issue.rule), scope, rule: issue.rule, label: ruleLabel(issue.rule), page: '' } : { key: ignoreKey(issue), scope, rule: issue.rule, label: labelOf(issue.el), page: location.pathname };
+  const r = await rpc({ type: 'ignore-add', item });
+  if (!r.ok) panel.setStatus(r.error ?? 'Could not ignore that', 'err');
+  else panel.setStatus(scope === 'kind' ? `Ignoring all “${ruleLabel(issue.rule)}” suggestions. Restore them from the Ignored list.` : 'Ignored. Restore it from the Ignored list.', 'ok');
+}
+
+async function restoreCheck(key: string) {
+  const r = await rpc({ type: 'ignore-remove', key });
+  if (!r.ok) panel.setStatus(r.error ?? 'Could not restore that', 'err');
 }
 /** An element in a few words for a list of issues: `<p> “Privacy · Terms”`, `<img> logo.png`, `<div> .card`. */
 function labelOf(el: HTMLElement): string {
@@ -531,7 +559,8 @@ window.addEventListener('unhandledrejection', (e) => note('error', `Unhandled pr
 /** The Checks tab's findings, for an agent: where each is written, what is wrong, and the edit that would fix it. */
 function checkPage(ask: { category?: string; rule?: string; limit?: number }) {
   const ignore = (el: Element) => el === panel.host || panel.host.contains(el) || el.closest('#brushup-root') !== null;
-  const all = [...scanPage(document, ignore), ...scanDesign(document, ignore)];
+  const everything = [...scanPage(document, ignore), ...scanDesign(document, ignore)];
+  const all = everything.filter((i) => !isIgnored(i));
   const category = (i: A11yIssue) => (DESIGN_RULES.some((r) => r.rule === i.rule) ? 'design' : 'accessibility');
   const wanted = all.filter((i) => (!ask.category || ask.category === 'all' || category(i) === ask.category) && (!ask.rule || i.rule === ask.rule));
   const limit = Math.min(Math.max(Math.floor(ask.limit ?? 30), 1), 100);
@@ -539,6 +568,7 @@ function checkPage(ask: { category?: string; rule?: string; limit?: number }) {
     page: location.pathname,
     counts: { accessibility: all.filter((i) => category(i) === 'accessibility').length, design: all.filter((i) => category(i) === 'design').length },
     shown: Math.min(wanted.length, limit),
+    ignoredByUser: everything.length - all.length,
     note: 'Fixed rules read from the rendered page, no screenshot. A clean result is not proof the page is accessible. Design checks are guidelines.',
     issues: wanted.slice(0, limit).map((i) => ({ category: category(i), rule: i.rule, problem: i.title, detail: i.detail, element: describeEl(i.el), ...(i.fix ? { suggestedFix: i.fix.props } : {}), ...ruleSource(i.rule) })),
   };
@@ -1124,6 +1154,8 @@ const panel = createPanel({
   onA11yLocate: locateA11y,
   onA11yFix: (id) => void fixA11y(id),
   onA11yNote: (id) => void noteA11y(id),
+  onA11yIgnore: (id, scope) => void ignoreCheck(id, scope),
+  onA11yRestore: (key) => void restoreCheck(key),
   onHandleDown(kind, e) {
     const el = selected();
     if (!el) return;
