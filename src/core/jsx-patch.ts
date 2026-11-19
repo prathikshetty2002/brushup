@@ -8,7 +8,7 @@ import { readRules, splice } from './css-patch';
 import { afterName, findElement, fingerprint, jsxName, parseSource, parseSrc, parseVer, walk } from './jsx';
 import { matches, parseSelector, specificity } from './selector';
 import type { SourceElement } from './html-map';
-import { tailwindClasses, variantConflicts, type ClassHints, type Scale } from './tailwind';
+import { tailwindClasses, variantConflicts, VARIANT, type ClassHints, type Scale } from './tailwind';
 
 export interface JsxOptions {
   /** Express style edits as Tailwind utilities instead of inline styles. */
@@ -411,14 +411,14 @@ function patchInline(code: string, file: string, edit: Edit, prop: string, value
 /* ---------- Tailwind className ---------- */
 
 /** Returns patched code, or null if className isn't a plain string we can safely rewrite. */
-function patchClass(code: string, file: string, edit: Edit, prop: string, value: string, scale?: Scale): string | null {
+function patchClass(code: string, file: string, edit: Edit, prop: string, value: string, scale?: Scale, variant = ''): string | null {
   const { el } = located(code, file, edit);
   const sent = edit.kind === 'style' ? edit.hints : undefined;
   // Only snap when the page says 1rem is 16px, otherwise `ml-10` wouldn't be the 40px the user saw.
   const hints: ClassHints = { lineHeight: sent?.lineHeight, scale: sent?.rootPx === 16 ? scale : undefined };
   const attr = attrNamed(el, 'className');
   if (!attr) {
-    const classes = tailwindClasses('', prop, value, hints);
+    const classes = tailwindClasses('', prop, value, hints, variant);
     if (classes === null) return null;
     const at = afterName(el.openingElement);
     return code.slice(0, at) + ` className="${classes}"` + code.slice(at);
@@ -427,7 +427,7 @@ function patchClass(code: string, file: string, edit: Edit, prop: string, value:
   if (!range) return null;
   const current = code.slice(range.start, range.end);
   if (current.includes('\\')) return null;
-  const next = tailwindClasses(current, prop, value, hints);
+  const next = tailwindClasses(current, prop, value, hints, variant);
   if (next === null) return null;
   return code.slice(0, range.start) + next + code.slice(range.end);
 }
@@ -552,9 +552,15 @@ export function applyJsxEdit(files: Files, file: string, edit: Edit, opts: JsxOp
         continue;
       }
     }
-    const variants = opts.tailwind ? variantConflicts(classSource(out[file], file, edit), p) : [];
+    const variant = edit.variant ?? '';
+    if (variant) {
+      // A breakpoint or state exists only as a Tailwind class: writing it inline would apply it at every size.
+      if (!VARIANT.test(variant)) throw new EditError(`Rejected variant ${variant}`);
+      if (!opts.tailwind) throw new EditError(`Editing for ${variant}: needs Tailwind. This project's styles aren't Tailwind classes, so switch back to All sizes.`);
+    }
+    const variants = opts.tailwind ? variantConflicts(classSource(out[file], file, edit), p, variant) : [];
     if (opts.tailwind) {
-      const next = patchClass(out[file], file, edit, p, rawValue, opts.scale);
+      const next = patchClass(out[file], file, edit, p, rawValue, opts.scale, variant);
       if (next !== null) {
         out = { ...out, [file]: next };
         target = 'class';
@@ -562,6 +568,7 @@ export function applyJsxEdit(files: Files, file: string, edit: Edit, opts: JsxOp
         continue;
       }
     }
+    if (variant) throw new EditError(`This element's className is computed, so ${variant}: can't be written into it. Edit it for All sizes, or write the ${variant}: class yourself.`);
     out = { ...out, [file]: patchInline(out[file], file, edit, p, rawValue) };
     target = 'inline';
     if (variants.length) warnings.push(`${p} was written inline (className is computed), which overrides ${variants.join(', ')} at every screen size`);

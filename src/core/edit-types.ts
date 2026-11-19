@@ -28,6 +28,11 @@ export interface StyleEdit {
    * auto:    edit the rule only if it targets this single element, else inline.
    */
   scope?: Scope;
+  /**
+   * A Tailwind variant to write the change under (`md` writes `md:ml-4`), so it applies from that screen size up. Only Tailwind
+   * classes can carry it: with no className to write into, or a computed one, the edit is refused rather than written for every size.
+   */
+  variant?: string;
   /** Facts the canvas knows from the live page that the source alone can't tell us. */
   hints?: {
     /** Current line-height as a unitless ratio, so changing font-size doesn't silently change spacing. */

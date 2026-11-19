@@ -96,6 +96,8 @@ Click an element to select it. The panel shows what it is and where it lives in 
 
 Drags snap to a 4px grid (Tailwind's spacing step). Hold **Shift** for 1px precision. A label shows the value as you drag.
 
+**Editing for one screen size.** In a Tailwind project, the Style tab has an **Applies to** switch. *All sizes* writes `ml-4`; the other button is named for the breakpoint your window is at right now (say *md and up*) and writes `md:ml-4`, so the change applies from that width up and leaves smaller screens alone. The window decides which size you are looking at: resize it, or open your browser's device mode (Ctrl/Cmd+Shift+M in Chrome) and pick a phone or tablet. Only Tailwind classes can carry a breakpoint, so on a `className` built with `cn(...)`, or on a plain HTML page, Brushup refuses with the reason instead of writing the change for every size.
+
 **Three things worth knowing**
 
 - **One line of JSX can be many elements.** The three cards in a `.map()` are one `<Card>` in your source, so resizing one resizes all three. The status line tells you ("2 elements share this JSX").
@@ -180,7 +182,7 @@ Brushup writes small, exact edits, and refuses when it can't be sure. These are 
 | *No Brushup canvas is open in a browser.* | `brushup_inspect` found no open page | Open the app in a browser |
 | *Brushup is not running for this project.* | No dev server | Start `npm run dev` |
 
-Also good to know: a `className` built with `cn(...)` or a template falls back to an **inline style**. Inline styles beat Tailwind responsive variants like `md:`, so Brushup shows an amber warning naming the variants it would override; check small screens after such an edit.
+Also good to know: a `className` built with `cn(...)` or a template falls back to an **inline style**. Inline styles beat Tailwind responsive variants like `md:`, so Brushup shows an amber warning naming the variants it would override; check small screens after such an edit. (With *Applies to* set to a screen size it refuses instead, since an inline style can't be limited to one.)
 
 ## 8. Troubleshooting
 

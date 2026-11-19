@@ -74,6 +74,8 @@ export interface NoteDraft {
 
 export interface PanelHooks {
   onStyle(props: Record<string, string>, scope: PanelScope): void;
+  /** The user chose whether edits apply to every screen size or only from the current one up. */
+  onVariant?(here: boolean): void;
   /** Live, unsaved preview while a field is being scrubbed; null drops it. */
   onScrub(props: Record<string, string> | null): void;
   /** The user typed something a field can't take. */
@@ -228,6 +230,10 @@ select { appearance: none; -webkit-appearance: none; padding-right: 20px; backgr
 input[type=color] { padding: 2px; cursor: pointer; } input[type=color]::-webkit-color-swatch-wrapper { padding: 0; } input[type=color]::-webkit-color-swatch { border: 0; border-radius: 1px; } input[type=color]::-moz-color-swatch { border: 0; border-radius: 1px; }
 input:hover, select:hover, textarea:hover { border-color: var(--faint); } input:disabled { opacity: .35; }
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+.vary { margin: 0 0 12px; } .varylbl { display: block; margin-bottom: 4px; color: var(--muted); font-size: 11px; }
+.varyseg { display: flex; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; } .varyseg button { flex: 1; padding: 5px 6px; border: 0; background: transparent; color: var(--muted); font: 500 11px var(--sans); cursor: pointer; } .varyseg button + button { border-left: 1px solid var(--line); }
+.varyseg button[aria-pressed=true] { background: var(--accent); color: var(--on-accent); } .varyseg button:disabled { opacity: .45; cursor: default; }
+.varynote { margin: 6px 0 0; color: var(--faint); font-size: 10.5px; line-height: 1.45; }
 .shared { display: flex; gap: 9px; align-items: flex-start; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); color: var(--muted); cursor: pointer; font-size: 11px; line-height: 1.45; }
 .shared b { display: block; color: var(--text); font-weight: 600; } .shared .why { display: block; margin-top: 2px; color: var(--faint); font-size: 10.5px; }
 .shared input { appearance: none; -webkit-appearance: none; flex: none; width: 30px; height: 18px; margin-top: 1px; padding: 0; border-radius: 2px; background: var(--raise-2); border: 0; position: relative; cursor: pointer; }
@@ -444,6 +450,11 @@ export function createPanel(hooks: PanelHooks) {
             <label class="imgchk"><input type="checkbox" data-img="decorative" /> Decorative: nothing to describe</label>
             <p class="imgwarn" hidden>No alt text yet. People using a screen reader get nothing for this image.</p>
           </div>
+          <div class="vary" hidden role="group" aria-label="Screen size these edits apply to">
+            <span class="varylbl">Applies to</span>
+            <div class="varyseg"><button type="button" data-vary="all" aria-pressed="true">All sizes</button><button type="button" data-vary="here" aria-pressed="false">This size and up</button></div>
+            <p class="varynote" hidden></p>
+          </div>
           <div class="fields" hidden></div>
           <label class="shared" hidden title="Off: only the selected element changes. On: the CSS rule is edited, so every element it matches changes."><input type="checkbox" /><span><b>Edit the shared CSS rule</b><small class="why">Off: only this element changes.</small></span></label>
           <dl class="keys" aria-label="Shortcuts"><div><dt><kbd>drag</kbd></dt><dd>Move</dd></div><div><dt><kbd>↑ ↓ ← →</kbd></dt><dd>Nudge 1px, <kbd>⇧</kbd> for 10</dd></div><div><dt><kbd>double-click</kbd></dt><dd>Edit text</dd></div><div><dt><kbd>Ctrl D</kbd></dt><dd>Duplicate</dd></div><div><dt><kbd>Alt ↑ ↓</kbd></dt><dd>Move up or down</dd></div><div><dt><kbd>Delete</kbd></dt><dd>Delete element</dd></div><div><dt><kbd>N</kbd></dt><dd>Add a note</dd></div><div><dt><kbd>Esc</kbd></dt><dd>Deselect</dd></div></dl>
@@ -500,6 +511,20 @@ export function createPanel(hooks: PanelHooks) {
   const undoBtn = $<HTMLButtonElement>('.toast .undo');
   const info = $<HTMLDivElement>('[data-pane=style] .info');
   const fieldsEl = $<HTMLDivElement>('.fields');
+  const varyEl = $<HTMLElement>('.vary');
+  const varyBtns = [...varyEl.querySelectorAll<HTMLButtonElement>('[data-vary]')];
+  const varyNote = $<HTMLElement>('.varynote');
+  let varyAvailable = false;
+  let varyHere = false;
+  let hasSel = false;
+  varyBtns.forEach((b) =>
+    b.addEventListener('click', () => {
+      varyHere = b.dataset.vary === 'here';
+      varyBtns.forEach((o) => o.setAttribute('aria-pressed', String(o === b)));
+      hooks.onVariant?.(varyHere);
+      b.blur(); // keep the arrow keys working on the page
+    }),
+  );
   const sharedLabel = $<HTMLLabelElement>('.shared');
   const shared = $<HTMLInputElement>('.shared input');
   const sharedWhy = $<HTMLElement>('.shared .why');
@@ -1453,6 +1478,24 @@ export function createPanel(hooks: PanelHooks) {
       place(hoverBox, active && hovered !== selected ? hovered : null);
       place(selBox, active ? selected : null);
     },
+    /**
+     * The "Applies to" choice: shown only where edits can be written as Tailwind classes. `bp` is the breakpoint the window is at
+     * now (`md`), or '' below the smallest, where "this size and up" is the same as all sizes.
+     */
+    setVariants(available: boolean, bp: string, from: number) {
+      varyAvailable = available;
+      const here = varyBtns[1];
+      here.textContent = bp ? `${bp} and up` : 'This size and up';
+      here.disabled = !bp;
+      if (!bp && varyHere) {
+        varyHere = false;
+        varyBtns.forEach((o) => o.setAttribute('aria-pressed', String(o === varyBtns[0])));
+        hooks.onVariant?.(false);
+      }
+      varyNote.hidden = !(varyHere && bp);
+      varyNote.textContent = `Written as ${bp}: classes, so they apply from ${from}px up. The window decides which size you are looking at: resize it, or use your browser's device mode.`;
+      varyEl.hidden = !available || !hasSel;
+    },
     /** Drop focus from any panel field so keyboard shortcuts and fresh values reach the canvas. */
     blur() {
       (root.activeElement as HTMLElement | null)?.blur();
@@ -1460,6 +1503,8 @@ export function createPanel(hooks: PanelHooks) {
     /** Fill the property fields from the element's computed style. `detail` is a source hint shown under the tag. */
     show(el: HTMLElement | null, detail = '', noteTarget = '', suggest: NoteKind = 'element', src: SourceRef | null = null) {
       fieldsEl.hidden = sharedLabel.hidden = !el;
+      hasSel = !!el;
+      varyEl.hidden = !el || !varyAvailable;
       target = noteTarget;
       suggestedKind = suggest;
       addBtn.disabled = !el;

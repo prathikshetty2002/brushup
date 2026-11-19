@@ -428,7 +428,7 @@ async function fixA11y(id: string) {
   const target = editableFor(issue.el);
   if (!target) return panel.setStatus("Brushup can't tell where this is written, so use Send to Claude instead", 'warn');
   select(target);
-  await commitStyle(target, issue.fix.props);
+  await commitStyle(target, issue.fix.props, 'auto', ''); // a fix is for the problem as it is, at every size
   setTimeout(scanA11y, 700); // let the page settle, then show what is left
 }
 
@@ -657,8 +657,22 @@ async function sendMany(edits: Edit[]): Promise<Result> {
   return r;
 }
 
+/* ---------- editing for a screen size ---------- */
+
+/** Tailwind's default breakpoints (v3 and v4 agree): the smallest width each prefix applies from. */
+const BREAKPOINTS: [string, number][] = [['2xl', 1536], ['xl', 1280], ['lg', 1024], ['md', 768], ['sm', 640]];
+/** The breakpoint the window is at now, or '' below the smallest. */
+const breakpointNow = () => BREAKPOINTS.find(([, min]) => window.innerWidth >= min)?.[0] ?? '';
+let editHere = false;
+/** The variant an edit is written under: the current breakpoint when "this size and up" is chosen, else none (every size). */
+const variantNow = () => (editHere ? breakpointNow() : '');
+function refreshVariants() {
+  const bp = breakpointNow();
+  panel.setVariants(DEV, bp, BREAKPOINTS.find(([name]) => name === bp)?.[1] ?? 0);
+}
+
 /** Style changes for one or more elements, written as a single change (one undo step). */
-async function commitStyles(items: { el: HTMLElement; props: Record<string, string> }[], scope: Scope = 'auto', retried = false) {
+async function commitStyles(items: { el: HTMLElement; props: Record<string, string> }[], scope: Scope = 'auto', retried = false, variant = variantNow()) {
   if (!items.length) return;
   const seen = new Set<string>();
   const edits: Edit[] = [];
@@ -668,7 +682,7 @@ async function commitStyles(items: { el: HTMLElement; props: Record<string, stri
     if (seen.has(ref)) continue; // list items share one source line: a single edit covers them all
     seen.add(ref);
     const hints = { ...(Number.isFinite(rootPx) ? { rootPx } : {}), ...('font-size' in props ? { lineHeight: lineHeightRatio(el) } : {}) };
-    edits.push({ kind: 'style', id: ref, tag: tagOf(el), props, scope, hints, ...(DEV ? { ident: identOf(el), ver: verOf(el) } : {}) });
+    edits.push({ kind: 'style', id: ref, tag: tagOf(el), props, scope: variant ? 'element' : scope, ...(variant ? { variant } : {}), hints, ...(DEV ? { ident: identOf(el), ver: verOf(el) } : {}) });
   }
   const previewed = items.map((i) => preview(i.el, i.props));
   const r = await sendMany(edits);
@@ -679,7 +693,7 @@ async function commitStyles(items: { el: HTMLElement; props: Record<string, stri
       await nextFresh(1500);
       await new Promise((resolve) => setTimeout(resolve, 120));
       const els = selectedAll();
-      if (els.length === items.length) return commitStyles(items.map((it, i) => ({ el: els[i], props: it.props })), scope, true);
+      if (els.length === items.length) return commitStyles(items.map((it, i) => ({ el: els[i], props: it.props })), scope, true, variant);
     }
     return refreshPanel();
   }
@@ -690,7 +704,7 @@ async function commitStyles(items: { el: HTMLElement; props: Record<string, stri
   }
 }
 
-const commitStyle = (el: HTMLElement, props: Record<string, string>, scope: Scope = 'auto') => commitStyles([{ el, props }], scope);
+const commitStyle = (el: HTMLElement, props: Record<string, string>, scope: Scope = 'auto', variant?: string) => commitStyles([{ el, props }], scope, false, variant);
 
 /* ---------- layers ---------- */
 
@@ -1217,6 +1231,10 @@ const panel = createPanel({
     scrubbing.forEach((p) => p.revert());
     scrubbing = props ? selectedAll().map((el) => preview(el, props)) : [];
   },
+  onVariant(here) {
+    editHere = here;
+    refreshVariants();
+  },
   onStyle(props, scope) {
     void commitStyles(
       selectedAll().map((el) => ({ el, props })),
@@ -1290,6 +1308,8 @@ const panel = createPanel({
   },
 });
 panel.setMode('edit');
+refreshVariants();
+window.addEventListener('resize', refreshVariants);
 
 // Notes are re-resolved when the page changes under them (route change, HMR, list updates).
 new MutationObserver(() => (domDirty = true)).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });

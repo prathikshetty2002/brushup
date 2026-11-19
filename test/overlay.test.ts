@@ -846,6 +846,59 @@ describe('the Changes tab', () => {
   });
 });
 
+describe('editing for a screen size', () => {
+  const q = (sel: string) => o.root.querySelector(sel) as HTMLElement;
+  const btn = (which: string) => q(`[data-vary=${which}]`) as HTMLButtonElement;
+  const setWidth = (w: number) => {
+    Object.defineProperty(window, 'innerWidth', { value: w, configurable: true });
+    window.dispatchEvent(new Event('resize'));
+  };
+  beforeEach(async () => {
+    o.destroy();
+    document.body.innerHTML = '<p data-brushup-src="src/App.tsx:5:6">Hi</p>';
+    o = await loadOverlay({ mode: 'dev' });
+  });
+  afterEach(() => setWidth(1024));
+
+  it('offers it in dev mode only once something is selected, and names the breakpoint the window is at', () => {
+    setWidth(900);
+    expect(q('.vary').hidden).toBe(true);
+    click(document.querySelector('p')!);
+    expect(q('.vary').hidden).toBe(false);
+    expect(btn('here').textContent).toBe('md and up');
+    setWidth(1300);
+    expect(btn('here').textContent).toBe('xl and up');
+  });
+
+  it('writes edits with the current breakpoint as the variant once "and up" is chosen, and with none for all sizes', async () => {
+    setWidth(900);
+    click(document.querySelector('p')!);
+    key('ArrowRight');
+    await settle();
+    expect(o.last('edit').edit.variant).toBeUndefined();
+    await ok('h1');
+    btn('here').click();
+    expect(q('.varynote').hidden).toBe(false);
+    key('ArrowRight');
+    await settle();
+    expect(o.last('edit').edit).toMatchObject({ variant: 'md', scope: 'element' });
+  });
+
+  it('is off below the smallest breakpoint, where "and up" would mean every size', () => {
+    setWidth(500);
+    click(document.querySelector('p')!);
+    expect(btn('here').disabled).toBe(true);
+  });
+
+  it('is not offered on a plain HTML page, which has no classes to carry it', async () => {
+    o.destroy();
+    document.body.innerHTML = '<p data-brushup-id="a1">Hi</p>';
+    o = await loadOverlay();
+    click(document.querySelector('p')!);
+    expect(q('.vary').hidden).toBe(true);
+  });
+});
+
 describe('the Layers tab in dev mode: which component each element is written in', () => {
   const q = (sel: string) => o.root.querySelector(sel) as HTMLElement;
   const rows = () => [...o.root.querySelectorAll('.layers button.row')] as HTMLButtonElement[];

@@ -54,7 +54,7 @@ When your agent changes the code, the canvas updates in place.
 | Node | 26 locally; **20.9, 22 and 24 in CI** | Node 22 and 24 run the full test suite; Node 20.9 installs the packed package and exercises the commands, both module formats, the MCP server and the static server (the test tooling itself needs Node 22+) |
 | Next.js | 16.4 and 15.5, each with Turbopack and webpack, App Router and Pages Router | `>=15.3` is the lowest version with the stable `turbopack.rules` config; Next 14 is untested |
 | Vite | 8 | plugin API is unchanged back to 5, untested |
-| React Router | 7 (Vite, server-rendered) with Tailwind 4 | tried by hand: text and style edits write back. The canvas loads from `app/root.tsx`. Remix on Vite uses the same code path, untested |
+| React Router | 7 (Vite, server-rendered) with Tailwind 4 | tried by hand: text and style edits write back. The canvas loads from `app/root.tsx`. Remix on Vite also works: tried by hand, the canvas loads and nudge, text and delete edits write back |
 | React | 19 | |
 | Tailwind | 4.3 and 3.4 | the installed version decides whether off-scale values become `ml-9.5` (v4) or `ml-[38px]` (v3) |
 | shadcn/ui | current Base UI version | Radix-based versions forward props the same way, untested |

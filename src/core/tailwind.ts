@@ -97,29 +97,42 @@ function snapped(prefix: string, value: string, scale: Scale): string | null {
 }
 
 /** Returns the new class string, or null if the value can't be expressed as a class. */
-export function tailwindClasses(classes: string, prop: string, value: string, hints: ClassHints = {}): string | null {
+export function tailwindClasses(classes: string, prop: string, value: string, hints: ClassHints = {}, variant = ''): string | null {
   if (/[\]\[{}"';\\]/.test(value) || (hints.lineHeight && !/^[\d.]+$/.test(hints.lineHeight))) return null;
+  if (variant && !VARIANT.test(variant)) return null;
   const { remove, make } = mapping(prop.toLowerCase(), value, hints.scale);
   const tokens = classes.split(/\s+/).filter(Boolean);
-  const isRemoved = (c: string) => !c.includes(':') && remove.test(c);
-  const out = [...tokens.filter((c) => !isRemoved(c)), make];
+  // Only utilities under exactly this variant are the ones replaced: `md:ml-4` is not touched by an edit with no variant, and the reverse.
+  const utility = (c: string) => {
+    const at = c.lastIndexOf(':');
+    return (at < 0 ? '' : c.slice(0, at)) === variant ? c.slice(at + 1) : null;
+  };
+  const isRemoved = (c: string) => {
+    const u = utility(c);
+    return u !== null && remove.test(u);
+  };
+  const tag = (u: string) => (variant ? `${variant}:${u}` : u);
+  const out = [...tokens.filter((c) => !isRemoved(c)), tag(make)];
   // Replacing `text-5xl` also drops its built-in line-height; pin the one the page was showing.
-  const lostLineHeight = prop === 'font-size' && tokens.some((c) => isRemoved(c) && NAMED_SIZE.test(c));
-  if (lostLineHeight && hints.lineHeight && !out.some((c) => !c.includes(':') && /^!?leading-/.test(c))) out.push(`leading-[${hints.lineHeight}]`);
+  const lostLineHeight = prop === 'font-size' && tokens.some((c) => isRemoved(c) && NAMED_SIZE.test(utility(c)!));
+  if (lostLineHeight && hints.lineHeight && !out.some((c) => /^!?leading-/.test(utility(c) ?? ''))) out.push(tag(`leading-[${hints.lineHeight}]`));
   return out.join(' ');
 }
+
+/** The variants an edit may be written under: screen sizes, and the states people ask for next. Nothing else goes into a class name. */
+export const VARIANT = /^(sm|md|lg|xl|2xl|hover|focus|dark)$/;
 
 /**
  * Variant utilities (`md:ml-4`, `hover:w-full`) in `text` that set the same property as `prop`. They keep
  * applying under their condition and win over a plain class or an inline style, so an edit made at the
  * current screen size can look ignored (class) or leak to every size (inline).
  */
-export function variantConflicts(text: string, prop: string): string[] {
+export function variantConflicts(text: string, prop: string, except = ''): string[] {
   const { remove } = mapping(prop.toLowerCase(), '0');
   const found = new Set<string>();
   for (const token of text.split(/[\s'"`,(){}]+/)) {
     const at = token.lastIndexOf(':');
-    if (at > 0 && /^[\w-]+(:[\w-]+)*$/.test(token.slice(0, at)) && remove.test(token.slice(at + 1))) found.add(token);
+    if (at > 0 && /^[\w-]+(:[\w-]+)*$/.test(token.slice(0, at)) && token.slice(0, at) !== except && remove.test(token.slice(at + 1))) found.add(token);
   }
   return [...found];
 }

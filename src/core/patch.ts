@@ -106,6 +106,7 @@ function findRuleDecl(doc: SourceDoc, el: SourceElement, sheets: Sheet[], files:
 }
 
 function applyStyleProp(files: Files, entry: string, edit: StyleEdit, prop: string, value: string): Files {
+  if (edit.variant) throw new EditError(`Editing for ${edit.variant}: works on Tailwind classes in a React or Next project. This is a plain HTML page, so switch back to All sizes.`);
   const source = files[entry];
   const doc = mapHtml(source);
   const el = lookup(doc, edit);

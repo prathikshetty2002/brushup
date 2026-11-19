@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { EditError, type Edit } from '../src/core/edit-types';
+import { EditError, type Edit, type StyleEdit } from '../src/core/edit-types';
 import { instrument } from '../src/core/jsx';
 import { applyJsxEdit, TextNotHere } from '../src/core/jsx-patch';
 import { tailwindClasses } from '../src/core/tailwind';
@@ -444,5 +444,54 @@ export default function P() {
     const ticked = 'export default () => <p>{`Save`}</p>;';
     expect(run(text('p', 0, 'Saved', undefined, quoted), quoted)).toContain('{"Saved"}');
     expect(run(text('p', 0, 'Saved', undefined, ticked), ticked)).toContain('{`Saved`}');
+  });
+});
+
+describe('editing for a screen size (a variant)', () => {
+  const tw = { tailwind: true };
+  const code = `export default function P() {
+  return <div className="p-4 ml-4 md:ml-8 lg:ml-12">x</div>;
+}
+`;
+  const e = (props: Record<string, string>, variant?: string, c = code): StyleEdit => ({ kind: 'style', id: idOf(c, 'div'), tag: 'div', props, ...(variant ? { variant } : {}) });
+
+  it('writes the class under the variant, replacing only the one that has that same variant', () => {
+    const out = run(code, e({ 'margin-left': '40px' }, 'md'), tw).files[FILE];
+    expect(out).toContain('className="p-4 ml-4 lg:ml-12 md:ml-[40px]"');
+  });
+
+  it('an edit with no variant leaves the md: and lg: classes alone', () => {
+    const out = run(code, e({ 'margin-left': '40px' }), tw).files[FILE];
+    expect(out).toContain('className="p-4 md:ml-8 lg:ml-12 ml-[40px]"');
+  });
+
+  it('warns that a larger size still wins, but not about the size being edited', () => {
+    const r = run(code, e({ 'margin-left': '40px' }, 'md'), tw);
+    expect(r.warning).toMatch(/lg:ml-12/);
+    expect(r.warning).not.toMatch(/md:ml-8/);
+  });
+
+  it('adds a className with the variant when there is none', () => {
+    const bare = code.replace(' className="p-4 ml-4 md:ml-8 lg:ml-12"', '');
+    expect(run(bare, e({ 'font-size': '30px' }, 'lg', bare), tw).files[FILE]).toContain('className="lg:text-[30px]"');
+  });
+
+  it('keeps the line-height a named size carried, under the same variant', () => {
+    const big = code.replace('p-4 ml-4 md:ml-8 lg:ml-12', 'text-lg md:text-2xl');
+    const out = run(big, { ...e({ 'font-size': '40px' }, 'md', big), hints: { lineHeight: '1.2' } }, tw).files[FILE];
+    expect(out).toContain('md:text-[40px]');
+    expect(out).toContain('md:leading-[1.2]');
+    expect(out).toContain('text-lg');
+  });
+
+  it('refuses rather than write for every size when it cannot write a class', () => {
+    const dyn = `export default function P({ on }) {\n  return <div className={cn('a', on && 'b')}>x</div>;\n}\n`;
+    expect(() => run(dyn, e({ 'margin-left': '40px' }, 'md', dyn), tw)).toThrow(/computed/);
+    expect(() => run(code, e({ 'margin-left': '40px' }, 'md'), { tailwind: false })).toThrow(/needs Tailwind/);
+  });
+
+  it('only accepts known variants, since the value goes into the class name', () => {
+    expect(() => run(code, e({ 'margin-left': '40px' }, 'md:ml-1 evil'), tw)).toThrow(/Rejected variant/);
+    expect(tailwindClasses('a', 'margin-left', '4px', {}, 'x y')).toBeNull();
   });
 });

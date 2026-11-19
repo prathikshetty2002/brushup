@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Edit for one screen size.** In a Tailwind project the Style tab has an **Applies to** switch: *All sizes*, or *md and up* (named for the breakpoint your window is at). The second writes your change as `md:ml-4` instead of `ml-4`, replacing only the class that already has that same prefix, so other sizes keep their values. It works for every edit that writes a style: fields, nudging with the arrow keys, dragging and resizing. Checks fixes always apply to every size. Brushup refuses, with the reason, rather than write for every size when it can't write a class (a computed `className`, a plain HTML page, a project without Tailwind). A warning names a larger-size class that will still win. The switch is the first piece of responsive editing; it uses your window width, so resize it or use your browser's device mode to look at other sizes. The same mechanism is ready for `hover:`, `focus:` and `dark:`.
+
 ## 0.1.8
 
 - **Checked by hand, no code change needed:** Remix on Vite (`remix vite:dev` with the Brushup plugin) loads the canvas, and a nudge, a text edit and a delete each wrote to the route's JSX. On a plain HTML page in a real browser, delete, duplicate, reorder, wrap, alt text, the Decorative checkbox and an image upload through the file picker all wrote the right changes (an upload never overwrites an existing file: it saved `a-1.png` beside `a.png`).
