@@ -164,7 +164,7 @@ export function scanDesign(doc: Document, ignore: (el: Element) => boolean = () 
     add({
       rule: 'spacing-grid',
       el,
-      title: `Spacing is off the ${GRID}px grid`,
+      title: `Off the ${GRID}px grid: ${Object.entries(off).map(([p]) => `${p} ${cs.getPropertyValue(p)}`).join(', ')}`,
       detail: `${describe(el)} has ${list.join(', ')}. Spacing from one scale (multiples of ${GRID}px) makes a layout feel ordered; odd values such as 15px or 23px usually come from nudging by eye.`,
       fix: { label: `Snap to the grid (${Object.entries(off).map(([p, v]) => `${p.replace('padding-', 'p-').replace('margin-', 'm-')} ${v}`).join(', ')})`, props: off },
     });

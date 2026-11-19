@@ -1062,8 +1062,10 @@ describe('the A11y tab', () => {
     el('a2').title = '<img src=x onerror=alert(1)>';
     q('[data-tab=a11y]').click();
     expect(q('.a11ysum').textContent).toBe('1 issue');
-    expect(q('.a11yitem b').textContent).toMatch(/Text is hard to read/);
-    expect(q('.a11yitem .rule').textContent).toBe('Contrast');
+    expect(q('.a11yitem .sub').textContent).toMatch(/Text is hard to read/);
+    expect(q('.a11yitem b').textContent).toBe('<p> “World”'); // the element names the card
+    expect(q('.a11ygrouphead .rule').textContent).toBe('Contrast');
+    expect(q('.a11ygrouphead .gcount').textContent).toBe('1');
     expect(q('[data-tab=a11y]').textContent).toContain('Checks');
     expect(q('[data-a11y-count]').textContent).toBe('1');
     expect(o.root.querySelector('.a11yitem img')).toBeNull();
@@ -1079,7 +1081,7 @@ describe('the A11y tab', () => {
     q('[data-tab=a11y]').click();
     const head = q('.a11yhead');
     const body = q('.a11ybody');
-    expect(head.querySelector('b')!.textContent).toMatch(/Text is hard to read/);
+    expect(head.querySelector('.sub')!.textContent).toMatch(/Text is hard to read/);
     expect(head.getAttribute('aria-expanded')).toBe('false');
     expect(body.hidden).toBe(true); // the explanation, the buttons and the source stay out of sight
     expect(head.getAttribute('aria-controls')).toBe(body.id);
@@ -1089,6 +1091,47 @@ describe('the A11y tab', () => {
     expect(q('.a11yitem').classList.contains('open')).toBe(true);
     head.click();
     expect(body.hidden).toBe(true);
+  });
+
+  describe('grouping', () => {
+    /** n paragraphs with faint text, each its own contrast problem. */
+    const faintParagraphs = (n: number) => {
+      document.querySelector('main')!.insertAdjacentHTML('beforeend', Array.from({ length: n }, (_, i) => `<p data-brushup-id="f${i}" style="color:#aaa;background:#fff;font-size:16px">faint ${i}</p>`).join(''));
+      for (let i = 0; i < n; i++) layout(el(`f${i}`), { x: 0, y: 0, width: 100, height: 20 });
+    };
+    const groups = () => [...o.root.querySelectorAll('.a11ygroup')] as HTMLElement[];
+    const heads = () => [...o.root.querySelectorAll('.a11ygrouphead')] as HTMLButtonElement[];
+
+    it('puts issues of one kind under one heading with a count, so a long run does not repeat the same words', () => {
+      faintParagraphs(3);
+      q('[data-tab=a11y]').click();
+      expect(groups()).toHaveLength(1);
+      expect(heads()[0].querySelector('.rule')!.textContent).toBe('Contrast');
+      expect(heads()[0].querySelector('.gcount')!.textContent).toBe('3');
+      const cards = [...o.root.querySelectorAll('.a11yhead b')].map((b) => b.textContent);
+      expect(cards).toEqual(['<p> “faint 0”', '<p> “faint 1”', '<p> “faint 2”']); // each card is its own element
+    });
+
+    it('opens a small group and folds a group of more than three, and remembers what you chose', () => {
+      faintParagraphs(5);
+      q('[data-tab=a11y]').click();
+      expect(heads()[0].getAttribute('aria-expanded')).toBe('false');
+      expect((o.root.querySelector('.a11ygroupbody') as HTMLElement).hidden).toBe(true);
+      heads()[0].click();
+      expect((o.root.querySelector('.a11ygroupbody') as HTMLElement).hidden).toBe(false);
+      (q('[data-act=a11y-scan]') as HTMLButtonElement).click();
+      expect(heads()[0].getAttribute('aria-expanded')).toBe('true'); // your choice survives the next check
+    });
+
+    it('names an image by its file and an unlabelled element by what identifies it', () => {
+      document.querySelector('main')!.insertAdjacentHTML('beforeend', '<img data-brushup-id="i1" src="/img/team/photo.png"><button data-brushup-id="b1" class="icon-btn" id="close"></button>');
+      layout(el('i1'), { x: 0, y: 0, width: 50, height: 50 });
+      layout(el('b1'), { x: 0, y: 0, width: 40, height: 40 });
+      q('[data-tab=a11y]').click();
+      const labels = [...o.root.querySelectorAll('.a11yhead b')].map((b) => b.textContent);
+      expect(labels).toContain('<img> photo.png');
+      expect(labels).toContain('<button> #close');
+    });
   });
 
   it('keeps a card as you left it when the page is checked again, and only that card', () => {
@@ -1150,7 +1193,9 @@ describe('the A11y tab', () => {
     (o.root.querySelector('[data-filter=design]') as HTMLButtonElement).click();
     expect(q('.a11ysum').textContent).toBe('1 design issue');
     expect(o.root.querySelectorAll('.a11yitem')).toHaveLength(1);
-    expect(q('.a11yitem .rule').textContent).toBe('Design · Spacing');
+    expect(q('.a11ygrouphead .rule').textContent).toBe('Design · Spacing');
+    expect(q('.a11yitem b').textContent).toBe('<div> “x”');
+    expect(q('.a11yitem .sub').textContent).toBe('Off the 4px grid: padding-top 15px');
     expect((q('.a11yitem .learn') as HTMLAnchorElement).href).toBe('https://m2.material.io/design/layout/spacing-methods.html');
     expect(q('.a11yitem .basis').textContent).toMatch(/^Guideline\. Figma recommends an 8-point grid/);
     (q('.a11yitem .apply') as HTMLButtonElement).click();
@@ -1158,7 +1203,7 @@ describe('the A11y tab', () => {
     expect(o.last('edit').edit).toMatchObject({ kind: 'style', id: 'a3', props: { 'padding-top': '16px' } });
     (o.root.querySelectorAll('.a11yitem .acts button')[2] as HTMLButtonElement).click();
     await settle();
-    expect(o.last('note-save').note).toMatchObject({ label: 'Design', text: expect.stringMatching(/^Design: Spacing is off the 4px grid/) });
+    expect(o.last('note-save').note).toMatchObject({ label: 'Design', text: expect.stringMatching(/^Design: Off the 4px grid: padding-top 15px/) });
     (o.root.querySelector('[data-filter=accessibility]') as HTMLButtonElement).click();
     expect(q('.a11ysum').textContent).toBe('1 accessibility issue');
     (o.root.querySelector('[data-filter=all]') as HTMLButtonElement).click();

@@ -362,9 +362,21 @@ function scanA11y() {
   const ignore = (el: Element) => el === panel.host || panel.host.contains(el) || el.closest('#brushup-root') !== null;
   const found = [...scanPage(document, ignore), ...scanDesign(document, ignore)];
   a11yIssues = new Map(found.map((i) => [i.id, i]));
-  const views: A11yView[] = found.map((i) => ({ id: i.id, category: DESIGN_RULES.some((r) => r.rule === i.rule) ? ('design' as const) : ('accessibility' as const), rule: i.rule, title: i.title, detail: i.detail, fix: i.fix?.label, ...ruleSource(i.rule) }));
+  const views: A11yView[] = found.map((i) => ({ id: i.id, element: labelOf(i.el), category: DESIGN_RULES.some((r) => r.rule === i.rule) ? ('design' as const) : ('accessibility' as const), rule: i.rule, title: i.title, detail: i.detail, fix: i.fix?.label, ...ruleSource(i.rule) }));
   panel.setA11y(views);
 }
+/** An element in a few words for a list of issues: `<p> “Privacy · Terms”`, `<img> logo.png`, `<div> .card`. */
+function labelOf(el: HTMLElement): string {
+  const tag = tagOf(el);
+  if (el instanceof HTMLImageElement) return `<img> ${(el.getAttribute('src') ?? '').split('/').pop()?.split('?')[0].slice(0, 32) ?? ''}`.trim();
+  if (el === document.documentElement || el === document.body) return `<${tag}> (the whole page)`;
+  // innerText puts a break between blocks (so "Drag to place" and "Move any element" don't run together); textContent is the fallback.
+  const text = (ownText(el) || ((el.innerText ?? el.textContent) ?? '').replace(/\s+/g, ' ').trim()).slice(0, 28);
+  if (text) return `<${tag}> “${text}”`;
+  const hint = el.id ? `#${el.id}` : el.getAttribute('aria-label') ? `“${el.getAttribute('aria-label')!.slice(0, 28)}”` : el.classList[0] ? `.${el.classList[0]}` : '';
+  return `<${tag}>${hint ? ` ${hint}` : ''}`;
+}
+
 /** The nearest element Brushup tagged, which is the one whose source it can edit. */
 const editableFor = (el: HTMLElement) => el.closest<HTMLElement>(TAGGED);
 

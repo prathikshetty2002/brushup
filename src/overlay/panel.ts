@@ -30,6 +30,8 @@ export interface A11yView {
   id: string;
   category: 'accessibility' | 'design';
   rule: string;
+  /** The element in a few words (`<p> “Privacy · Terms”`), so two issues of one kind can be told apart. */
+  element: string;
   title: string;
   detail: string;
   /** Label of the one-click fix, when there is one. */
@@ -232,7 +234,11 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .chnote { margin: 8px 0; padding: 7px 9px; border-left: 2px solid var(--warn); background: var(--raise); color: var(--muted); font-size: 11px; line-height: 1.5; }
 .note .reply { margin: 6px 0 0; padding: 5px 8px; border-left: 2px solid var(--ok); background: var(--raise); color: var(--muted); font-size: 11px; line-height: 1.5; }
 .a11yitem { border: 1px solid var(--line); border-radius: 3px; padding: 8px 9px; margin-bottom: 6px; background: var(--bg); }
-.a11yitem { padding: 0; } .a11yhead { display: block; position: relative; width: 100%; padding: 8px 26px 8px 9px; text-align: left; border-radius: 3px; } .a11yhead::after { content: '▸'; position: absolute; right: 9px; top: 9px; color: var(--faint); font-size: 10px; } .a11yitem.open .a11yhead::after { content: '▾'; } .a11yhead b { margin-top: 0; } .a11ybody { padding: 0 9px 9px; } .a11ybody[hidden] { display: none; }
+.a11yitem { padding: 0; } .a11yhead { display: block; position: relative; width: 100%; padding: 7px 26px 7px 9px; text-align: left; border-radius: 3px; } .a11yhead::after { content: '▸'; position: absolute; right: 9px; top: 9px; color: var(--faint); font-size: 10px; } .a11yitem.open .a11yhead::after { content: '▾'; }
+.a11yhead b { display: block; margin: 0; font: 600 11.5px/1.4 var(--mono); color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .a11yhead .sub { display: block; margin-top: 1px; color: var(--muted); font-size: 11px; line-height: 1.4; }
+.a11ybody { padding: 0 9px 9px; } .a11ybody[hidden], .a11ygroupbody[hidden] { display: none; }
+.a11ygroup { margin-bottom: 8px; } .a11ygrouphead { display: flex; align-items: center; gap: 8px; width: 100%; padding: 4px 2px; text-align: left; border-radius: 3px; } .a11ygrouphead::before { content: '▸'; color: var(--faint); font-size: 10px; width: 10px; } .a11ygroup.open .a11ygrouphead::before { content: '▾'; }
+.a11ygrouphead .rule { margin: 0; } .a11ygrouphead .gcount { margin-left: auto; color: var(--faint); font: 600 11px var(--mono); }
 .a11yitem .rule { display: inline-block; margin-bottom: 4px; padding: 1px 6px; border-radius: 2px; background: var(--raise); color: var(--muted); font: 600 10px var(--mono); text-transform: uppercase; letter-spacing: .04em; }
 .a11yitem b { display: block; color: var(--text); font-weight: 600; font-size: 12px; line-height: 1.4; } .a11yitem p { margin: 3px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .layfilter { width: 100%; height: 26px; margin: 0 0 6px; padding: 0 8px; border: 1px solid var(--fieldline); border-radius: 3px; background: var(--field); color: var(--text); font: 11.5px system-ui; } .layfilter::placeholder { color: var(--faint); }
@@ -1083,6 +1089,7 @@ export function createPanel(hooks: PanelHooks) {
   const LEARN_HOSTS = new Set(['www.w3.org', 'www.figma.com', 'm2.material.io', 'developer.apple.com', 'baymard.com', 'boia.org', 'developer.mozilla.org']);
   let a11yAll: A11yView[] = [];
   const a11yOpened = new Set<string>();
+  const a11yGroups = new Map<string, boolean>();
   let a11yCards = 0;
   let a11yFilter: 'all' | 'accessibility' | 'design' = 'all';
   const filterBtns = [...root.querySelectorAll<HTMLButtonElement>('.a11yfilter button')];
@@ -1104,7 +1111,7 @@ export function createPanel(hooks: PanelHooks) {
     const what = a11yFilter === 'all' ? '' : `${a11yFilter} `;
     a11ySum.textContent = issues.length ? `${issues.length} ${what}issue${issues.length === 1 ? '' : 's'}` : `No ${what}issues found`;
     a11yNote.hidden = false;
-    for (const issue of issues) {
+    const card = (issue: A11yView) => {
       const item = document.createElement('div');
       item.className = 'a11yitem';
       const key = `${issue.rule}|${issue.detail.slice(0, 80)}`;
@@ -1123,11 +1130,12 @@ export function createPanel(hooks: PanelHooks) {
       };
       head.setAttribute('aria-controls', body.id);
       head.addEventListener('click', () => setOpen(!!body.hidden));
-      const rule = document.createElement('span');
-      rule.className = `rule${issue.category === 'design' ? ' design' : ''}`;
-      rule.textContent = `${issue.category === 'design' ? 'Design · ' : ''}${[...RULES, ...DESIGN_RULES].find((r) => r.rule === issue.rule)?.label ?? issue.rule}`;
-      const title = document.createElement('b');
-      title.textContent = issue.title; // text only: this comes from the page being inspected
+      // The element names the card (so a list of the same problem reads as different things); what is wrong sits under it.
+      const name = document.createElement('b');
+      name.textContent = issue.element; // text only: this comes from the page being inspected
+      const sub = document.createElement('span');
+      sub.className = 'sub';
+      sub.textContent = issue.title;
       const detail = document.createElement('p');
       detail.textContent = issue.detail;
       const acts = document.createElement('div');
@@ -1142,7 +1150,7 @@ export function createPanel(hooks: PanelHooks) {
       if (issue.fix) act(issue.fix, () => hooks.onA11yFix(issue.id), 'apply');
       act('Locate', () => hooks.onA11yLocate(issue.id));
       act('Send to Claude', () => hooks.onA11yNote(issue.id));
-      head.append(rule, title);
+      head.append(name, sub);
       body.append(detail, acts);
       item.append(head, body);
       if (issue.basis) {
@@ -1161,7 +1169,42 @@ export function createPanel(hooks: PanelHooks) {
         body.append(learn);
       }
       setOpen(a11yOpened.has(key)); // closed unless you opened it, and it stays as you left it when the page is checked again
-      a11yList.append(item);
+      return item;
+    };
+    // Group by kind of problem, under a heading that names it and counts it. A group with more than a few starts folded.
+    const groups = new Map<string, A11yView[]>();
+    for (const issue of issues) (groups.get(issue.rule) ?? groups.set(issue.rule, []).get(issue.rule)!).push(issue);
+    for (const [ruleKey, list] of groups) {
+      const section = document.createElement('div');
+      section.className = 'a11ygroup';
+      const gh = document.createElement('button');
+      gh.type = 'button';
+      gh.className = 'a11ygrouphead';
+      const gb = document.createElement('div');
+      gb.className = 'a11ygroupbody';
+      gb.id = `a11y-group-${a11yCards++}`;
+      const open = a11yGroups.get(ruleKey) ?? list.length <= 3;
+      const apply = (isOpen: boolean) => {
+        gb.hidden = !isOpen;
+        gh.setAttribute('aria-expanded', String(isOpen));
+        section.classList.toggle('open', isOpen);
+      };
+      gh.setAttribute('aria-controls', gb.id);
+      gh.addEventListener('click', () => {
+        a11yGroups.set(ruleKey, !!gb.hidden);
+        apply(!!gb.hidden);
+      });
+      const rule = document.createElement('span');
+      rule.className = `rule${list[0].category === 'design' ? ' design' : ''}`;
+      rule.textContent = `${list[0].category === 'design' ? 'Design · ' : ''}${[...RULES, ...DESIGN_RULES].find((r) => r.rule === ruleKey)?.label ?? ruleKey}`;
+      const count = document.createElement('span');
+      count.className = 'gcount';
+      count.textContent = String(list.length);
+      gh.append(rule, count);
+      gb.append(...list.map(card));
+      apply(open);
+      section.append(gh, gb);
+      a11yList.append(section);
     }
   };
   const setA11y = (issues: A11yView[]) => {
