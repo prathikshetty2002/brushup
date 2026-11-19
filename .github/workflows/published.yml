@@ -1,0 +1,29 @@
+name: Published package
+
+# Installs what is on npm, not what is in the repo, on Linux, Windows and macOS, and runs the same checks as the packed-package smoke
+# test: install, init, imports from CommonJS and ESM, the MCP server, and serving a page. Run it by hand after `npm publish`
+# (Actions tab, "Published package", Run workflow).
+
+on:
+  workflow_dispatch:
+    inputs:
+      spec:
+        description: 'What to install (default: the latest release)'
+        default: 'brushup@latest'
+
+jobs:
+  smoke:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: ['20.9', '22', '24']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Smoke test the published package
+        run: node scripts/smoke.mjs "${{ inputs.spec || 'brushup@latest' }}"
