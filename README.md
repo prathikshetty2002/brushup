@@ -125,6 +125,7 @@ npx brushup page.html          # http://127.0.0.1:4321
 | See the page's structure | **Layers** tab: the elements as a tree with a filter box, folding for big pages, and click to select |
 | Check accessibility and design | **Checks** tab: 15 accessibility and 11 design checks (contrast, tap size, alt text, keyboard access, headings; spacing grid, line length, hierarchy, type scale, stretched images, clipped text…). No AI, no tokens. Each says where its number comes from (WCAG, Figma, Material, Apple, Baymard) and links to it; one-click fixes where a style edit can do it, Send to Claude for the rest, and Ignore for the ones that don't fit (saved with the project) |
 | Know before it mixes in | The first edit to a file that already has uncommitted changes says so (once per file), so you can commit first |
+| Line things up | Shift-click two or more elements: align edges or centres, or space three or more evenly. Written as the same margin or `top`/`left` edit a drag makes |
 | Review what changed | **Changes** tab: the git diff against your last commit, files Brushup edited marked, Copy diff |
 | See what you saved | **Changes** tab: an estimate of the tokens your canvas edits saved this session and in the project (`brushup stats` in a terminal). It is labelled an estimate, errs low, and [the guide](docs/GUIDE.md#how-the-token-estimate-works) lists its sources |
 | Undo / redo | `Ctrl/Cmd+Z`, `Ctrl/Cmd+Shift+Z` |

@@ -867,6 +867,45 @@ describe('the Changes tab', () => {
   });
 });
 
+describe('lining up a selection', () => {
+  const q = (sel: string) => o.root.querySelector(sel) as HTMLElement;
+  const btn = (kind: string) => q(`[data-arrange=${kind}]`) as HTMLButtonElement;
+
+  it('offers the buttons for two or more selected elements, and spacing only for three', () => {
+    click(el('a1'));
+    expect(q('.arrange').hidden).toBe(true);
+    click(el('a2'), { shiftKey: true });
+    expect(q('.arrange').hidden).toBe(false);
+    expect(q('.arrangelbl').textContent).toBe('Line up 2 elements');
+    expect(btn('left').disabled).toBe(false);
+    expect(btn('space-x').disabled).toBe(true);
+    click(el('a3'), { shiftKey: true });
+    expect(btn('space-x').disabled).toBe(false);
+  });
+
+  it('aligns left edges by writing the margin of each element that has to move', async () => {
+    layout(el('a1'), { x: 40, y: 10, width: 100, height: 30 });
+    layout(el('a2'), { x: 100, y: 60, width: 80, height: 30 });
+    click(el('a1'));
+    click(el('a2'), { shiftKey: true });
+    btn('left').click();
+    await settle();
+    // a1 is already at the left edge, so only a2 moves, and it goes as a single edit.
+    expect(o.last('edit').edit).toMatchObject({ id: 'a2', props: { 'margin-left': '-60px' } });
+  });
+
+  it('says so when everything is already lined up, and writes nothing', async () => {
+    layout(el('a1'), { x: 40, y: 10, width: 100, height: 30 });
+    layout(el('a2'), { x: 40, y: 60, width: 80, height: 30 });
+    click(el('a1'));
+    click(el('a2'), { shiftKey: true });
+    btn('left').click();
+    await settle();
+    expect(status()).toBe('Already lined up');
+    expect(o.all('edits')).toHaveLength(0);
+  });
+});
+
 describe('a refused edit offers to become a note', () => {
   const pin = () => o.root.querySelector('.toast .pinnote') as HTMLButtonElement;
   beforeEach(async () => {

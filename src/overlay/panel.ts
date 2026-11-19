@@ -29,6 +29,8 @@ export interface SavingsView {
   total: { changes: number; edits: number; tokens: number };
 }
 
+export type ArrangeKind = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom' | 'space-x' | 'space-y';
+
 export type ChangesView =
   | { repo: false; reason: string }
   | { repo: true; branch: string; truncated: boolean; files: { file: string; status: string; additions: number; deletions: number; diff: string; byBrushup: boolean }[] };
@@ -83,6 +85,8 @@ export interface PanelHooks {
   onStyle(props: Record<string, string>, scope: PanelScope): void;
   /** The user chose whether edits apply to every screen size or only from the current one up. */
   onVariant?(here: boolean): void;
+  /** Line up the selected elements: align their edges or centres, or space them evenly. */
+  onArrange?(kind: ArrangeKind): void;
   /** Live, unsaved preview while a field is being scrubbed; null drops it. */
   onScrub(props: Record<string, string> | null): void;
   /** The user typed something a field can't take. */
@@ -237,6 +241,7 @@ select { appearance: none; -webkit-appearance: none; padding-right: 20px; backgr
 input[type=color] { padding: 2px; cursor: pointer; } input[type=color]::-webkit-color-swatch-wrapper { padding: 0; } input[type=color]::-webkit-color-swatch { border: 0; border-radius: 1px; } input[type=color]::-moz-color-swatch { border: 0; border-radius: 1px; }
 input:hover, select:hover, textarea:hover { border-color: var(--faint); } input:disabled { opacity: .35; }
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+.arrange { margin: 0 0 12px; } .arrangelbl { display: block; margin-bottom: 4px; color: var(--muted); font-size: 11px; } .arrangebtns { display: flex; gap: 2px; flex-wrap: wrap; } .arrangebtns .iconbtn:disabled { opacity: .35; }
 .vary { margin: 0 0 12px; } .tokens { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin: 6px 0 2px; } .tokenlbl { flex: 0 0 100%; color: var(--faint); font-size: 10.5px; }
 .tokensw { width: 18px; height: 18px; padding: 0; border: 1px solid var(--line-strong, rgba(0,0,0,.25)); border-radius: 2px; cursor: pointer; } .tokensw:hover { outline: 2px solid var(--accent); outline-offset: 1px; }
 .vary summary { cursor: pointer; color: var(--muted); font-size: 11px; list-style: none; } .vary summary::-webkit-details-marker { display: none; } .vary summary::before { content: '▸ '; } .vary[open] summary::before { content: '▾ '; } .vary[open] summary { margin-bottom: 5px; }
@@ -461,6 +466,7 @@ export function createPanel(hooks: PanelHooks) {
             <label class="imgchk"><input type="checkbox" data-img="decorative" /> Decorative: nothing to describe</label>
             <p class="imgwarn" hidden>No alt text yet. People using a screen reader get nothing for this image.</p>
           </div>
+          <div class="arrange" hidden role="group" aria-label="Line up the selected elements"><span class="arrangelbl">Line up {n} elements</span><div class="arrangebtns"><button class="iconbtn" data-arrange="left" title="Align left edges" aria-label="Align left edges"><svg viewBox="0 0 24 24"><path d="M4 3v18"/><rect x="6" y="6" width="13" height="4" rx="1"/><rect x="6" y="14" width="8" height="4" rx="1"/></svg></button><button class="iconbtn" data-arrange="center" title="Align centres horizontally" aria-label="Align centres horizontally"><svg viewBox="0 0 24 24"><path d="M12 3v18"/><rect x="5" y="6" width="14" height="4" rx="1"/><rect x="8" y="14" width="8" height="4" rx="1"/></svg></button><button class="iconbtn" data-arrange="right" title="Align right edges" aria-label="Align right edges"><svg viewBox="0 0 24 24"><path d="M20 3v18"/><rect x="5" y="6" width="13" height="4" rx="1"/><rect x="10" y="14" width="8" height="4" rx="1"/></svg></button><button class="iconbtn" data-arrange="top" title="Align top edges" aria-label="Align top edges"><svg viewBox="0 0 24 24"><path d="M3 4h18"/><rect x="6" y="6" width="4" height="13" rx="1"/><rect x="14" y="6" width="4" height="8" rx="1"/></svg></button><button class="iconbtn" data-arrange="middle" title="Align centres vertically" aria-label="Align centres vertically"><svg viewBox="0 0 24 24"><path d="M3 12h18"/><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="8" width="4" height="8" rx="1"/></svg></button><button class="iconbtn" data-arrange="bottom" title="Align bottom edges" aria-label="Align bottom edges"><svg viewBox="0 0 24 24"><path d="M3 20h18"/><rect x="6" y="5" width="4" height="13" rx="1"/><rect x="14" y="10" width="4" height="8" rx="1"/></svg></button><button class="iconbtn" data-arrange="space-x" title="Space evenly across (3 or more)" aria-label="Space evenly across (3 or more)"><svg viewBox="0 0 24 24"><path d="M4 3v18M20 3v18"/><rect x="9" y="7" width="6" height="10" rx="1"/></svg></button><button class="iconbtn" data-arrange="space-y" title="Space evenly down (3 or more)" aria-label="Space evenly down (3 or more)"><svg viewBox="0 0 24 24"><path d="M3 4h18M3 20h18"/><rect x="7" y="9" width="10" height="6" rx="1"/></svg></button></div></div>
           <details class="vary" hidden>
             <summary>Only on wider screens…</summary>
             <div class="varyseg" role="group" aria-label="Which screens these edits apply to"><button type="button" data-vary="all" aria-pressed="true" title="Phones, tablets and desktops all get the change">Every screen</button><button type="button" data-vary="here" aria-pressed="false">This size and wider</button></div>
@@ -537,6 +543,14 @@ export function createPanel(hooks: PanelHooks) {
   tokenBox.className = 'tokens';
   tokenBox.hidden = true;
   let tokenKey = '';
+  const arrangeEl = $<HTMLElement>('.arrange');
+  const arrangeBtns = [...arrangeEl.querySelectorAll<HTMLButtonElement>('[data-arrange]')];
+  arrangeBtns.forEach((b) =>
+    b.addEventListener('click', () => {
+      hooks.onArrange?.(b.dataset.arrange as ArrangeKind);
+      b.blur(); // keep the arrow keys working on the page
+    }),
+  );
   const varyEl = $<HTMLDetailsElement>('.vary');
   const varyBtns = [...varyEl.querySelectorAll<HTMLButtonElement>('[data-vary]')];
   let varyBp = '';
@@ -1577,6 +1591,12 @@ export function createPanel(hooks: PanelHooks) {
       varyFrom = from;
       noteVary();
       varyEl.hidden = !available || !hasSel;
+    },
+    /** Show the line-up buttons when two or more elements are selected (the spacing ones need three). */
+    setArrange(count: number) {
+      arrangeEl.hidden = count < 2;
+      arrangeEl.querySelector('.arrangelbl')!.textContent = `Line up ${count} elements`;
+      arrangeBtns.forEach((b) => (b.disabled = (b.dataset.arrange?.startsWith('space') ?? false) && count < 3));
     },
     /** Swatches for the page's theme colours (`--color-ink`), under Color: one click writes the theme's own class instead of a hex. */
     setThemeColors(colors: { name: string; value: string }[]) {

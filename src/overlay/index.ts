@@ -1,11 +1,12 @@
 import type { Edit, Scope, Target } from '../core/edit-types';
 import type { Note } from '../server/notes';
+import { arrangeOffsets, needs } from './arrange';
 import { moveBase, moveProps, type MoveBase } from './drag';
 import { explainSize, handleLabel, handleProps, sizeProps, type BoxStart, type HandleKind, type SizeStyle } from './handles-math';
 import { morphPage, refreshStylesheets } from './morph';
 import { accessibleName, backdrop, contrastRatio, parseColor, RULES, scanPage, type A11yIssue } from './a11y';
 import { DESIGN_RULES, scanDesign } from './design';
-import { createPanel, type HandleInfo, type Mode, type NoteDraft, type NoteKind, type NoteView, type ChangesView, type SavingsView, type A11yView, type IgnoredView, type LayerView } from './panel';
+import { createPanel, type HandleInfo, type Mode, type NoteDraft, type NoteKind, type NoteView, type ChangesView, type SavingsView, type ArrangeKind, type A11yView, type IgnoredView, type LayerView } from './panel';
 
 interface Boot {
   /** 'static': Brushup serves one HTML page. 'dev': a framework dev server serves the app. */
@@ -233,6 +234,7 @@ const suggestKind = (el: HTMLElement): NoteKind => (el.hasAttribute(USE) ? 'comp
 function refreshPanel() {
   const el = selected();
   const detail = sels.length > 1 ? `${sels.length} elements selected` : '';
+  panel.setArrange(sels.length);
   if (el) panel.setThemeColors(themeColors());
   panel.show(el, detail || undefined, el ? `<${tagOf(el)}>` : '', el ? suggestKind(el) : 'element', el && DEV ? sourceOf(el) : null);
 }
@@ -1320,6 +1322,14 @@ const panel = createPanel({
   onScrub(props) {
     scrubbing.forEach((p) => p.revert());
     scrubbing = props ? selectedAll().map((el) => preview(el, props)) : [];
+  },
+  onArrange(kind) {
+    const els = movable();
+    const offsets = arrangeOffsets(kind, els.map((el) => el.getBoundingClientRect()));
+    if (!offsets) return panel.setStatus(`Select ${needs(kind)} or more elements to ${kind.startsWith('space') ? 'space them evenly' : 'line them up'}`, 'err');
+    const moves = els.map((el, i) => ({ el, props: moveProps(moveBase(el), offsets[i].dx, offsets[i].dy) })).filter((m) => Object.keys(m.props).length);
+    if (!moves.length) return panel.setStatus('Already lined up', 'ok');
+    void commitStyles(moves);
   },
   onVariant(here) {
     editHere = here;
