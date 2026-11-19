@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.7
 
 - **Two new MCP tools, and a richer `brushup_inspect`: Claude can see the page without a screenshot.** `brushup_check` returns the Checks tab's findings as data: each problem, the element and where it is written, the standard or guideline behind it, and the style edit that fixes it. `brushup_console` returns the errors, warnings, uncaught exceptions and unhandled rejections the page has logged since the canvas loaded. `brushup_inspect` now also reports a stable handle (a short selector, and whether the element is mapped to source), its accessible name and role, its text contrast against the real background, what is on top of it at its centre, and which other elements overlap it. Seven tools in all. Checked end to end with a real MCP client against a running React Router app.
 - **Delete and duplicate.** Select an element and press **Delete** to remove it from your source (its lines go with it, leaving no gap), or **Ctrl/Cmd+D** to write a copy right after it at the same indentation. Both are one undo step, in JSX and in static HTML, and work on several selected elements at once. They refuse, with the reason, rather than guess: an element drawn by `.map()` (one line makes many elements), one shown with `&&` or `?:`, one passed as a prop, the element a component returns, and `<html>`, `<head>` or `<body>`. An element *inside* a list item or conditional is ordinary markup and is fine (it edits the shared template; the status says how many elements share it). A copy that repeats an `id` warns.
