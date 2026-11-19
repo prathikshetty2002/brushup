@@ -99,7 +99,7 @@ function snapped(prefix: string, value: string, scale: Scale): string | null {
 /** Returns the new class string, or null if the value can't be expressed as a class. */
 export function tailwindClasses(classes: string, prop: string, value: string, hints: ClassHints = {}, variant = ''): string | null {
   if (/[\]\[{}"';\\]/.test(value) || (hints.lineHeight && !/^[\d.]+$/.test(hints.lineHeight))) return null;
-  if (variant && !VARIANT.test(variant)) return null;
+  if (variant && !isVariant(variant)) return null;
   const { remove, make } = mapping(prop.toLowerCase(), value, hints.scale);
   const tokens = classes.split(/\s+/).filter(Boolean);
   // Only utilities under exactly this variant are the ones replaced: `md:ml-4` is not touched by an edit with no variant, and the reverse.
@@ -119,8 +119,18 @@ export function tailwindClasses(classes: string, prop: string, value: string, hi
   return out.join(' ');
 }
 
-/** The variants an edit may be written under: screen sizes, and the states people ask for next. Nothing else goes into a class name. */
-export const VARIANT = /^(sm|md|lg|xl|2xl|hover|focus|dark)$/;
+/** The variants an edit may be written under: a screen size, a state (hover, focus) and dark mode, alone or together. Nothing else goes into a class name. */
+const BREAKPOINT = new Set(['sm', 'md', 'lg', 'xl', '2xl']);
+const STATE = new Set(['hover', 'focus']);
+export function isVariant(v: string): boolean {
+  // Up to one of each, in one fixed order (`dark:md:hover`), so the same condition is always written the same way.
+  const parts = v.split(':');
+  let i = 0;
+  if (parts[i] === 'dark') i++;
+  if (BREAKPOINT.has(parts[i])) i++;
+  if (STATE.has(parts[i])) i++;
+  return i === parts.length && parts.length > 0 && v !== '';
+}
 
 /**
  * Variant utilities (`md:ml-4`, `hover:w-full`) in `text` that set the same property as `prop`. They keep

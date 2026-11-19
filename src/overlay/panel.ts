@@ -76,6 +76,8 @@ export interface PanelHooks {
   onStyle(props: Record<string, string>, scope: PanelScope): void;
   /** The user chose whether edits apply to every screen size or only from the current one up. */
   onVariant?(here: boolean): void;
+  /** The state chosen next to it: '' for none, `hover`, `focus` or `dark`. */
+  onState?(state: string): void;
   /** Live, unsaved preview while a field is being scrubbed; null drops it. */
   onScrub(props: Record<string, string> | null): void;
   /** The user typed something a field can't take. */
@@ -230,7 +232,7 @@ select { appearance: none; -webkit-appearance: none; padding-right: 20px; backgr
 input[type=color] { padding: 2px; cursor: pointer; } input[type=color]::-webkit-color-swatch-wrapper { padding: 0; } input[type=color]::-webkit-color-swatch { border: 0; border-radius: 1px; } input[type=color]::-moz-color-swatch { border: 0; border-radius: 1px; }
 input:hover, select:hover, textarea:hover { border-color: var(--faint); } input:disabled { opacity: .35; }
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
-.vary { margin: 0 0 12px; } .varylbl { display: block; margin-bottom: 4px; color: var(--muted); font-size: 11px; }
+.vary { margin: 0 0 12px; } .varylbl2 { margin-top: 8px; } .varylbl { display: block; margin-bottom: 4px; color: var(--muted); font-size: 11px; }
 .varyseg { display: flex; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; } .varyseg button { flex: 1; padding: 5px 6px; border: 0; background: transparent; color: var(--muted); font: 500 11px var(--sans); cursor: pointer; } .varyseg button + button { border-left: 1px solid var(--line); }
 .varyseg button[aria-pressed=true] { background: var(--accent); color: var(--on-accent); } .varyseg button:disabled { opacity: .45; cursor: default; }
 .varynote { margin: 6px 0 0; color: var(--faint); font-size: 10.5px; line-height: 1.45; }
@@ -453,6 +455,8 @@ export function createPanel(hooks: PanelHooks) {
           <div class="vary" hidden role="group" aria-label="Screen size these edits apply to">
             <span class="varylbl">Applies to</span>
             <div class="varyseg"><button type="button" data-vary="all" aria-pressed="true">All sizes</button><button type="button" data-vary="here" aria-pressed="false">This size and up</button></div>
+            <span class="varylbl varylbl2">State</span>
+            <div class="varyseg"><button type="button" data-state="" aria-pressed="true">Normal</button><button type="button" data-state="hover" aria-pressed="false">Hover</button><button type="button" data-state="focus" aria-pressed="false">Focus</button><button type="button" data-state="dark" aria-pressed="false">Dark</button></div>
             <p class="varynote" hidden></p>
           </div>
           <div class="fields" hidden></div>
@@ -513,6 +517,29 @@ export function createPanel(hooks: PanelHooks) {
   const fieldsEl = $<HTMLDivElement>('.fields');
   const varyEl = $<HTMLElement>('.vary');
   const varyBtns = [...varyEl.querySelectorAll<HTMLButtonElement>('[data-vary]')];
+  const stateBtns = [...varyEl.querySelectorAll<HTMLButtonElement>('[data-state]')];
+  let varyState = '';
+  let varyBp = '';
+  let varyFrom = 0;
+  /** What the choices mean, in plain words, so nobody has to guess what will be written. */
+  const noteVary = () => {
+    const prefix = [varyState === 'dark' ? 'dark' : '', varyHere ? varyBp : '', varyState && varyState !== 'dark' ? varyState : ''].filter(Boolean).join(':');
+    varyNote.hidden = !prefix;
+    const parts: string[] = [];
+    if (varyHere && varyBp) parts.push(`from ${varyFrom}px up`);
+    if (varyState === 'hover' || varyState === 'focus') parts.push(`while the element is ${varyState === 'hover' ? 'hovered' : 'focused'}`);
+    if (varyState === 'dark') parts.push('in dark mode');
+    varyNote.textContent = `Written as ${prefix}: classes, so they apply ${parts.join(', ')}. ${varyState && varyState !== 'dark' ? 'The page can’t show it until you hover or focus the element. ' : varyState === 'dark' ? 'The page only shows it once dark mode is on. ' : ''}${varyHere ? 'The window decides which size you are looking at: resize it, or use your browser’s device mode.' : ''}`.trim();
+  };
+  stateBtns.forEach((b) =>
+    b.addEventListener('click', () => {
+      varyState = b.dataset.state ?? '';
+      stateBtns.forEach((o) => o.setAttribute('aria-pressed', String(o === b)));
+      noteVary();
+      hooks.onState?.(varyState);
+      b.blur();
+    }),
+  );
   const varyNote = $<HTMLElement>('.varynote');
   let varyAvailable = false;
   let varyHere = false;
@@ -521,6 +548,7 @@ export function createPanel(hooks: PanelHooks) {
     b.addEventListener('click', () => {
       varyHere = b.dataset.vary === 'here';
       varyBtns.forEach((o) => o.setAttribute('aria-pressed', String(o === b)));
+      noteVary();
       hooks.onVariant?.(varyHere);
       b.blur(); // keep the arrow keys working on the page
     }),
@@ -1492,8 +1520,9 @@ export function createPanel(hooks: PanelHooks) {
         varyBtns.forEach((o) => o.setAttribute('aria-pressed', String(o === varyBtns[0])));
         hooks.onVariant?.(false);
       }
-      varyNote.hidden = !(varyHere && bp);
-      varyNote.textContent = `Written as ${bp}: classes, so they apply from ${from}px up. The window decides which size you are looking at: resize it, or use your browser's device mode.`;
+      varyBp = bp;
+      varyFrom = from;
+      noteVary();
       varyEl.hidden = !available || !hasSel;
     },
     /** Drop focus from any panel field so keyboard shortcuts and fresh values reach the canvas. */

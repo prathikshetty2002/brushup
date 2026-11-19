@@ -8,7 +8,7 @@ import { readRules, splice } from './css-patch';
 import { afterName, findElement, fingerprint, jsxName, parseSource, parseSrc, parseVer, walk } from './jsx';
 import { matches, parseSelector, specificity } from './selector';
 import type { SourceElement } from './html-map';
-import { tailwindClasses, variantConflicts, VARIANT, type ClassHints, type Scale } from './tailwind';
+import { tailwindClasses, variantConflicts, isVariant, type ClassHints, type Scale } from './tailwind';
 
 export interface JsxOptions {
   /** Express style edits as Tailwind utilities instead of inline styles. */
@@ -555,7 +555,7 @@ export function applyJsxEdit(files: Files, file: string, edit: Edit, opts: JsxOp
     const variant = edit.variant ?? '';
     if (variant) {
       // A breakpoint or state exists only as a Tailwind class: writing it inline would apply it at every size.
-      if (!VARIANT.test(variant)) throw new EditError(`Rejected variant ${variant}`);
+      if (!isVariant(variant)) throw new EditError(`Rejected variant ${variant}`);
       if (!opts.tailwind) throw new EditError(`Editing for ${variant}: needs Tailwind. This project's styles aren't Tailwind classes, so switch back to All sizes.`);
     }
     const variants = opts.tailwind ? variantConflicts(classSource(out[file], file, edit), p, variant) : [];

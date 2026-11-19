@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { EditError, type Edit, type StyleEdit } from '../src/core/edit-types';
 import { instrument } from '../src/core/jsx';
 import { applyJsxEdit, TextNotHere } from '../src/core/jsx-patch';
-import { tailwindClasses } from '../src/core/tailwind';
+import { isVariant, tailwindClasses } from '../src/core/tailwind';
 
 const FILE = '/app/src/App.tsx';
 
@@ -490,7 +490,26 @@ describe('editing for a screen size (a variant)', () => {
     expect(() => run(code, e({ 'margin-left': '40px' }, 'md'), { tailwind: false })).toThrow(/needs Tailwind/);
   });
 
-  it('only accepts known variants, since the value goes into the class name', () => {
+  it('writes hover, focus and dark, alone or stacked with a screen size', () => {
+    const hov = `export default function P() {\n  return <div className="bg-white hover:bg-gray-100">x</div>;\n}\n`;
+    expect(run(hov, e({ 'font-weight': '600' }, 'hover', hov), tw).files[FILE]).toContain('hover:font-semibold');
+    expect(run(hov, e({ color: '#111111' }, 'focus', hov), tw).files[FILE]).toContain('focus:text-[#111111]');
+    expect(run(hov, e({ color: '#eeeeee' }, 'dark', hov), tw).files[FILE]).toContain('dark:text-[#eeeeee]');
+    expect(run(hov, e({ 'margin-left': '40px' }, 'dark:md:hover', hov), tw).files[FILE]).toContain('dark:md:hover:ml-[40px]');
+    // The hover: class already there is for another property; it is kept.
+    expect(run(hov, e({ 'font-weight': '600' }, 'hover', hov), tw).files[FILE]).toContain('hover:bg-gray-100');
+  });
+
+  it('replaces the same property under the same state, and not the plain one', () => {
+    const both = `export default function P() {\n  return <div className="text-red-500 hover:text-blue-500">x</div>;\n}\n`;
+    const out = run(both, e({ color: '#00aa00' }, 'hover', both), tw).files[FILE];
+    expect(out).toContain('className="text-red-500 hover:text-[#00aa00]"');
+  });
+
+  it('only accepts known variants, in one order, since the value goes into the class name', () => {
+    for (const bad of ['md:dark', 'hover:md', 'md:md', 'group-hover', 'md:', ':md', 'dark:dark'])
+      expect(isVariant(bad), bad).toBe(false);
+    for (const good of ['md', 'hover', 'dark', 'dark:lg', 'lg:focus', 'dark:2xl:hover']) expect(isVariant(good), good).toBe(true);
     expect(() => run(code, e({ 'margin-left': '40px' }, 'md:ml-1 evil'), tw)).toThrow(/Rejected variant/);
     expect(tailwindClasses('a', 'margin-left', '4px', {}, 'x y')).toBeNull();
   });

@@ -884,6 +884,24 @@ describe('editing for a screen size', () => {
     expect(o.last('edit').edit).toMatchObject({ variant: 'md', scope: 'element' });
   });
 
+  it('writes hover, focus and dark, stacked with the screen size, and shows no inline preview for them', async () => {
+    setWidth(900);
+    click(document.querySelector('p')!);
+    (q('[data-state=hover]') as HTMLButtonElement).click();
+    expect(q('.varynote').textContent).toContain('hover:');
+    key('ArrowRight');
+    await settle();
+    expect(o.last('edit').edit).toMatchObject({ variant: 'hover', scope: 'element' });
+    expect(document.querySelector('p')!.style.marginLeft).toBe(''); // the page can't show hover yet, so nothing is faked
+    await ok('h1');
+    btn('here').click();
+    (q('[data-state=dark]') as HTMLButtonElement).click();
+    key('ArrowRight');
+    await settle();
+    expect(o.last('edit').edit.variant).toBe('dark:md');
+    (q('[data-state=""]') as HTMLButtonElement).click();
+  });
+
   it('is off below the smallest breakpoint, where "and up" would mean every size', () => {
     setWidth(500);
     click(document.querySelector('p')!);
