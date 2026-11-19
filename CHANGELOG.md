@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.10
 
 - **Line up a selection.** Shift-click two or more elements and the Style tab shows a **Line up** row: align left edges, centres or right edges, align top, middle or bottom, and with three or more, space them evenly across or down (the two outer ones stay put). Each element that has to move gets the same edit a drag writes, in one undo step; elements already in place are left alone, and it says "Already lined up" when nothing needs to move.
 - **Edits now work inside `cn()`, `clsx()` and template literals.** Modern React and shadcn code builds classNames like `cn('px-4 py-2', active && 'bg-blue-500', className)` or `` `px-3 ${className}` ``, which Brushup used to answer with an inline style (that overrides Tailwind and ignores screen sizes). It now writes the class into the plain string part (`cn`, `clsx`, `classNames`, `classnames`, `cx`, `twMerge`, `twJoin`), replaces the old class of the same kind (also in a second plain string), keeps the spacing next to `${className}`, and leaves conditional and passed-in parts untouched. If a conditional part sets the same property, a warning says it still wins while its condition holds. With no plain string to write into (`cn(buttonVariants(), className)`), the order of the pieces would decide what wins, so it still falls back as before. "Only on wider screens" works in these too.
