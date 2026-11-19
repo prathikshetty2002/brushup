@@ -1,8 +1,9 @@
 name: Published package
 
 # Installs what is on npm, not what is in the repo, on Linux, Windows and macOS, and runs the same checks as the packed-package smoke
-# test: install, init, imports from CommonJS and ESM, the MCP server, and serving a page. Run it by hand after `npm publish`
-# (Actions tab, "Published package", Run workflow).
+# test (install, init, imports from CommonJS and ESM, the MCP server, serving a page), then builds a real Vite and a real Next.js
+# app with it and edits through the panel in a browser. Run it by hand after `npm publish` (Actions tab, "Published package",
+# Run workflow).
 
 on:
   workflow_dispatch:
@@ -27,3 +28,30 @@ jobs:
           node-version: ${{ matrix.node }}
       - name: Smoke test the published package
         run: node scripts/smoke.mjs "${{ inputs.spec || 'brushup@latest' }}"
+
+  # A real app on each OS with the published package: install, init, dev server, then select, edit in the panel, edit again and
+  # undo in a browser, checking each lands in the source file.
+  apps:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, framework: vite, browser: chromium }
+          - { os: ubuntu-latest, framework: next, browser: chromium }
+          - { os: windows-latest, framework: vite, browser: chromium }
+          - { os: windows-latest, framework: next, browser: chromium }
+          - { os: macos-latest, framework: vite, browser: chromium }
+          - { os: macos-latest, framework: next, browser: chromium }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Install ${{ matrix.browser }}
+        run: npx playwright-core install --with-deps ${{ matrix.browser }}
+      - name: ${{ matrix.framework }} app with the published package
+        run: node scripts/with-retry.mjs 3 8 -- node scripts/e2e-dev.mjs ${{ matrix.framework }} ${{ matrix.browser }} "${{ inputs.spec || 'brushup@latest' }}"
