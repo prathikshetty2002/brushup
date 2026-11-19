@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { collectChanges, splitDiff } from '../src/server/changes';
+import { collectChanges, dirtyFiles, splitDiff } from '../src/server/changes';
 
 let dir: string;
 const git = (...args: string[]) => execFileSync('git', args, { cwd: dir, stdio: 'pipe' });
@@ -62,5 +62,88 @@ describe('collectChanges', () => {
     git('commit', '-q', '-m', 'init');
     const r = await collectChanges(dir);
     expect(r.repo && r.files).toEqual([]);
+  });
+});
+
+describe('dirtyFiles', () => {
+  const init = () => {
+    git('init', '-q');
+    git('config', 'user.email', 't@t.t');
+    git('config', 'user.name', 't');
+  };
+
+  it('names the tracked files that differ from the last commit, and only those', async () => {
+    init();
+    await writeFile(path.join(dir, 'clean.txt'), 'a\n');
+    await writeFile(path.join(dir, 'dirty.txt'), 'a\n');
+    git('add', '.');
+    git('commit', '-q', '-m', 'init');
+    await writeFile(path.join(dir, 'dirty.txt'), 'changed\n');
+    await writeFile(path.join(dir, 'untracked.txt'), 'new\n');
+    expect(await dirtyFiles(dir, ['clean.txt', 'dirty.txt', 'untracked.txt', 'missing.txt'])).toEqual(['dirty.txt']);
+  });
+
+  it('counts a staged change as different too', async () => {
+    init();
+    await writeFile(path.join(dir, 'a.txt'), 'a\n');
+    git('add', '.');
+    git('commit', '-q', '-m', 'init');
+    await writeFile(path.join(dir, 'a.txt'), 'staged\n');
+    git('add', 'a.txt');
+    expect(await dirtyFiles(dir, ['a.txt'])).toEqual(['a.txt']);
+  });
+
+  it('has nothing to say outside git, before the first commit, or for no files', async () => {
+    expect(await dirtyFiles(dir, ['a.txt'])).toEqual([]);
+    init();
+    await writeFile(path.join(dir, 'a.txt'), 'a\n');
+    git('add', '.');
+    expect(await dirtyFiles(dir, ['a.txt'])).toEqual([]); // nothing committed yet, so nothing to be mixed with
+    expect(await dirtyFiles(dir, [])).toEqual([]);
+  });
+});
+
+describe('warning before the first write to a file with uncommitted changes', () => {
+  const page = (body: string) => `export default function A() {\n  return (\n    <main>\n${body}\n    </main>\n  );\n}\n`;
+  const idAt = (code: string, marker: string) => {
+    const at = code.lastIndexOf('<', code.indexOf(marker));
+    const before = code.slice(0, at).split('\n');
+    return `src/A.tsx:${before.length}:${before[before.length - 1].length}`;
+  };
+
+  async function project(opts: { dirty: boolean; repo?: boolean }) {
+    const { mkdir } = await import('node:fs/promises');
+    const { DevProject } = await import('../src/server/dev-project');
+    await mkdir(path.join(dir, 'src'));
+    const code = page('      <p id="a">One</p>\n      <p id="b">Two</p>');
+    await writeFile(path.join(dir, 'src', 'A.tsx'), code);
+    if (opts.repo !== false) {
+      git('init', '-q');
+      git('config', 'user.email', 't@t.t');
+      git('config', 'user.name', 't');
+      git('add', '.');
+      git('commit', '-q', '-m', 'init');
+    }
+    if (opts.dirty) await writeFile(path.join(dir, 'src', 'A.tsx'), code.replace('One', 'One, edited by hand'));
+    const now = async () => (await import('node:fs/promises')).readFile(path.join(dir, 'src', 'A.tsx'), 'utf8');
+    return { project: new DevProject(dir), code: await now(), now, text: (c: string, marker: string, value: string) => ({ kind: 'text' as const, id: idAt(c, marker), tag: 'p', text: value }) };
+  }
+
+  it('warns the first time, naming the file, and not again for that file', async () => {
+    const t = await project({ dirty: true });
+    const first = await t.project.edit(t.text(t.code, 'id="a"', 'Uno'));
+    expect(first.warning).toMatch(/src\/A\.tsx already had uncommitted changes, so Brushup's edits are now mixed in with them in git/);
+    const second = await t.project.edit(t.text(await t.now(), 'id="b"', 'Dos'));
+    expect(second.warning).toBeUndefined();
+  });
+
+  it('stays quiet for a file that matches the last commit, and for a project outside git', async () => {
+    const clean = await project({ dirty: false });
+    expect((await clean.project.edit(clean.text(clean.code, 'id="a"', 'Uno'))).warning).toBeUndefined();
+  });
+
+  it('stays quiet when the project is not in git at all', async () => {
+    const none = await project({ dirty: true, repo: false });
+    expect((await none.project.edit(none.text(none.code, 'id="a"', 'Uno'))).warning).toBeUndefined();
   });
 });

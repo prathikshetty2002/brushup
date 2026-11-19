@@ -769,7 +769,8 @@ async function commitAttr(el: HTMLElement, name: 'src' | 'alt', value: string, e
     refreshPanel();
     return false;
   }
-  panel.setStatus(name === 'src' ? 'Saved · image source' : value ? 'Saved · alt text' : 'Saved · marked decorative', 'ok', { undo: true });
+  const saved = name === 'src' ? 'Saved · image source' : value ? 'Saved · alt text' : 'Saved · marked decorative';
+  panel.setStatus(r.warning ? `${saved} — ${r.warning}` : saved, r.warning ? 'warn' : 'ok', { undo: true });
   refreshPanel();
   return true;
 }

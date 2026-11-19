@@ -100,3 +100,34 @@ export async function collectChanges(root: string): Promise<Changes> {
     return { repo: false, reason: `Could not read the git changes: ${(err as Error).message.split('\n')[0]}` };
   }
 }
+
+/**
+ * Which of these files (paths relative to the project) already differ from the last commit, so a warning can say that
+ * Brushup's next write will be mixed in with them. A file git doesn't track yet, a project that isn't in git, or any
+ * trouble running git all count as "nothing to warn about".
+ */
+export async function dirtyFiles(root: string, files: string[]): Promise<string[]> {
+  if (!files.length) return [];
+  try {
+    await git(root, ['rev-parse', '--is-inside-work-tree']);
+    await git(root, ['rev-parse', '--verify', 'HEAD']); // no commit yet: nothing to be mixed with
+  } catch {
+    return [];
+  }
+  const checks = await Promise.all(
+    files.map(async (file) => {
+      try {
+        await git(root, ['ls-files', '--error-unmatch', '--', file]); // exits 1 for a file git doesn't track: nothing to mix with
+      } catch {
+        return null;
+      }
+      try {
+        await git(root, ['diff', '--quiet', 'HEAD', '--', file]); // exits 0 when it matches the last commit
+        return null;
+      } catch (err) {
+        return (err as { code?: number }).code === 1 ? file : null; // 1 means it differs; any other failure means no warning
+      }
+    }),
+  );
+  return checks.filter((f): f is string => f !== null);
+}

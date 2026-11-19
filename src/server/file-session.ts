@@ -4,6 +4,7 @@ import path from 'node:path';
 import { EditError, type Edit, type Target } from '../core/edit-types';
 import type { Files } from '../core/patch';
 import { saveImage } from './assets';
+import { dirtyFiles } from './changes';
 
 export type { Target };
 export const sha = (text: string) => createHash('sha1').update(text).digest('hex').slice(0, 12);
@@ -37,6 +38,8 @@ export abstract class FileSession {
   abstract readonly root: string;
   private undoStack: Snapshot[] = [];
   private redoStack: Snapshot[] = [];
+  /** Files already checked for uncommitted changes this session: the warning is for the first write to each. */
+  private checkedDirty = new Set<string>();
   /** Hashes of content we just wrote, so the watcher can ignore our own echo. */
   private ownWrites = new Map<string, Set<string>>();
 
@@ -103,9 +106,14 @@ export abstract class FileSession {
       select = out.select ?? select;
       if (out.warning) warnings.add(out.warning);
     }
-    const warning = warnings.size ? [...warnings].join('; ') : undefined;
     const changed = diff(before, after);
-    if (!Object.keys(changed).length) return { files: [], target, warning, select };
+    if (!Object.keys(changed).length) return { files: [], target, warning: warnings.size ? [...warnings].join('; ') : undefined, select };
+    // The first time Brushup writes to a file that already has uncommitted changes, say so: from then on `git diff` shows both.
+    const fresh = Object.keys(changed).filter((f) => !this.checkedDirty.has(f));
+    fresh.forEach((f) => this.checkedDirty.add(f));
+    const dirty = await dirtyFiles(this.root, fresh.map((f) => path.relative(this.root, f).replace(/\\/g, '/')));
+    if (dirty.length) warnings.add(`${dirty.join(', ')} already had uncommitted changes, so Brushup's edits are now mixed in with them in git. Commit first if you want them kept apart`);
+    const warning = warnings.size ? [...warnings].join('; ') : undefined;
     await this.write(changed);
     this.written(pick(before, changed), changed);
     this.undoStack.push({ before: pick(before, changed), after: changed });
