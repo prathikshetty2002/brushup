@@ -7,14 +7,38 @@
 
 # Brushup
 
-A visual canvas that runs next to your coding agent.
+A visual canvas that runs next to your coding agent. Click anything on your running app, change it, and the edit is written straight into your source.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/prathikshetty2002/brushup/main/docs/media/brushup-demo.gif" alt="Brushup on a React and Tailwind landing page: retyping a headline, resizing a button, and fixing a contrast problem from the Checks tab" width="860">
+</p>
+<p align="center"><sub>Brushup on the <a href="examples/cadence">Cadence example</a> (React, Vite, Tailwind). <a href="https://raw.githubusercontent.com/prathikshetty2002/brushup/main/docs/media/brushup-demo.mp4">Watch the full 60-second walkthrough</a>.</sub></p>
 
 1. **Trivial changes never touch an LLM.** Drag, resize, retype and re-space elements on the canvas; the edit is written straight into your source (HTML, CSS, JSX, Tailwind). No prompt, no screenshot, no tokens.
 2. **Notes make Claude's changes better.** Pin a note on an element, a section or a component. Claude reads `.brushup/notes.md`, which says what you want and exactly which file and line it lives in.
 
 When your agent changes the code, the canvas updates in place.
 
-**New here? Read the [step-by-step guide](docs/GUIDE.md)** (setup, the three workflows with Claude Code, troubleshooting) and watch the demo: `demo/out/brushup-claude-demo.mp4`.
+**New here? Read the [step-by-step guide](docs/GUIDE.md)** (setup, the three workflows with Claude Code, troubleshooting), or run the [Cadence example](examples/cadence) and try it on a real-looking site in two minutes.
+
+## What it looks like
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/prathikshetty2002/brushup/main/docs/media/hero.png" alt="A headline selected on a landing page, with the Brushup panel showing its type, spacing and layout" width="900">
+</p>
+
+<table>
+  <tr>
+    <td width="33%" valign="top"><img src="https://raw.githubusercontent.com/prathikshetty2002/brushup/main/docs/media/style.png" alt="The Style tab"><br><sub><b>Style.</b> Type, spacing and layout for whatever you select. Edits become Tailwind classes.</sub></td>
+    <td width="33%" valign="top"><img src="https://raw.githubusercontent.com/prathikshetty2002/brushup/main/docs/media/layers.png" alt="The Layers tab"><br><sub><b>Layers.</b> The page as a tree, with component names. Search it, reorder, wrap.</sub></td>
+    <td width="33%" valign="top"><img src="https://raw.githubusercontent.com/prathikshetty2002/brushup/main/docs/media/checks.png" alt="The Checks tab"><br><sub><b>Checks.</b> Accessibility and design problems, the standard behind each, and a fix.</sub></td>
+  </tr>
+  <tr>
+    <td valign="top"><img src="https://raw.githubusercontent.com/prathikshetty2002/brushup/main/docs/media/notes.png" alt="The Notes tab with a note and an agent's reply"><br><sub><b>Notes.</b> Pin a request for Claude on an element; its reply shows up here. (The reply in this picture is staged.)</sub></td>
+    <td valign="top"><img src="https://raw.githubusercontent.com/prathikshetty2002/brushup/main/docs/media/image.png" alt="The Image section for a photo with no alt text"><br><sub><b>Images.</b> Swap a file into your project and write the alt text.</sub></td>
+    <td valign="top"><img src="https://raw.githubusercontent.com/prathikshetty2002/brushup/main/docs/media/changes.png" alt="The Changes tab showing a one-line diff"><br><sub><b>Changes.</b> The git diff of what Brushup wrote: one line per edit.</sub></td>
+  </tr>
+</table>
 
 | | Static HTML | Vite (React) | Next.js (App Router) |
 | --- | --- | --- | --- |
@@ -30,6 +54,7 @@ When your agent changes the code, the canvas updates in place.
 | Node | 26 locally; **20.9, 22 and 24 in CI** | Node 22 and 24 run the full test suite; Node 20.9 installs the packed package and exercises the commands, both module formats, the MCP server and the static server (the test tooling itself needs Node 22+) |
 | Next.js | 16.4 and 15.5, each with Turbopack and webpack, App Router and Pages Router | `>=15.3` is the lowest version with the stable `turbopack.rules` config; Next 14 is untested |
 | Vite | 8 | plugin API is unchanged back to 5, untested |
+| React Router | 7 (Vite, server-rendered) with Tailwind 4 | tried by hand: text and style edits write back. The canvas loads from `app/root.tsx`. Remix on Vite uses the same code path, untested |
 | React | 19 | |
 | Tailwind | 4.3 and 3.4 | the installed version decides whether off-scale values become `ml-9.5` (v4) or `ml-[38px]` (v3) |
 | shadcn/ui | current Base UI version | Radix-based versions forward props the same way, untested |

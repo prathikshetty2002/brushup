@@ -23,7 +23,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 await rm(OUT, { recursive: true, force: true });
 await mkdir(OUT, { recursive: true });
-await rm(path.join(APP, '.brushup'), { recursive: true, force: true });
+/** Clear the notes and edit log, but leave the folder itself: the dev server is watching it. */
+const reset = () => Promise.all(['notes.json', 'notes.md', 'edits.jsonl', 'ignored-checks.json'].map((f) => rm(path.join(APP, '.brushup', f), { force: true })));
+await reset();
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true, args: ['--hide-scrollbars'] });
 const context = await browser.newContext({ viewport: { width: 1680, height: 1000 }, deviceScaleFactor: 2, colorScheme: 'light', reducedMotion: 'reduce' });
@@ -46,12 +48,17 @@ const shot = async (name, options = {}) => {
  * A close-up of the panel for the README. The window is made taller first so the whole panel shows, with nothing
  * cut off at the bottom, then put back.
  */
-const panelShot = async (name) => {
+const panelShot = async (name, { until } = {}) => {
   await page.setViewportSize({ width: 1680, height: 1500 });
   await sleep(700);
+  // Hide the page behind it, so the picture is the panel on a clean cream background and not a sliver of the site.
+  await page.evaluate(() => (document.getElementById('root').style.visibility = 'hidden'));
   const box = await page.locator('.panel').boundingBox();
-  const pad = 14;
-  await shot(name, { clip: { x: box.x - pad, y: Math.max(0, box.y - pad), width: box.width + pad * 2, height: box.height + pad * 2 } });
+  const pad = 16;
+  const y = Math.max(0, box.y - pad);
+  const end = until ? (await page.locator(until).boundingBox()).y + (await page.locator(until).boundingBox()).height + pad : box.y + box.height + pad;
+  await shot(name, { clip: { x: box.x - pad, y, width: box.width + pad * 2, height: end - y } });
+  await page.evaluate(() => (document.getElementById('root').style.visibility = ''));
   await page.setViewportSize({ width: 1680, height: 1000 });
   await sleep(500);
 };
@@ -66,7 +73,7 @@ await open();
 await page.locator('h1').click();
 await sleep(700);
 await shot('hero');
-await panelShot('style');
+await panelShot('style', { until: '.fields' });
 
 /* 2. Checks: the grouped list, one card open to show the explanation, the fix and where the number comes from. */
 await open();
@@ -89,10 +96,10 @@ await page.locator('#customers img').scrollIntoViewIfNeeded();
 await sleep(300);
 await page.locator('#customers img').click();
 await sleep(700);
-await panelShot('image');
+await panelShot('image', { until: '.imgsec' });
 await shot('image-page');
 
-/* 5. Notes: pin a note on the pricing heading, then answer it the way Claude does (through the notes file). */
+/* 5. Notes: pin a note on the pricing heading, then answer it the way Claude does (through the notes file, staged: this is not a live Claude run). */
 await open();
 await page.locator('#pricing h2').scrollIntoViewIfNeeded();
 await sleep(300);
@@ -100,13 +107,13 @@ await page.locator('#pricing h2').click();
 await sleep(500);
 await page.keyboard.press('n');
 await sleep(400);
-await page.locator('textarea').fill('Make this headline punchier and keep it to one line.');
+await page.locator('textarea').fill('Reword this headline so it says what the price is for.');
 await page.getByRole('button', { name: 'Save note' }).click();
 await sleep(900);
 const notesFile = path.join(APP, '.brushup', 'notes.json');
 const notes = JSON.parse(await readFile(notesFile, 'utf8'));
 notes[0].status = 'done';
-notes[0].reply = 'Changed it to "Start free. Pay when the whole team is in." in Pricing.tsx, one line at every width.';
+notes[0].reply = 'Now reads “Start free. Pay when the whole team is in.” (Pricing.tsx).';
 notes[0].updatedAt = new Date().toISOString();
 await writeFile(notesFile, JSON.stringify(notes, null, 2) + '\n');
 await sleep(1500);
@@ -115,22 +122,21 @@ await sleep(600);
 await panelShot('notes');
 await shot('notes-page');
 
-/* 6. Changes: make three real edits, then show the diff Brushup wrote. */
+/* 6. Changes: three real text edits on three different pages of the site, then the diff Brushup wrote. */
+const retype = async (locator, text) => {
+  await locator.scrollIntoViewIfNeeded();
+  await sleep(300);
+  await locator.dblclick();
+  await sleep(300);
+  await page.keyboard.press('Control+A');
+  await page.keyboard.type(text);
+  await page.keyboard.press('Enter');
+  await sleep(1500);
+};
 await open();
-await page.locator('h1').dblclick();
-await page.keyboard.press('Control+A');
-await page.keyboard.type('Your team’s week, on one page.');
-await page.keyboard.press('Enter');
-await sleep(1500);
-const cta = page.locator('#product a', { hasText: 'Start free' }).first();
-await cta.click();
-await sleep(500);
-await page.keyboard.press('Shift+ArrowRight');
-await sleep(1200);
-await page.locator('#product p', { hasText: 'Free for teams' }).click();
-await sleep(400);
-await page.keyboard.press('Shift+ArrowDown');
-await sleep(1500);
+await retype(page.locator('header a', { hasText: 'Sign in' }), 'Log in');
+await retype(page.locator('#product a', { hasText: 'See how teams use it' }), 'See a real week');
+await retype(page.locator('section a', { hasText: 'Start free' }).last(), 'Try it free');
 await tab('changes');
 await sleep(1200);
 await page.locator('.chfile summary').first().click();
@@ -141,5 +147,5 @@ await browser.close();
 
 /* Put the example back as it was. */
 execFileSync('git', ['checkout', '--', 'examples/cadence/src'], { cwd: REPO });
-await rm(path.join(APP, '.brushup'), { recursive: true, force: true });
+await reset();
 console.log('done');

@@ -2,6 +2,8 @@
 
 A small, realistic landing page (React, Vite, Tailwind CSS v4) for a made-up product. It is here so you can try Brushup on something that looks like a real project: components, design tokens, real layout.
 
+![Brushup on the Cadence example: a headline selected, the Style panel beside it](../../docs/media/hero.png)
+
 ```bash
 cd examples/cadence
 npm install

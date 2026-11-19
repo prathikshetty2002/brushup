@@ -10,7 +10,7 @@ Brushup is a visual canvas that sits on your running app. It gives you three way
 
 Everything is written to your real source files (Tailwind classes, JSX, CSS), as small diffs you can review in git.
 
-> Watch it first: `demo/out/brushup-claude-demo.mp4` (2 minutes, real Claude Code runs). How it was made is at the end of this guide.
+> Watch it first: the [60-second walkthrough](https://raw.githubusercontent.com/prathikshetty2002/brushup/main/docs/media/brushup-demo.mp4) (real Chrome, real edits on the [Cadence example](../examples/cadence)). How it was made is at the end of this guide.
 
 ---
 
@@ -216,7 +216,19 @@ Tested by hand on Linux with Chrome, and in CI on Windows, macOS and three brows
 
 ## Appendix: how the demo was made
 
-The video is real, not mocked. A script drives the Next.js app and the Brushup canvas in Chrome, and runs **Claude Code live, twice** (headless, `claude -p`), streaming its actual tool calls into the terminal panel. The setup commands are real output captured from a fresh project and replayed at typing speed.
+The pictures and the walkthrough in the README are made by three scripts you can run yourself. They need Chrome and ffmpeg, and the Cadence example running (`cd examples/cadence && npm install && npx vite --port 5301`):
+
+```bash
+node demo/capture-screenshots.mjs   # the screenshots, at 2x
+node demo/record-demo.mjs           # the walkthrough video
+bash demo/make-media.sh             # encodes them into docs/media
+```
+
+Chrome is driven for real: every edit is written to the example's source, and the example is put back with `git checkout` afterwards. The cursor, click ripples and captions are drawn over the page for the recording only. The one thing staged is the agent's reply in the Notes picture, which is written into the notes file by the script, not by a live Claude run.
+
+### A longer version, with Claude Code running live
+
+That older recording is real, not mocked. A script drives the Next.js app and the Brushup canvas in Chrome, and runs **Claude Code live, twice** (headless, `claude -p`), streaming its actual tool calls into the terminal panel. The setup commands are real output captured from a fresh project and replayed at typing speed.
 
 - Run 1 (*"Handle the open Brushup design notes"*) and run 2 (*"how wide is the element I have selected…"*) each cost roughly $0.10–$0.20 on Sonnet.
 - To make your own: start your app with Brushup, make sure `claude` is logged in, then:
@@ -225,4 +237,4 @@ The video is real, not mocked. A script drives the Next.js app and the Brushup c
 BRUSHUP_DEMO_NEXTAPP=/path/to/your/app npm run demo:claude
 ```
 
-It needs Chrome and ffmpeg, and writes `demo/out/brushup-claude-demo.mp4`.
+It needs Chrome and ffmpeg, and writes `demo/out/brushup-claude-demo.mp4` (a local file; it is not published).
