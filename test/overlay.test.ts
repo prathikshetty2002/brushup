@@ -814,6 +814,27 @@ describe('the Changes tab', () => {
     expect((q('[data-act=changes-copy]') as HTMLButtonElement).disabled).toBe(false);
   });
 
+  it('shows the token estimate for this session and the project, labelled as an estimate, even with no git repository', async () => {
+    q('[data-tab=changes]').click();
+    await settle();
+    const savings = { session: { changes: 3, edits: 14, tokens: 8300 }, total: { changes: 11, edits: 40, tokens: 24100 } };
+    o.reply({ ok: true, changes: { repo: false, reason: 'This project is not in a git repository.' }, savings });
+    await settle();
+    expect(q('.savecard').hidden).toBe(false);
+    expect(q('.savemain').textContent).toBe('This session: about 8.3k tokens not spent on prompts (3 tweaks). An estimate.');
+    expect(q('.savesub').textContent).toBe('In this project so far: about 24k tokens across 11 tweaks.');
+    expect(q('.savehow').textContent).toContain('not a measurement');
+  });
+
+  it('invites the first edit when the session has none yet', async () => {
+    q('[data-tab=changes]').click();
+    await settle();
+    o.reply({ ok: true, changes, savings: { session: { changes: 0, edits: 0, tokens: 0 }, total: { changes: 0, edits: 0, tokens: 0 } } });
+    await settle();
+    expect(q('.savemain').textContent).toContain('No canvas edits yet this session');
+    expect(q('.savesub').hidden).toBe(true);
+  });
+
   it('lists the files closed, even when Brushup edited only one', async () => {
     q('[data-tab=changes]').click();
     await settle();

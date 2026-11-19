@@ -212,6 +212,23 @@ npm uninstall brushup
 
 Remove the two lines from `next.config.ts` and `layout.tsx`, the `brushup` entry from `.mcp.json`, the block between the `brushup:start`/`brushup:end` markers in `CLAUDE.md`, and the `.brushup/` folder. Your source files keep every edit that was made.
 
+## How the token estimate works
+
+The Changes tab shows how many tokens your canvas edits probably saved, for this session and for the project so far, and `brushup stats` prints the project total in a terminal. It is an **estimate**: Brushup never sees what an agent spends, so nothing is measured.
+
+Each tweak is counted as the messages you did not have to send. Edits to the same element within 30 seconds count once (holding an arrow key is one tweak, not thirty), a batch of selected elements dragged together counts once, and an edit you undo doesn't count.
+
+| Part of a prompted tweak | Tokens | Where the figure comes from |
+| :- | :- | :- |
+| Your sentence describing it | ~100 | typical short instruction |
+| The file the agent reads first | ~1,500 | public measurements put a ~300-line file at 1,200 to 2,000 tokens |
+| The agent's edit and reply | ~300 | typical short edit |
+| A screenshot (style, move and wrap edits only) | 1,560 | [Anthropic's vision docs](https://platform.claude.com/docs/en/build-with-claude/vision): a 1920×1080 screenshot is 1,560 tokens (2,691 on the newest high-resolution tier) |
+
+So a text, delete, duplicate or image edit counts as about **1,900** tokens and a visual one as about **3,500**.
+
+What it leaves out, so the real saving is probably larger: Claude Code [sends the whole conversation with every request](https://code.claude.com/docs/en/costs) (one public logging-proxy test measured about 33,000 tokens of fixed overhead per request), the agent's thinking tokens, and the follow-up rounds visual tweaks usually take ("a bit more to the left"). The file-read and overhead figures come from public blog measurements, not controlled studies, so treat them as ballpark. For your own number, compare `/usage` in Claude Code for matching tasks.
+
 ## 11. Limits today
 
 Tested by hand on Linux with Chrome, and in CI on Windows, macOS and three browser engines. Supported frameworks are Next.js (App and Pages Router), Vite + React, React Router v7 / Remix (Vite) and plain HTML. Not supported yet: Vue, Svelte, Astro, CSS Modules, CSS-in-JS, a screenshot tool (deliberately: `brushup_inspect` gives Claude numbers instead). Full list in the README.

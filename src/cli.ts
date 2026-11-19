@@ -40,6 +40,19 @@ if (args[0] === 'init') {
   process.exit(0);
 }
 
+if (args[0] === 'stats') {
+  const { readSavings } = await import('./server/savings');
+  const { roundTokens, SIMPLE_TOKENS, VISUAL_TOKENS } = await import('./core/savings');
+  const root = path.resolve(args[1] ?? '.');
+  const { total } = await readSavings(root, Infinity);
+  if (!total.edits) console.log(`No canvas edits logged in ${path.join(root, '.brushup', 'edits.jsonl')} yet.`);
+  else {
+    console.log(`${total.edits} canvas edit${total.edits === 1 ? '' : 's'}, counted as ${total.changes} tweak${total.changes === 1 ? '' : 's'}: about ${roundTokens(total.tokens)} tokens you did not spend asking an agent (an estimate).`);
+    console.log(`Each tweak is counted as about ${SIMPLE_TOKENS.toLocaleString('en')} tokens (${VISUAL_TOKENS.toLocaleString('en')} for a visual one, which would have needed a screenshot). It leaves out the conversation re-sent with every request and any follow-up rounds, so the real saving is probably larger. How it is worked out: the guide, "How the token estimate works".`);
+  }
+  process.exit(0);
+}
+
 const portFlag = args.indexOf('--port');
 const port = portFlag >= 0 ? Number(args.splice(portFlag, 2)[1]) : 4321;
 const file = args[0];

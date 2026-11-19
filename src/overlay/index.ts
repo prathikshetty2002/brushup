@@ -5,7 +5,7 @@ import { explainSize, handleLabel, handleProps, sizeProps, type BoxStart, type H
 import { morphPage, refreshStylesheets } from './morph';
 import { accessibleName, backdrop, contrastRatio, parseColor, RULES, scanPage, type A11yIssue } from './a11y';
 import { DESIGN_RULES, scanDesign } from './design';
-import { createPanel, type HandleInfo, type Mode, type NoteDraft, type NoteKind, type NoteView, type ChangesView, type A11yView, type IgnoredView, type LayerView } from './panel';
+import { createPanel, type HandleInfo, type Mode, type NoteDraft, type NoteKind, type NoteView, type ChangesView, type SavingsView, type A11yView, type IgnoredView, type LayerView } from './panel';
 
 interface Boot {
   /** 'static': Brushup serves one HTML page. 'dev': a framework dev server serves the app. */
@@ -32,6 +32,7 @@ interface Result {
   textSource?: boolean;
   /** Answer to a `changes` request. */
   changes?: ChangesView;
+  savings?: SavingsView;
   /** Where the edited element now is (`file:line:col`), when the edit moved it. */
   select?: string;
   /** An uploaded image: what to write as its `src`, and the file it was saved as. */
@@ -303,7 +304,7 @@ function resolveNote(n: Note): HTMLElement | null {
   return candidates[a.index] ?? candidates[0] ?? null;
 }
 
-const refreshChanges = () => void rpc({ type: 'changes' }).then((r) => panel.setChanges(r.ok ? (r.changes ?? null) : null));
+const refreshChanges = () => void rpc({ type: 'changes' }).then((r) => panel.setChanges(r.ok ? (r.changes ?? null) : null, r.ok ? r.savings : undefined));
 
 /** Re-resolve every note on this page and refresh the list. `force` redraws even if nothing visible changed. */
 function refreshNotes(force = false) {

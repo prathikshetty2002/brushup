@@ -3,6 +3,7 @@ import type { Duplex } from 'node:stream';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { EditError, StaleElement, type Edit } from '../core/edit-types';
 import { collectChanges } from './changes';
+import { readSavings } from './savings';
 import type { IgnoredStore } from './ignored';
 import { TextNotHere } from '../core/jsx-patch';
 import type { EditOutcome, FileSession, Selection } from './file-session';
@@ -38,6 +39,7 @@ const MAX_ASK_BYTES = 8 * 1024;
  * authenticates the HTTP upgrade (host/origin/token) before handing it over.
  */
 export function createHub(session: FileSession, notes?: NotesStore, ignored?: IgnoredStore) {
+  const sessionStart = Date.now();
   const wss = new WebSocketServer({ noServer: true, maxPayload: 4 * 1024 * 1024 });
   const clients = new Map<WebSocket, ClientInfo>();
   /** Questions an agent asked the canvas that are still waiting for an answer. */
@@ -112,7 +114,7 @@ export function createHub(session: FileSession, notes?: NotesStore, ignored?: Ig
     }
     if (msg.type === 'changes') {
       if (info?.role !== 'canvas') return;
-      return void send(ws, { type: 'result', n: msg.n, ok: true, changes: await collectChanges(session.root) });
+      return void send(ws, { type: 'result', n: msg.n, ok: true, changes: await collectChanges(session.root), savings: await readSavings(session.root, sessionStart) });
     }
     if (msg.type === 'select') return void session.setSelection(msg.selection).catch(() => {});
     if (msg.type === 'note-save' || msg.type === 'note-delete') {

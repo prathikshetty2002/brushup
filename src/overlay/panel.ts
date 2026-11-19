@@ -1,6 +1,7 @@
 import { RULES } from './a11y';
 import { DESIGN_RULES } from './design';
 import { markDiff } from './diff-marks';
+import { roundTokens } from '../core/savings';
 import { HANDLE_KINDS, SIDES, type HandleKind, type Sides } from './handles-math';
 
 export type Mode = 'edit' | 'preview';
@@ -22,6 +23,12 @@ export interface NoteView {
 }
 
 /** What the Changes tab shows: the git diff of the project's working tree. */
+/** The token estimate: this session's, and every edit in the project's log. See src/core/savings.ts for how it is worked out. */
+export interface SavingsView {
+  session: { changes: number; edits: number; tokens: number };
+  total: { changes: number; edits: number; tokens: number };
+}
+
 export type ChangesView =
   | { repo: false; reason: string }
   | { repo: true; branch: string; truncated: boolean; files: { file: string; status: string; additions: number; deletions: number; diff: string; byBrushup: boolean }[] };
@@ -252,6 +259,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .tour button { padding: 5px 11px; border-radius: 3px; } .tour .next { background: var(--accent); color: var(--on-accent); } .tour .skip { color: var(--muted); }
 .tour[hidden], .tour-ring[hidden] { display: none; }
 .panel.mini .body { display: none; } .panel.mini header { border-bottom: 0; } .panel.mini [data-act=mini] svg { transform: rotate(180deg); }
+.savecard { margin: 0 0 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--raise); } .savecard p { margin: 0; } .savemain { color: var(--text); font-size: 11.5px; line-height: 1.45; } .savesub { margin-top: 3px; color: var(--muted); font-size: 11px; }
+.savehow { margin-top: 6px; color: var(--faint); font-size: 10.5px; line-height: 1.5; } .savehow summary { cursor: pointer; } .savehow p { margin: 5px 0 0; }
 .chbar { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; color: var(--muted); font-size: 11.5px; } .chbar .sp { flex: 1; } .chbar .chsum { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; } .chbar .ghost { white-space: nowrap; } .chbar .ghost { padding: 3px 8px; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); } .chbar .ghost:hover:not(:disabled) { color: var(--text); } .chbar .ghost:disabled { opacity: .45; cursor: default; }
 .chlist { min-width: 0; } .chfile { border: 1px solid var(--line); border-radius: 3px; margin-bottom: 6px; overflow: hidden; background: var(--bg); } .chfile summary { display: flex; gap: 8px; align-items: baseline; padding: 6px 8px; cursor: pointer; list-style: none; } .chfile summary::-webkit-details-marker { display: none; }
 .chfile .chnm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 11px var(--mono); color: var(--text); direction: rtl; text-align: left; } .chfile .chst { font: 600 10px var(--mono); color: var(--faint); }
@@ -469,6 +478,14 @@ export function createPanel(hooks: PanelHooks) {
         </div>
         <div data-pane="changes" role="tabpanel" id="brushup-pane-changes" aria-labelledby="brushup-tab-changes" hidden>
           <div class="chbar"><span class="chsum">Not loaded yet</span><span class="sp"></span><button class="ghost" data-act="changes-refresh">Refresh</button><button class="ghost" data-act="changes-copy" disabled>Copy diff</button></div>
+          <div class="savecard" hidden>
+            <p class="savemain"></p>
+            <p class="savesub"></p>
+            <details class="savehow"><summary>How is this worked out?</summary>
+              <p>Each tweak you make on the canvas would otherwise have been a message to an agent: a sentence describing it, the file the agent has to read (about 1,500 tokens for a typical component), its reply, and for a visual tweak a screenshot (about 1,560 tokens, from Anthropic's image sizing). That is counted as about 1,900 tokens, or 3,500 with a screenshot. Edits to the same element within 30 seconds count once, and undone edits don't count.</p>
+              <p>It leaves out what an agent also spends: the whole conversation is re-sent with every request, plus its thinking and any follow-up rounds. So the real saving is probably larger. It is an estimate, not a measurement: Brushup can't see the agent's side.</p>
+            </details>
+          </div>
           <div class="chlist"></div>
         </div>
         <div data-pane="a11y" role="tabpanel" id="brushup-pane-a11y" aria-labelledby="brushup-tab-a11y" hidden>
@@ -1385,7 +1402,22 @@ export function createPanel(hooks: PanelHooks) {
       () => ((chCopy.textContent = 'Copy failed'), setTimeout(() => (chCopy.textContent = 'Copy diff'), 1400)),
     );
   });
-  const setChanges = (view: ChangesView | null) => {
+  const saveCard = $<HTMLElement>('.savecard');
+  const saveMain = $<HTMLElement>('.savemain');
+  const saveSub = $<HTMLElement>('.savesub');
+  const tokensText = roundTokens;
+  const tweaks = (n: number) => `${n} tweak${n === 1 ? '' : 's'}`;
+  const setSavings = (s: SavingsView | undefined) => {
+    saveCard.hidden = !s;
+    if (!s) return;
+    saveMain.textContent = s.session.changes
+      ? `This session: about ${tokensText(s.session.tokens)} tokens not spent on prompts (${tweaks(s.session.changes)}). An estimate.`
+      : 'No canvas edits yet this session. Each tweak you make here is one you don’t have to prompt for.';
+    saveSub.textContent = s.total.changes > s.session.changes ? `In this project so far: about ${tokensText(s.total.tokens)} tokens across ${tweaks(s.total.changes)}.` : '';
+    saveSub.hidden = !saveSub.textContent;
+  };
+  const setChanges = (view: ChangesView | null, savings?: SavingsView) => {
+    setSavings(savings);
     chList.textContent = '';
     chText = '';
     chCopy.disabled = true;

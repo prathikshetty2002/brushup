@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **A token estimate: how much prompting your canvas edits saved.** The Changes tab now shows, for this session and for the project so far, about how many tokens you did not spend asking an agent for the same tweaks, and `brushup stats` prints the project total. Each tweak is counted as the messages it replaces: a sentence, the file the agent reads and its reply (about 1,900 tokens), plus a screenshot for visual edits (about 3,500). Edits to one element within 30 seconds count once, and undone edits don't count. It is always labelled an estimate, it leaves out the re-sent conversation and follow-up rounds so it errs low, and the figures and their sources (Anthropic's image-token sizing, public measurements) are listed in the guide. It reads the existing `.brushup/edits.jsonl`, so nothing new is stored.
+
 ## 0.1.9
 
 - **Pick a theme colour.** Under the Color field the Style tab shows a swatch for every colour the page's theme defines (`--color-*` custom properties on the root, which is what Tailwind 4's `@theme` produces). One click writes the theme's own class (`text-accent`) instead of a hex in brackets, replaces any colour class already on the element, and leaves the text size and weight alone. Projects with no `--color-*` variables simply show no swatches. The list is read from the page's own stylesheets, so nothing is guessed, and a token the page didn't list is never turned into a class.
