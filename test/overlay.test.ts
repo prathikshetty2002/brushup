@@ -753,6 +753,138 @@ describe('the Changes tab', () => {
   });
 });
 
+describe('the Layers tab', () => {
+  const q = (sel: string) => o.root.querySelector(sel) as HTMLElement;
+  const rows = () => [...o.root.querySelectorAll('.layers button.row')] as HTMLButtonElement[];
+  const name = (r: HTMLElement) => r.querySelector('.lnm')!.textContent;
+
+  it('lists the page as a tree: nested elements indented under their parent, with a hint to tell them apart', () => {
+    q('[data-tab=layers]').click();
+    expect(rows().map((r) => [name(r), r.getAttribute('aria-level')])).toEqual([['h1', '1'], ['p', '1'], ['div', '1'], ['span', '2']]);
+    expect(rows()[0].querySelector('.lhint')!.textContent).toBe('“Hello”');
+    expect(rows()[1].querySelector('.lhint')!.textContent).toBe('“World”');
+    expect(rows()[2].getAttribute('aria-expanded')).toBe('true'); // only elements with children can fold
+    expect(rows()[0].hasAttribute('aria-expanded')).toBe(false);
+    expect(q('.laysum').textContent).toBe('4 elements');
+  });
+
+  it('clicking a row selects that element, Shift adds, and the row follows the selection made on the page', () => {
+    q('[data-tab=layers]').click();
+    rows()[1].click();
+    expect(o.last('select').selection).toEqual({ id: 'a2', tag: 'p' });
+    expect(rows()[1].getAttribute('aria-selected')).toBe('true');
+    rows()[3].dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }));
+    expect(info()).toContain('2 elements selected');
+    click(el('a1'));
+    expect(rows().map((r) => r.getAttribute('aria-selected'))).toEqual(['true', 'false', 'false', 'false']);
+  });
+
+  it('folding hides everything under a row, and unfolding brings it back', () => {
+    q('[data-tab=layers]').click();
+    (rows()[2].querySelector('.lcaret') as HTMLElement).click();
+    expect(rows().map(name)).toEqual(['h1', 'p', 'div']);
+    expect(rows()[2].getAttribute('aria-expanded')).toBe('false');
+    (rows()[2].querySelector('.lcaret') as HTMLElement).click();
+    expect(rows().map(name)).toEqual(['h1', 'p', 'div', 'span']);
+  });
+
+  it('the arrow keys move between rows, and Left folds an open row', () => {
+    q('[data-tab=layers]').click();
+    const first = rows()[0];
+    first.focus();
+    first.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    expect(o.root.activeElement).toBe(rows()[1]);
+    rows()[2].focus();
+    rows()[2].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+    expect(rows().map(name)).toEqual(['h1', 'p', 'div']);
+    expect(o.root.activeElement).toBe(rows()[2]);
+  });
+
+  it('leaves out the page head and the overlay itself', () => {
+    const meta = document.createElement('meta');
+    meta.setAttribute('data-brushup-id', 'm1');
+    document.head.append(meta);
+    q('[data-tab=layers]').click();
+    expect(rows().map(name)).toEqual(['h1', 'p', 'div', 'span']);
+    meta.remove();
+  });
+
+  it('writes the page\'s text into the tree as text, never as markup', () => {
+    el('a2').textContent = '<img src=x onerror=alert(1)>';
+    q('[data-tab=layers]').click();
+    expect(o.root.querySelector('.layers img')).toBeNull();
+    expect(rows()[1].querySelector('.lhint')!.textContent).toContain('<img src=x');
+  });
+});
+
+describe('delete and duplicate', () => {
+  const q = (sel: string) => o.root.querySelector(sel) as HTMLButtonElement;
+
+  it('Delete removes the selection from the source, clears the selection and offers Undo', async () => {
+    click(el('a2'));
+    key('Delete');
+    await settle();
+    expect(o.last('edit').edit).toEqual({ kind: 'delete', id: 'a2', tag: 'p' });
+    o.reply({ ok: true, hash: 'h1', target: 'structure' });
+    await settle();
+    expect(status()).toBe('Deleted <p>');
+    expect(o.last('select').selection).toBeNull();
+    expect(o.root.querySelector('.undo')!.hasAttribute('hidden')).toBe(false);
+  });
+
+  it('Ctrl+D (and Cmd+D) writes a copy and keeps the original selected', async () => {
+    click(el('a1'));
+    const down = new KeyboardEvent('keydown', { key: 'd', ctrlKey: true, bubbles: true, cancelable: true });
+    window.dispatchEvent(down);
+    await settle();
+    expect(down.defaultPrevented).toBe(true); // not the browser's "bookmark this page"
+    expect(o.last('edit').edit).toMatchObject({ kind: 'duplicate', id: 'a1', tag: 'h1' });
+    o.reply({ ok: true, hash: 'h1', target: 'structure' });
+    await settle();
+    expect(status()).toBe('Duplicated <h1>');
+    expect(info()).toContain('<h1>');
+  });
+
+  it('the buttons are off until something is selected, then do the same', async () => {
+    expect(q('[data-act=delete]').disabled).toBe(true);
+    expect(q('[data-act=duplicate]').disabled).toBe(true);
+    click(el('a2'));
+    expect(q('[data-act=delete]').disabled).toBe(false);
+    q('[data-act=duplicate]').click();
+    await settle();
+    expect(o.last('edit').edit).toMatchObject({ kind: 'duplicate', id: 'a2' });
+  });
+
+  it('shows the server\'s reason when it refuses, and keeps the selection', async () => {
+    click(el('a1'));
+    key('Delete');
+    await settle();
+    o.reply({ ok: false, error: '<h1> is drawn from a list (.map), so one line of code makes several elements' });
+    await settle();
+    expect(status()).toContain('drawn from a list');
+    expect(info()).toContain('<h1>');
+  });
+
+  it('does nothing without a selection, and never fires while typing in a field or a note', async () => {
+    key('Delete');
+    await settle();
+    expect(o.all('edit')).toHaveLength(0);
+    click(el('a1'));
+    const field = o.root.querySelector('input') as HTMLInputElement;
+    field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true, composed: true }));
+    await settle();
+    expect(o.all('edit')).toHaveLength(0);
+  });
+
+  it('removes several selected elements as one edit batch, one per distinct element', async () => {
+    click(el('a1'));
+    click(el('a2'), { shiftKey: true });
+    key('Delete');
+    await settle();
+    expect(o.last('edits').edits.map((e: any) => [e.kind, e.id])).toEqual([['delete', 'a1'], ['delete', 'a2']]);
+  });
+});
+
 describe('the A11y tab', () => {
   const q = (sel: string) => o.root.querySelector(sel) as HTMLElement;
   // A proper page, so the tests are about the element and not about a missing <title> or <main>.
@@ -1027,14 +1159,18 @@ describe('panel accessibility', () => {
   it('is a labelled region with a proper tablist, tabpanels and arrow-key navigation', () => {
     expect(o.root.querySelector('.panel')!.getAttribute('role')).toBe('region');
     const style = o.root.querySelector('[data-tab=style]') as HTMLElement;
-    const notes = o.root.querySelector('[data-tab=notes]') as HTMLElement;
+    const layers = o.root.querySelector('[data-tab=layers]') as HTMLElement;
     expect(style.getAttribute('aria-controls')).toBe(o.root.querySelector('[data-pane=style]')!.id);
     expect(o.root.querySelector('[data-pane=style]')!.getAttribute('role')).toBe('tabpanel');
-    expect([style.tabIndex, notes.tabIndex]).toEqual([0, -1]);
+    expect([style.tabIndex, layers.tabIndex]).toEqual([0, -1]);
     style.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
-    expect(notes.getAttribute('aria-selected')).toBe('true');
-    expect([style.tabIndex, notes.tabIndex]).toEqual([-1, 0]);
-    expect((o.root.querySelector('[data-pane=notes]') as HTMLElement).hidden).toBe(false);
+    expect(layers.getAttribute('aria-selected')).toBe('true');
+    expect([style.tabIndex, layers.tabIndex]).toEqual([-1, 0]);
+    expect((o.root.querySelector('[data-pane=layers]') as HTMLElement).hidden).toBe(false);
+    layers.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+    expect(style.getAttribute('aria-selected')).toBe('true'); // and it wraps around the other way too
+    style.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+    expect((o.root.querySelector('[data-tab=a11y]') as HTMLElement).getAttribute('aria-selected')).toBe('true');
   });
 
   it('every form control has an accessible name', () => {

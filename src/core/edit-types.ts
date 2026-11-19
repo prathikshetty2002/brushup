@@ -56,10 +56,20 @@ export interface TextEdit {
   text: string;
 }
 
-export type Edit = StyleEdit | TextEdit;
+/** Take an element out of the source, or write a copy of it right after itself. */
+export interface StructureEdit {
+  kind: 'delete' | 'duplicate';
+  ver?: string;
+  stale?: Staleness;
+  id: string;
+  tag: string;
+  ident?: Ident;
+}
+
+export type Edit = StyleEdit | TextEdit | StructureEdit;
 
 /** Where an edit ended up, so the canvas knows how long its temporary preview must live. */
-export type Target = 'inline' | 'rule' | 'class' | 'text';
+export type Target = 'inline' | 'rule' | 'class' | 'text' | 'structure';
 
 export class EditError extends Error {}
 

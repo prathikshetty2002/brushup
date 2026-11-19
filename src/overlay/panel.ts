@@ -41,6 +41,18 @@ export interface A11yView {
   strength?: 'standard' | 'guideline' | 'convention';
 }
 
+/** One row of the Layers tree. */
+export interface LayerView {
+  key: string;
+  depth: number;
+  /** The tag, or the component's name when this is a component usage. */
+  name: string;
+  component: boolean;
+  /** An id, a class or a piece of its text, to tell siblings apart. */
+  hint: string;
+  hasChildren: boolean;
+}
+
 export interface NoteDraft {
   kind: NoteKind;
   label: string;
@@ -57,6 +69,12 @@ export interface PanelHooks {
   onUndo(): void;
   onRedo(): void;
   onParent(): void;
+  onDelete(): void;
+  onDuplicate(): void;
+  /** The Layers tab was opened: build the tree and call `setLayers`. */
+  onLayersRefresh(): void;
+  onLayerSelect(key: string, add: boolean): void;
+  onLayerHover(key: string | null): void;
   onNoteSave(draft: NoteDraft, id: string | null): void;
   onNoteDelete(id: string): void;
   onNoteDone(id: string, done: boolean): void;
@@ -194,6 +212,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .shared input:checked { background: var(--accent); } .shared input:checked::after { transform: translateX(12px); background: #fff; }
 .keys { margin: 14px 0 0; padding-top: 10px; border-top: 1px solid var(--line); display: grid; gap: 6px; color: var(--faint); font-size: 11.5px; }
 .keys div { display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: 8px; } .keys dt, .keys dd { margin: 0; } .keys kbd { margin: 0; }
+.iconbtn:disabled { opacity: .35; cursor: default; } .iconbtn[data-act=delete]:not(:disabled):hover { color: var(--err); }
 .iconbtn { position: relative; } .iconbtn .dot { position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
 .tour-ring { position: fixed; z-index: 5; pointer-events: none; border: 2px solid var(--accent); border-radius: 4px; box-shadow: 0 0 0 4px rgba(var(--accent-rgb), .18); transition: all .2s cubic-bezier(.2,.8,.2,1); }
 .tour { position: fixed; z-index: 6; width: 264px; padding: 14px 14px 12px; pointer-events: auto; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 14px 36px rgba(0,0,0,.28); animation: enter .2s cubic-bezier(.2,.8,.2,1); }
@@ -213,6 +232,11 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .a11yitem { border: 1px solid var(--line); border-radius: 3px; padding: 8px 9px; margin-bottom: 6px; background: var(--bg); }
 .a11yitem .rule { display: inline-block; margin-bottom: 4px; padding: 1px 6px; border-radius: 2px; background: var(--raise); color: var(--muted); font: 600 10px var(--mono); text-transform: uppercase; letter-spacing: .04em; }
 .a11yitem b { display: block; color: var(--text); font-weight: 600; font-size: 12px; line-height: 1.4; } .a11yitem p { margin: 3px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.layers { list-style: none; margin: 0; padding: 0; max-height: 340px; overflow: auto; border: 1px solid var(--line); border-radius: 3px; background: var(--bg); }
+.layers li { display: block; } .layers button.row { display: flex; align-items: center; gap: 4px; width: 100%; padding: 3px 6px; border-radius: 0; text-align: left; color: var(--muted); font: 11.5px/1.4 var(--mono); background: none; white-space: nowrap; overflow: hidden; }
+.layers button.row:hover { background: var(--raise); color: var(--text); } .layers button.row[aria-selected=true] { background: rgba(var(--accent-rgb), .14); color: var(--text); box-shadow: inset 2px 0 var(--accent); }
+.layers .lcaret { width: 14px; flex: none; text-align: center; color: var(--faint); font-size: 9px; cursor: pointer; } .layers .lcaret:hover { color: var(--text); }
+.layers .lnm { color: var(--text); } .layers .lnm.comp { color: var(--accent); } .layers .lhint { color: var(--faint); overflow: hidden; text-overflow: ellipsis; }
 .a11yfilter { display: flex; gap: 4px; margin: 0 0 8px; } .a11yfilter button { padding: 3px 9px; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); font-size: 11px; } .a11yfilter button[aria-pressed=true] { background: var(--raise-2); color: var(--text); border-color: var(--fieldline); }
 .a11yitem .rule.design { color: var(--pad); }
 .a11yitem .basis { margin: 5px 0 0; padding-left: 7px; border-left: 2px solid var(--line); color: var(--faint); font-size: 10.5px; line-height: 1.5; }
@@ -359,6 +383,8 @@ export function createPanel(hooks: PanelHooks) {
         <div class="actions">
           <button class="iconbtn" data-act="undo" title="Undo (Ctrl/Cmd+Z)" aria-label="Undo"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 010 11H11"/></svg></button>
           <button class="iconbtn" data-act="redo" title="Redo (Ctrl/Cmd+Shift+Z)" aria-label="Redo"><svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 000 11H13"/></svg></button>
+          <button class="iconbtn" data-act="duplicate" title="Duplicate (Ctrl/Cmd+D)" aria-label="Duplicate the selected element" disabled><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2"/></svg></button>
+          <button class="iconbtn" data-act="delete" title="Delete (Delete key)" aria-label="Delete the selected element" disabled><svg viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2"/><path d="M6 7l1 12a2 2 0 002 2h6a2 2 0 002-2l1-12"/></svg></button>
           <button class="iconbtn" data-act="parent" title="Select parent" aria-label="Select parent"><svg viewBox="0 0 24 24"><path d="M12 19V6"/><path d="M6 11l6-6 6 6"/></svg></button>
           <span class="sp"></span>
           <button class="iconbtn" data-act="tour" title="How to use Brushup" aria-label="How to use Brushup"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 114 2c-.9.6-1.6 1-1.6 2.1"/><path d="M12 16.9v.1"/></svg><i class="dot" hidden></i></button>
@@ -366,6 +392,7 @@ export function createPanel(hooks: PanelHooks) {
         </div>
         <div class="tabs" role="tablist"><span class="ink"></span>
           <button role="tab" id="brushup-tab-style" aria-controls="brushup-pane-style" data-tab="style" aria-selected="true" tabindex="0">Style</button>
+          <button role="tab" id="brushup-tab-layers" aria-controls="brushup-pane-layers" data-tab="layers" aria-selected="false" tabindex="-1">Layers</button>
           <button role="tab" id="brushup-tab-notes" aria-controls="brushup-pane-notes" data-tab="notes" aria-selected="false" tabindex="-1">Notes<span class="count" hidden></span></button>
           <button role="tab" id="brushup-tab-changes" aria-controls="brushup-pane-changes" data-tab="changes" aria-selected="false" tabindex="-1">Changes</button>
           <button role="tab" id="brushup-tab-a11y" aria-controls="brushup-pane-a11y" data-tab="a11y" aria-selected="false" tabindex="-1" >Checks<span class="count" data-a11y-count hidden></span></button>
@@ -374,7 +401,11 @@ export function createPanel(hooks: PanelHooks) {
           <div class="info">Click an element to select it.</div>
           <div class="fields" hidden></div>
           <label class="shared" hidden title="Off: only the selected element changes. On: the CSS rule is edited, so every element it matches changes."><input type="checkbox" /><span><b>Edit the shared CSS rule</b><small class="why">Off: only this element changes.</small></span></label>
-          <dl class="keys" aria-label="Shortcuts"><div><dt><kbd>drag</kbd></dt><dd>Move</dd></div><div><dt><kbd>↑ ↓ ← →</kbd></dt><dd>Nudge 1px, <kbd>⇧</kbd> for 10</dd></div><div><dt><kbd>double-click</kbd></dt><dd>Edit text</dd></div><div><dt><kbd>N</kbd></dt><dd>Add a note</dd></div><div><dt><kbd>Esc</kbd></dt><dd>Deselect</dd></div></dl>
+          <dl class="keys" aria-label="Shortcuts"><div><dt><kbd>drag</kbd></dt><dd>Move</dd></div><div><dt><kbd>↑ ↓ ← →</kbd></dt><dd>Nudge 1px, <kbd>⇧</kbd> for 10</dd></div><div><dt><kbd>double-click</kbd></dt><dd>Edit text</dd></div><div><dt><kbd>Ctrl D</kbd></dt><dd>Duplicate</dd></div><div><dt><kbd>Delete</kbd></dt><dd>Delete element</dd></div><div><dt><kbd>N</kbd></dt><dd>Add a note</dd></div><div><dt><kbd>Esc</kbd></dt><dd>Deselect</dd></div></dl>
+        </div>
+        <div data-pane="layers" role="tabpanel" id="brushup-pane-layers" aria-labelledby="brushup-tab-layers" hidden>
+          <div class="chbar"><span class="laysum">Open this tab to see the page's elements</span></div>
+          <ul class="layers" aria-label="Elements on the page"></ul>
         </div>
         <div data-pane="changes" role="tabpanel" id="brushup-pane-changes" aria-labelledby="brushup-tab-changes" hidden>
           <div class="chbar"><span class="chsum">Not loaded yet</span><span class="sp"></span><button class="ghost" data-act="changes-refresh">Refresh</button><button class="ghost" data-act="changes-copy" disabled>Copy diff</button></div>
@@ -596,6 +627,8 @@ export function createPanel(hooks: PanelHooks) {
   root.querySelector('[data-act=toast-x]')!.addEventListener('click', () => ((statusEl.textContent = ''), (toastEl.hidden = true)));
   root.querySelector('[data-act=redo]')!.addEventListener('click', () => hooks.onRedo());
   root.querySelector('[data-act=parent]')!.addEventListener('click', () => hooks.onParent());
+  root.querySelector('[data-act=duplicate]')!.addEventListener('click', () => hooks.onDuplicate());
+  root.querySelector('[data-act=delete]')!.addEventListener('click', () => hooks.onDelete());
   // Which side the panel sits on; remembered per browser, never required.
   try {
     if (localStorage.getItem('brushup:dock') === 'left') panel.classList.add('left');
@@ -665,7 +698,7 @@ export function createPanel(hooks: PanelHooks) {
   const tourDot = root.querySelector<HTMLElement>('[data-act=tour] .dot')!;
   const STEPS: { sel: string | null; title: string; body: string }[] = [
     { sel: null, title: 'Click to select', body: 'Click any element on your page to select it. Shift-click adds more; drag on empty space to box-select. Esc deselects.' },
-    { sel: null, title: 'Move and resize', body: 'Drag an element to move it, or pull its handles to resize. Arrow keys nudge by 1px (hold Shift for 10). Guides snap to neighbours; hold Ctrl/Cmd to turn that off.' },
+    { sel: null, title: 'Move, resize, copy, delete', body: 'Drag an element to move it, or pull its handles to resize. Arrow keys nudge by 1px (hold Shift for 10). Ctrl/Cmd+D duplicates the selection and Delete removes it from your code, both undoable. The Layers tab shows the whole page as a tree.' },
     { sel: '.info', title: 'Change the style', body: 'The fields for the selected element appear here: size, colour, spacing, width. Every change is written straight into your source file.' },
     { sel: null, title: 'Edit text in place', body: 'Double-click text to retype it. If the text comes from data Brushup can’t edit, it pins a note for Claude instead.' },
     { sel: '[data-tab=notes]', title: 'Leave notes for Claude', body: 'Press N on a selected section or component to pin a note. Claude reads your notes and picks them up from your project.' },
@@ -734,19 +767,20 @@ export function createPanel(hooks: PanelHooks) {
     slide($<HTMLElement>('.tabs .ink'), root.querySelector<HTMLElement>('[data-tab][aria-selected=true]'));
     slide($<HTMLElement>('.seg .thumb'), root.querySelector<HTMLElement>('[data-mode][aria-pressed=true]'));
   };
-  const showTab = (tab: 'style' | 'notes' | 'changes' | 'a11y') => {
+  const showTab = (tab: 'style' | 'layers' | 'notes' | 'changes' | 'a11y') => {
     root.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach((b) => (b.setAttribute('aria-selected', String(b.dataset.tab === tab)), (b.tabIndex = b.dataset.tab === tab ? 0 : -1)));
     root.querySelectorAll<HTMLElement>('[data-pane]').forEach((p) => (p.hidden = p.dataset.pane !== tab));
     moveInk();
+    if (tab === 'layers') hooks.onLayersRefresh();
     if (tab === 'changes') hooks.onChangesRefresh();
     if (tab === 'a11y') hooks.onA11yScan();
   };
   requestAnimationFrame(moveInk);
   document.fonts?.ready.then(moveInk);
-  root.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab as 'style' | 'notes' | 'changes' | 'a11y')));
+  root.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab as 'style' | 'layers' | 'notes' | 'changes' | 'a11y')));
   // Arrow keys move between tabs (the tablist pattern); only the active tab is in the Tab order.
   $<HTMLElement>('.tabs').addEventListener('keydown', (e: KeyboardEvent) => {
-    const order = ['style', 'notes', 'changes', 'a11y'] as const;
+    const order = ['style', 'layers', 'notes', 'changes', 'a11y'] as const;
     const at = order.findIndex((t) => root.querySelector<HTMLElement>(`[data-tab=${t}]`)!.getAttribute('aria-selected') === 'true');
     const n = order.length;
     const to = e.key === 'ArrowRight' ? (at + 1) % n : e.key === 'ArrowLeft' ? (at + n - 1) % n : e.key === 'Home' ? 0 : e.key === 'End' ? n - 1 : -1;
@@ -883,6 +917,79 @@ export function createPanel(hooks: PanelHooks) {
       panel.style.top = `${above >= below ? 14 : innerHeight - 14 - Math.min(room, p.height)}px`;
     };
     window.setTimeout(place, 0);
+  };
+
+  /* ----- layers ----- */
+  const laySum = $<HTMLElement>('.laysum');
+  const layList = $<HTMLElement>('.layers');
+  let layRows: LayerView[] = [];
+  let laySelected = new Set<string>();
+  const collapsed = new Set<string>();
+  const renderLayers = () => {
+    layList.textContent = '';
+    let hideBelow = Infinity; // while inside a collapsed row, skip rows deeper than it
+    for (const row of layRows) {
+      if (row.depth > hideBelow) continue;
+      hideBelow = Infinity;
+      const li = document.createElement('li');
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'row';
+      b.dataset.key = row.key;
+      b.style.paddingLeft = `${6 + row.depth * 12}px`;
+      b.setAttribute('aria-selected', String(laySelected.has(row.key)));
+      b.setAttribute('aria-level', String(row.depth + 1));
+      if (row.hasChildren) b.setAttribute('aria-expanded', String(!collapsed.has(row.key)));
+      const caret = document.createElement('span');
+      caret.className = 'lcaret';
+      caret.textContent = row.hasChildren ? (collapsed.has(row.key) ? '▸' : '▾') : '';
+      caret.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (collapsed.has(row.key)) collapsed.delete(row.key);
+        else collapsed.add(row.key);
+        renderLayers();
+      });
+      const name = document.createElement('span');
+      name.className = `lnm${row.component ? ' comp' : ''}`;
+      name.textContent = row.component ? `<${row.name}>` : row.name; // text only: names and hints come from the page
+      const hint = document.createElement('span');
+      hint.className = 'lhint';
+      hint.textContent = row.hint;
+      b.append(caret, name, hint);
+      b.addEventListener('click', (e) => hooks.onLayerSelect(row.key, e.shiftKey));
+      b.addEventListener('pointerenter', () => hooks.onLayerHover(row.key));
+      b.addEventListener('pointerleave', () => hooks.onLayerHover(null));
+      li.append(b);
+      layList.append(li);
+      if (row.hasChildren && collapsed.has(row.key)) hideBelow = row.depth;
+    }
+    laySum.textContent = layRows.length ? `${layRows.length} element${layRows.length === 1 ? '' : 's'}` : 'No elements found';
+  };
+  // Up and Down move between rows; Left and Right fold and unfold.
+  layList.addEventListener('keydown', (e: KeyboardEvent) => {
+    const rows = [...layList.querySelectorAll<HTMLButtonElement>('button.row')];
+    const at = rows.indexOf(root.activeElement as HTMLButtonElement);
+    if (at < 0) return;
+    const key = rows[at].dataset.key!;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      rows[Math.min(rows.length - 1, Math.max(0, at + (e.key === 'ArrowDown' ? 1 : -1)))].focus();
+    } else if ((e.key === 'ArrowRight' && collapsed.has(key)) || (e.key === 'ArrowLeft' && rows[at].getAttribute('aria-expanded') === 'true')) {
+      e.preventDefault();
+      if (collapsed.has(key)) collapsed.delete(key);
+      else collapsed.add(key);
+      renderLayers();
+      [...layList.querySelectorAll<HTMLButtonElement>('button.row')].find((b) => b.dataset.key === key)?.focus();
+    }
+  });
+  const setLayers = (rows: LayerView[]) => {
+    layRows = rows;
+    renderLayers();
+  };
+  const setLayerSelection = (keys: string[]) => {
+    laySelected = new Set(keys);
+    for (const b of layList.querySelectorAll<HTMLButtonElement>('button.row')) b.setAttribute('aria-selected', String(laySelected.has(b.dataset.key!)));
+    layList.querySelector<HTMLElement>('button.row[aria-selected=true]')?.scrollIntoView?.({ block: 'nearest' });
   };
 
   /* ----- accessibility ----- */
@@ -1114,6 +1221,7 @@ export function createPanel(hooks: PanelHooks) {
       target = noteTarget;
       suggestedKind = suggest;
       addBtn.disabled = !el;
+      root.querySelectorAll<HTMLButtonElement>('[data-act=duplicate], [data-act=delete]').forEach((b) => (b.disabled = !el));
       addBtn.textContent = el ? `+ Add a note on ${noteTarget || 'this element'}` : 'Select an element to add a note';
       if (!el) {
         info.textContent = 'Click an element to select it.';
@@ -1182,6 +1290,10 @@ export function createPanel(hooks: PanelHooks) {
       field('text').value = existing?.text ?? '';
       field('text').focus();
     },
+    /** Fill the Layers tab. */
+    setLayers,
+    setLayerSelection,
+    layersOpen: () => !root.querySelector<HTMLElement>('[data-pane=layers]')!.hidden,
     /** Fill the A11y tab. */
     setA11y,
     a11yOpen: () => !root.querySelector<HTMLElement>('[data-pane=a11y]')!.hidden,

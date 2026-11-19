@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Delete and duplicate.** Select an element and press **Delete** to remove it from your source (its lines go with it, leaving no gap), or **Ctrl/Cmd+D** to write a copy right after it at the same indentation. Both are one undo step, in JSX and in static HTML, and work on several selected elements at once. They refuse, with the reason, rather than guess: an element drawn by `.map()` (one line makes many elements), one shown with `&&` or `?:`, one passed as a prop, the element a component returns, and `<html>`, `<head>` or `<body>`. An element *inside* a list item or conditional is ordinary markup and is fine (it edits the shared template; the status says how many elements share it). A copy that repeats an `id` warns.
+- **A Layers tab.** The page as a tree of its elements, with component usages shown by name (`<Button>`) and a hint (id, text or class) to tell siblings apart. Click a row to select it (Shift to add), fold branches, move with the arrow keys. It follows selections made on the page, rebuilds after edits and leaves out the `<head>`.
 - **React Router v7 (and Remix on Vite) now loads the canvas.** These frameworks render the page on the server, so the Vite plugin's usual place to add the overlay (`index.html`) never runs and no canvas appeared, even though elements were being tagged. The plugin now loads the overlay from the root route (`app/root.tsx`, or `src/root.tsx`) instead, once and in the browser only. Verified by hand in a real React Router 7 + Tailwind 4 app: the canvas appears, a text edit rewrote the JSX, and a nudge wrote `ml-2.5` onto the right element. Remix on Vite uses the same code path but hasn't been tried.
 
 ## 0.1.6

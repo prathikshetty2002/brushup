@@ -5,7 +5,7 @@ import { explainSize, handleLabel, handleProps, sizeProps, type BoxStart, type H
 import { morphPage, refreshStylesheets } from './morph';
 import { RULES, scanPage, type A11yIssue } from './a11y';
 import { DESIGN_RULES, scanDesign } from './design';
-import { createPanel, type HandleInfo, type Mode, type NoteDraft, type NoteKind, type NoteView, type ChangesView, type A11yView } from './panel';
+import { createPanel, type HandleInfo, type Mode, type NoteDraft, type NoteKind, type NoteView, type ChangesView, type A11yView, type LayerView } from './panel';
 
 interface Boot {
   /** 'static': Brushup serves one HTML page. 'dev': a framework dev server serves the app. */
@@ -102,6 +102,7 @@ function connect() {
       state.hash = msg.hash;
       void reload(!!msg.css);
       if (panel.changesOpen()) refreshChanges();
+      if (panel.layersOpen()) setTimeout(refreshLayers, 300);
       if (panel.a11yOpen()) setTimeout(scanA11y, 400);
     } else if (msg.type === 'hmr') {
       freshListeners.forEach((f) => f());
@@ -238,6 +239,7 @@ function select(el: HTMLElement | null, add = false) {
 /** Show the selection in the panel and tell the server (and through it, the agent) which element is selected. */
 function announceSelection() {
   refreshPanel();
+  if (panel.layersOpen()) panel.setLayerSelection(selectedAll().map(layerKey));
   const primary = selected();
   ws?.readyState === WebSocket.OPEN && ws.send(JSON.stringify({ type: 'select', selection: primary ? { id: refOf(primary), tag: tagOf(primary) } : null }));
 }
@@ -544,6 +546,70 @@ async function commitStyles(items: { el: HTMLElement; props: Record<string, stri
 }
 
 const commitStyle = (el: HTMLElement, props: Record<string, string>, scope: Scope = 'auto') => commitStyles([{ el, props }], scope);
+
+/* ---------- layers ---------- */
+
+const layerEls = new Map<string, HTMLElement>();
+const layerKey = (el: HTMLElement) => `${refOf(el)}#${Math.max(0, instances(refOf(el)).indexOf(el))}`;
+
+/** The page's tagged elements as a tree, in document order. Capped, so a huge page can't stall the panel. */
+function layerRows(): LayerView[] {
+  const rows: LayerView[] = [];
+  const depth = new Map<HTMLElement, number>();
+  layerEls.clear();
+  for (const el of document.querySelectorAll<HTMLElement>(TAGGED)) {
+    if (rows.length >= 600) break;
+    if (el === document.documentElement || el === document.body || panel.host.contains(el) || el.closest('head')) continue; // the page itself, not its <head>
+    const parent = el.parentElement?.closest<HTMLElement>(TAGGED) ?? null;
+    const d = parent && depth.has(parent) ? depth.get(parent)! + 1 : 0;
+    depth.set(el, d);
+    const use = DEV ? el.getAttribute(USE) : null;
+    const text = [...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent ?? '').join('').trim().replace(/\s+/g, ' ');
+    const cls = (el.getAttribute('class') ?? '').trim().split(/\s+/)[0];
+    const key = layerKey(el);
+    layerEls.set(key, el);
+    rows.push({ key, depth: d, name: use ? (use.split('#')[1] ?? tagOf(el)) : tagOf(el), component: !!use, hint: el.id ? `#${el.id}` : text ? `“${text.slice(0, 28)}”` : cls ? `.${cls}` : '', hasChildren: false });
+    const above = parent && layerEls.size ? rows.find((r) => r.key === layerKey(parent)) : null;
+    if (above) above.hasChildren = true;
+  }
+  return rows;
+}
+
+function refreshLayers() {
+  panel.setLayers(layerRows());
+  panel.setLayerSelection(selectedAll().map(layerKey));
+}
+
+/* ---------- delete and duplicate ---------- */
+
+/** Take the selected element(s) out of the source, or write a copy right after each. Both are one undo step. */
+async function structure(kind: 'delete' | 'duplicate', retried = false): Promise<void> {
+  const els = selectedAll().filter((el) => el !== document.body && el !== document.documentElement);
+  if (!els.length) return panel.setStatus('Select an element first', 'err');
+  const seen = new Set<string>();
+  const edits: Edit[] = [];
+  for (const el of els) {
+    const ref = refOf(el);
+    if (seen.has(ref)) continue; // list items share one source line: one edit covers them all
+    seen.add(ref);
+    edits.push({ kind, id: ref, tag: tagOf(el), ...(DEV ? { ident: identOf(el), ver: verOf(el) } : {}) });
+  }
+  const r = await sendMany(edits);
+  if (!r.ok) {
+    if (r.stale && !retried) {
+      await nextFresh(1500);
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      return structure(kind, true);
+    }
+    return; // the server's message is already on screen: it says why (a list item, a condition, the page root…)
+  }
+  const shared = DEV && els.length === 1 ? instances(refOf(els[0])).length : 1;
+  const what = els.length > 1 ? `${els.length} elements` : `<${tagOf(els[0])}>`;
+  const note = shared > 1 ? ` · ${shared} elements share this JSX, so all of them ${kind === 'delete' ? 'are gone' : 'got a copy'}` : '';
+  if (kind === 'delete') select(null);
+  const text = `${kind === 'delete' ? 'Deleted' : 'Duplicated'} ${what}${note}`;
+  panel.setStatus(r.warning ? `${text} — ${r.warning}` : text, r.warning ? 'warn' : 'ok', { undo: true });
+}
 
 async function history(kind: 'undo' | 'redo') {
   const r = await enqueue(() => rpc({ type: kind }));
@@ -852,6 +918,13 @@ window.addEventListener(
       void history('redo');
     } else if (e.key === 'Escape') {
       select(null);
+    } else if ((e.key === 'Delete' || e.key === 'Backspace') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (!selectedAll().length) return;
+      e.preventDefault();
+      void structure('delete');
+    } else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'd') {
+      e.preventDefault(); // the browser would bookmark the page
+      if (selectedAll().length) void structure('duplicate');
     } else if (e.key.toLowerCase() === 'n' && !e.ctrlKey && !e.metaKey && !e.altKey) {
       if (!selected()) return;
       e.preventDefault();
@@ -892,6 +965,18 @@ const panel = createPanel({
   },
   onUndo: () => void history('undo'),
   onRedo: () => void history('redo'),
+  onLayersRefresh: refreshLayers,
+  onLayerSelect(key, add) {
+    const el = layerEls.get(key);
+    if (!el) return;
+    select(el, add);
+    el.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+  },
+  onLayerHover(key) {
+    state.hovered = key ? (layerEls.get(key) ?? null) : null;
+  },
+  onDelete: () => void structure('delete'),
+  onDuplicate: () => void structure('duplicate'),
   onParent() {
     const parent = selected()?.parentElement?.closest<HTMLElement>(TAGGED);
     if (parent) select(parent);

@@ -1,6 +1,7 @@
 import type * as t from '@babel/types';
 import path from 'node:path';
-import { EditError, StaleElement, type Edit, type Ident, type Target, type TextEdit } from './edit-types';
+import { EditError, StaleElement, type Edit, type Ident, type StructureEdit, type Target, type TextEdit } from './edit-types';
+import { duplicateSpan, removeSpan } from './structure';
 import type { Files } from './patch';
 import { readRules, splice } from './css-patch';
 import { afterName, findElement, fingerprint, jsxName, parseSource, parseSrc, parseVer, walk } from './jsx';
@@ -247,6 +248,58 @@ function patchText(code: string, file: string, edit: TextEdit): string {
   return code.slice(0, node.start!) + lead + escapeJsxText(edit.text.trim()) + trail + code.slice(node.end!);
 }
 
+/* ---------- delete and duplicate ---------- */
+
+const LIST_METHODS = new Set(['map', 'flatMap', 'filter', 'reduce', 'forEach']);
+
+/**
+ * Why an element can't be safely removed or copied on its own, or null when it is an ordinary child of another
+ * element. Only its direct parent matters: a `<p>` inside a `<div>` is plain markup even if that div is conditional
+ * or drawn by a `.map` (changing it changes the shared template, which is what editing that JSX means).
+ */
+function structureRefusal(ast: t.File, el: t.JSXElement): string | null {
+  const path: t.Node[] = [];
+  const find = (node: unknown): boolean => {
+    if (!node || typeof node !== 'object') return false;
+    if (Array.isArray(node)) return node.some(find);
+    const n = node as t.Node;
+    if (typeof n.type !== 'string') return false;
+    if (n === el) return true;
+    path.push(n);
+    for (const key of Object.keys(n)) {
+      if (key === 'loc' || key === 'extra' || key.endsWith('Comments')) continue;
+      if (find((n as unknown as Record<string, unknown>)[key])) return true;
+    }
+    path.pop();
+    return false;
+  };
+  find(ast);
+  const parent = path[path.length - 1];
+  if (parent && (parent.type === 'JSXElement' || parent.type === 'JSXFragment')) return null;
+  // Not a plain child: say what it is instead.
+  for (let i = path.length - 1; i >= 0; i--) {
+    const n = path[i];
+    if (n.type === 'CallExpression' && n.callee.type === 'MemberExpression' && n.callee.property.type === 'Identifier' && LIST_METHODS.has(n.callee.property.name)) {
+      return `is drawn from a list (.${n.callee.property.name}), so one line of code makes several elements and removing or copying it would change them all`;
+    }
+    if (n.type === 'ConditionalExpression' || n.type === 'LogicalExpression') return 'is shown conditionally (a && or ?: expression), so removing or copying it would change that logic';
+    if (n.type === 'JSXAttribute') return 'is passed as a prop, not written as a child';
+    if (n.type === 'JSXExpressionContainer') return 'is written inside an expression ({…}), so Brushup can\'t tell what it is for';
+  }
+  return 'is the top-level element a component returns, so removing or copying it would leave the component with nothing, or two roots';
+}
+
+function patchStructure(code: string, file: string, edit: StructureEdit): { code: string; warning?: string } {
+  const { el } = located(code, file, edit);
+  const label = parseSrc(edit.id)?.name ?? edit.tag;
+  const why = structureRefusal(parseSource(code, file), el);
+  if (why) throw new EditError(`<${label}> ${why}. Ask Claude to change it, or edit the code by hand.`);
+  if (edit.kind === 'delete') return { code: removeSpan(code, el.start!, el.end!) };
+  const copy = duplicateSpan(code, el.start!, el.end!);
+  const ids = /\bid\s*=/.test(code.slice(el.start!, el.end!));
+  return { code: copy, ...(ids ? { warning: 'The copy has the same id as the original; change one of them' } : {}) };
+}
+
 /* ---------- inline style={{ ... }} ---------- */
 
 function patchInline(code: string, file: string, edit: Edit, prop: string, value: string): string {
@@ -397,6 +450,10 @@ function classSource(code: string, file: string, edit: Edit): string {
 /** Pure: apply an edit to the JSX file `file` (plus project css in `files` for rule edits). */
 export function applyJsxEdit(files: Files, file: string, edit: Edit, opts: JsxOptions): { files: Files; target: Target; warning?: string } {
   if (edit.kind === 'text') return { files: { ...files, [file]: patchText(files[file], file, edit) }, target: 'text' };
+  if (edit.kind !== 'style') {
+    const done = patchStructure(files[file], file, edit);
+    return { files: { ...files, [file]: done.code }, target: 'structure', ...(done.warning ? { warning: done.warning } : {}) };
+  }
 
   let out = files;
   let target: Target = 'inline';

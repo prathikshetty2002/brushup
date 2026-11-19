@@ -1,5 +1,6 @@
 import path from 'node:path';
-import { EditError, type Edit, type Scope, type StyleEdit, type TextEdit } from './edit-types';
+import { EditError, type Edit, type Scope, type StructureEdit, type StyleEdit, type TextEdit } from './edit-types';
+import { duplicateSpan, removeSpan } from './structure';
 import { afterTagName, mapHtml, type Range, type SourceDoc, type SourceElement } from './html-map';
 import { parseSelector, matches, specificity } from './selector';
 import { readInlineDecls, readRules, splice } from './css-patch';
@@ -137,9 +138,23 @@ function applyText(files: Files, entry: string, edit: TextEdit): Files {
   return next === source ? files : { ...files, [entry]: next };
 }
 
+/** Delete or duplicate an element of a static page. */
+function applyStructure(files: Files, entry: string, edit: StructureEdit): Files {
+  const source = files[entry];
+  const doc = mapHtml(source);
+  const el = lookup(doc, edit);
+  if (['html', 'head', 'body'].includes(el.tag.toLowerCase())) throw new EditError(`<${el.tag}> holds the whole page, so it can't be ${edit.kind === 'delete' ? 'removed' : 'copied'}`);
+  if (el.inHead) throw new EditError(`<${el.tag}> is in the page head, not on the page itself`);
+  const start = el.startTag.start;
+  const end = el.endTag ? el.endTag.end : el.startTag.end;
+  const next = edit.kind === 'delete' ? removeSpan(source, start, end) : duplicateSpan(source, start, end);
+  return { ...files, [entry]: next };
+}
+
 /** Pure: returns new file contents (unchanged files keep identity). Throws EditError if the edit can't be placed. */
 export function applyEdit(files: Files, entry: string, edit: Edit): Files {
   if (edit.kind === 'text') return applyText(files, entry, edit);
+  if (edit.kind !== 'style') return applyStructure(files, entry, edit);
   let out = files;
   for (const [prop, value] of Object.entries(edit.props)) {
     if (!/^[a-z-]+$/i.test(prop) || /[;{}]/.test(value)) throw new EditError(`Rejected style ${prop}: ${value}`);

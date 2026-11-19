@@ -84,14 +84,16 @@ export async function getSelection(ctx: ToolContext): Promise<ToolResult> {
 }
 
 interface LoggedEdit {
-  kind: 'style' | 'text';
+  kind: 'style' | 'text' | 'delete' | 'duplicate';
   id: string;
   props?: Record<string, string>;
   text?: string;
 }
 
 const summarize = (e: LoggedEdit) =>
-  e.kind === 'text' ? { target: shortRef(e.id), change: `text → "${(e.text ?? '').slice(0, 80)}"` } : { target: shortRef(e.id), change: Object.entries(e.props ?? {}).map(([k, v]) => `${k}: ${v}`).join('; ') };
+  e.kind === 'delete' || e.kind === 'duplicate'
+    ? { target: shortRef(e.id), change: e.kind === 'delete' ? 'element deleted' : 'element duplicated (a copy was added right after it)' }
+    : e.kind === 'text' ? { target: shortRef(e.id), change: `text → "${(e.text ?? '').slice(0, 80)}"` } : { target: shortRef(e.id), change: Object.entries(e.props ?? {}).map(([k, v]) => `${k}: ${v}`).join('; ') };
 
 /** The user's recent manual edits on the canvas. Agents should keep these, not revert them. */
 export async function getRecentEdits(ctx: ToolContext, input: { limit?: number; since?: string }): Promise<ToolResult> {
