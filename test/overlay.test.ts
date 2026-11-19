@@ -865,9 +865,9 @@ describe('editing for a screen size', () => {
     expect(q('.vary').hidden).toBe(true);
     click(document.querySelector('p')!);
     expect(q('.vary').hidden).toBe(false);
-    expect(btn('here').textContent).toBe('md and up');
+    expect(btn('here').textContent).toBe('768px and wider');
     setWidth(1300);
-    expect(btn('here').textContent).toBe('xl and up');
+    expect(btn('here').textContent).toBe('1280px and wider');
   });
 
   it('writes edits with the current breakpoint as the variant once "and up" is chosen, and with none for all sizes', async () => {
@@ -878,7 +878,8 @@ describe('editing for a screen size', () => {
     expect(o.last('edit').edit.variant).toBeUndefined();
     await ok('h1');
     btn('here').click();
-    expect(q('.varynote').hidden).toBe(false);
+    expect(q('.varynote').textContent).toContain('screens 768px wide and wider');
+    expect(q('.varynote').textContent).toContain('Written as md:');
     key('ArrowRight');
     await settle();
     expect(o.last('edit').edit).toMatchObject({ variant: 'md', scope: 'element' });

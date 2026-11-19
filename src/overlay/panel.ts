@@ -454,11 +454,11 @@ export function createPanel(hooks: PanelHooks) {
             <label class="imgchk"><input type="checkbox" data-img="decorative" /> Decorative: nothing to describe</label>
             <p class="imgwarn" hidden>No alt text yet. People using a screen reader get nothing for this image.</p>
           </div>
-          <div class="vary" hidden role="group" aria-label="Screen size these edits apply to">
-            <span class="varylbl">Applies to</span>
-            <div class="varyseg"><button type="button" data-vary="all" aria-pressed="true">All sizes</button><button type="button" data-vary="here" aria-pressed="false">This size and up</button></div>
-            <span class="varylbl varylbl2">State</span>
-            <div class="varyseg"><button type="button" data-state="" aria-pressed="true">Normal</button><button type="button" data-state="hover" aria-pressed="false">Hover</button><button type="button" data-state="focus" aria-pressed="false">Focus</button><button type="button" data-state="dark" aria-pressed="false">Dark</button></div>
+          <div class="vary" hidden role="group" aria-label="Which screens and states these edits apply to">
+            <span class="varylbl">Screen size</span>
+            <div class="varyseg"><button type="button" data-vary="all" aria-pressed="true" title="Phones, tablets and desktops all get the change">Every screen</button><button type="button" data-vary="here" aria-pressed="false">This size and up</button></div>
+            <span class="varylbl varylbl2">When</span>
+            <div class="varyseg"><button type="button" data-state="" aria-pressed="true" title="Always">Always</button><button type="button" data-state="hover" aria-pressed="false" title="Only while the pointer is over it">On hover</button><button type="button" data-state="focus" aria-pressed="false" title="Only while it has keyboard focus">On focus</button><button type="button" data-state="dark" aria-pressed="false" title="Only when dark mode is on">Dark mode</button></div>
             <p class="varynote" hidden></p>
           </div>
           <div class="fields" hidden></div>
@@ -531,12 +531,12 @@ export function createPanel(hooks: PanelHooks) {
   /** What the choices mean, in plain words, so nobody has to guess what will be written. */
   const noteVary = () => {
     const prefix = [varyState === 'dark' ? 'dark' : '', varyHere ? varyBp : '', varyState && varyState !== 'dark' ? varyState : ''].filter(Boolean).join(':');
-    varyNote.hidden = !prefix;
-    const parts: string[] = [];
-    if (varyHere && varyBp) parts.push(`from ${varyFrom}px up`);
-    if (varyState === 'hover' || varyState === 'focus') parts.push(`while the element is ${varyState === 'hover' ? 'hovered' : 'focused'}`);
-    if (varyState === 'dark') parts.push('in dark mode');
-    varyNote.textContent = `Written as ${prefix}: classes, so they apply ${parts.join(', ')}. ${varyState && varyState !== 'dark' ? 'The page can’t show it until you hover or focus the element. ' : varyState === 'dark' ? 'The page only shows it once dark mode is on. ' : ''}${varyHere ? 'The window decides which size you are looking at: resize it, or use your browser’s device mode.' : ''}`.trim();
+    const who = varyHere && varyBp ? `screens ${varyFrom}px wide and wider` : 'every screen size';
+    const when = varyState === 'hover' ? ' while the pointer is over it' : varyState === 'focus' ? ' while it has keyboard focus' : varyState === 'dark' ? ' in dark mode' : '';
+    const see = varyState === 'hover' ? 'You will see it when you hover the element.' : varyState === 'focus' ? 'You will see it when the element has focus.' : varyState === 'dark' ? 'You will see it once dark mode is on.' : '';
+    const size = varyHere && varyBp ? `Narrower screens keep their current look. Your window is ${window.innerWidth}px wide: resize it, or use your browser’s device mode, to check other sizes.` : '';
+    varyNote.hidden = false;
+    varyNote.textContent = [`Your next edits apply to ${who}${when}.`, prefix ? `Written as ${prefix}: classes.` : '', see, size].filter(Boolean).join(' ');
   };
   stateBtns.forEach((b) =>
     b.addEventListener('click', () => {
@@ -1515,13 +1515,14 @@ export function createPanel(hooks: PanelHooks) {
       place(selBox, active ? selected : null);
     },
     /**
-     * The "Applies to" choice: shown only where edits can be written as Tailwind classes. `bp` is the breakpoint the window is at
+     * The screen-size choice: shown only where edits can be written as Tailwind classes. `bp` is the breakpoint the window is at
      * now (`md`), or '' below the smallest, where "this size and up" is the same as all sizes.
      */
     setVariants(available: boolean, bp: string, from: number) {
       varyAvailable = available;
       const here = varyBtns[1];
-      here.textContent = bp ? `${bp} and up` : 'This size and up';
+      here.textContent = bp ? `${from}px and wider` : 'This size and wider';
+      here.title = bp ? `Only screens ${from}px wide and wider (Tailwind’s ${bp}: prefix) get the change; narrower ones keep their look` : 'Your window is narrower than the smallest breakpoint (640px), so this is the same as every screen';
       here.disabled = !bp;
       if (!bp && varyHere) {
         varyHere = false;
