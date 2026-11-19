@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Setup is one command.** `npx brushup init --mcp` now adds `brushup` to your project's dev dependencies first (with pnpm, yarn, bun or npm, whichever your lock file shows, pinned to the version that is running), then does the wiring as before. It skips the install when brushup is already listed or there is no `package.json`, and `--no-install` turns it off. If the install fails it changes nothing and prints the command to run yourself.
+
 ## 0.1.9
 
 - **Clicking Edit opens a collapsed panel.** When you select an element the panel has no room beside, it shrinks to its header so it doesn't cover the element. Choosing **Edit** now expands it again, even though the mode is already Edit, so nobody is left wondering where the fields went.

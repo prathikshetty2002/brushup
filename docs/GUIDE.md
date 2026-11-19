@@ -30,11 +30,10 @@ Work on a branch, or commit first: Brushup edits your files, and `git diff` is t
 ### Next.js or Vite
 
 ```bash
-npm install -D brushup
 npx brushup init --mcp
 ```
 
-That is the whole setup. `init` is idempotent and does all of this:
+That one command is the whole setup. `init` is idempotent and does all of this (it first adds `brushup` to your project's dev dependencies with whichever package manager your lock file shows, unless it is already there; `--no-install` skips that):
 
 - wires Brushup into your project: wraps the export in `next.config.*` with `withBrushup(...)` and adds `<BrushupScript />` inside `<body>` of the root layout (Next), or adds `brushup()` to `plugins` in `vite.config.*` (Vite);
 - adds a short block to `CLAUDE.md` (between `<!-- brushup:start -->` markers) telling Claude Code how to use Brushup's notes;

@@ -1,6 +1,7 @@
 import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import { initProject } from './init';
+import { run } from './install';
 import { startServer } from './server/index';
 import { VERSION } from './version';
 
@@ -17,6 +18,16 @@ if (args[0] === 'init') {
   const agents = rest.includes('--agents');
   const wire = !rest.includes('--no-wire');
   const root = path.resolve(rest.find((a) => !a.startsWith('--')) ?? '.');
+  // One command is the whole setup: add the package to the project first if it isn't there, since the wiring imports it.
+  if (!rest.includes('--no-install')) {
+    const { installSelf } = await import('./install');
+    const installed = await installSelf(root, (command, args, cwd) => (console.log(`Adding brushup to this project: ${[command, ...args].join(' ')}`), run(command, args, cwd)));
+    if (installed.status === 'failed') {
+      console.error(`Could not install brushup (${installed.message}). Nothing was changed. Run this yourself, then run init again:\n  ${installed.command}`);
+      process.exit(1);
+    }
+    if (installed.status === 'no-package-json') console.log('No package.json here, so brushup was not installed. For a plain HTML page you do not need to: run  npx brushup <page.html>.');
+  }
   const r = await initProject(root, { mcp, wire, agents });
   console.log(`CLAUDE.md: ${r.claudeMd}   .gitignore: ${r.gitignore === 'absent' ? 'no .gitignore found' : r.gitignore}${r.mcp ? `   .mcp.json: ${r.mcp}` : ''}`);
   if (r.wire?.next) {
@@ -58,7 +69,7 @@ const port = portFlag >= 0 ? Number(args.splice(portFlag, 2)[1]) : 4321;
 const file = args[0];
 
 if (!file || !Number.isInteger(port)) {
-  console.error('Usage: brushup <page.html> [--port 4321]\n       brushup init [project-folder] [--mcp] [--agents] [--no-wire]   (set up a project: CLAUDE.md, Next/Vite wiring; --mcp registers the MCP server; --agents also sets up AGENTS.md and Cursor)');
+  console.error('Usage: brushup <page.html> [--port 4321]\n       brushup init [project-folder] [--mcp] [--agents] [--no-wire] [--no-install]   (set up a project, installing brushup if needed: CLAUDE.md, Next/Vite wiring; --mcp registers the MCP server; --agents also sets up AGENTS.md and Cursor)');
   process.exit(1);
 }
 

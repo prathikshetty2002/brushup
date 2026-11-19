@@ -64,8 +64,7 @@ When your agent changes the code, the canvas updates in place.
 ## Quick start (Next.js + Tailwind + shadcn/ui)
 
 ```bash
-npm install -D brushup
-npx brushup init --mcp         # wires next.config / layout / vite.config, adds Claude instructions + MCP server, ignores .brushup/ in git (--no-wire skips the config edits)
+npx brushup init --mcp         # one command: adds brushup to your project (with your package manager), wires next.config / layout / vite.config, adds Claude instructions + the MCP server, ignores .brushup/ in git (--no-install and --no-wire skip those steps)
 ```
 
 ```ts
