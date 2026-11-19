@@ -19,15 +19,15 @@ export default function ProductCard() {
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-muted">This week</p>
-          <h3 className="mt-1 font-display text-2xl font-semibold">Product team</h3>
+          <p className="mt-1 font-display text-2xl font-semibold">Product team</p>
         </div>
         <div className="flex -space-x-2" aria-label="9 people">
           {people.map((p) => (
-            <span key={p.initials} className={`grid size-8 place-items-center rounded-full border-2 border-white text-[11px] font-semibold ${p.tone}`}>
+            <span key={p.initials} className={`grid size-8 place-items-center rounded-full border-2 border-white text-xs font-semibold ${p.tone}`}>
               {p.initials}
             </span>
           ))}
-          <span className="grid size-8 place-items-center rounded-full border-2 border-white bg-sand text-[11px] font-semibold text-muted">+5</span>
+          <span className="grid size-8 place-items-center rounded-full border-2 border-white bg-sand text-xs font-semibold text-muted">+5</span>
         </div>
       </div>
 

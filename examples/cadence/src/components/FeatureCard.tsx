@@ -1,10 +1,11 @@
 import type { LucideIcon } from 'lucide-react';
+import type { ComponentProps } from 'react';
 
-type Props = { icon: LucideIcon; title: string; body: string };
+type Props = ComponentProps<'article'> & { icon: LucideIcon; title: string; body: string };
 
-export default function FeatureCard({ icon: Icon, title, body }: Props) {
+export default function FeatureCard({ icon: Icon, title, body, className = '', ...props }: Props) {
   return (
-    <article className="rounded-card border border-line bg-white p-8 transition-shadow hover:shadow-card">
+    <article className={`rounded-card border border-line bg-white p-8 transition-shadow hover:shadow-card ${className}`} {...props}>
       <span className="grid size-11 place-items-center rounded-xl bg-accent-soft text-accent">
         <Icon className="size-5" aria-hidden="true" />
       </span>

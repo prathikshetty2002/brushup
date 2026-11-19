@@ -1,11 +1,12 @@
 import { Check } from 'lucide-react';
+import type { ComponentProps } from 'react';
 import Button from './Button';
 
-type Props = { name: string; price: string; note: string; features: string[]; featured?: boolean; cta: string };
+type Props = ComponentProps<'article'> & { name: string; price: string; note: string; features: string[]; featured?: boolean; cta: string };
 
-export default function PricingCard({ name, price, note, features, featured = false, cta }: Props) {
+export default function PricingCard({ name, price, note, features, featured = false, cta, className = '', ...props }: Props) {
   return (
-    <article className={`flex flex-col rounded-card border p-8 ${featured ? 'border-accent bg-white shadow-card ring-1 ring-accent' : 'border-line bg-white'}`}>
+    <article className={`flex flex-col rounded-card border p-8 ${featured ? 'border-accent bg-white shadow-card ring-1 ring-accent' : 'border-line bg-white'} ${className}`} {...props}>
       <div className="flex items-center justify-between">
         <h3 className="font-display text-2xl font-semibold">{name}</h3>
         {featured && <span className="rounded-full bg-accent px-3 py-1 text-xs font-medium text-white">Most teams</span>}

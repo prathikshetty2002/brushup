@@ -14,7 +14,7 @@ export default function Header() {
         <Logo />
         <nav aria-label="Main" className="hidden items-center gap-8 text-sm text-muted md:flex">
           {links.map((l) => (
-            <a key={l.href} href={l.href} className="transition-colors hover:text-ink">
+            <a key={l.href} href={l.href} className="inline-flex min-h-10 items-center transition-colors hover:text-ink">
               {l.label}
             </a>
           ))}
