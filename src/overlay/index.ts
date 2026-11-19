@@ -32,6 +32,8 @@ interface Result {
   textSource?: boolean;
   /** Answer to a `changes` request. */
   changes?: ChangesView;
+  /** Where the edited element now is (`file:line:col`), when the edit moved it. */
+  select?: string;
 }
 
 // Config comes from `window.__brushup` (static server, Vite plugin) or, for frameworks that render a plain
@@ -741,12 +743,16 @@ function refreshLayers() {
   panel.setLayerSelection(selectedAll().map(layerKey));
 }
 
+/** Tag and the start of the text: enough to tell the element that moved from the one it swapped with. */
+const signature = (el: HTMLElement) => `${tagOf(el)}|${(el.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 60)}`;
+
 /* ---------- delete and duplicate ---------- */
 
 /** Take the selected element(s) out of the source, or write a copy right after each. Both are one undo step. */
-async function structure(kind: 'delete' | 'duplicate', retried = false): Promise<void> {
+async function structure(kind: 'delete' | 'duplicate' | 'moveUp' | 'moveDown' | 'wrap', retried = false): Promise<void> {
   const els = selectedAll().filter((el) => el !== document.body && el !== document.documentElement);
   if (!els.length) return panel.setStatus('Select an element first', 'err');
+  if (els.length > 1 && !/^(delete|duplicate)$/.test(kind)) return panel.setStatus('Select one element to move or wrap it', 'err');
   const seen = new Set<string>();
   const edits: Edit[] = [];
   for (const el of els) {
@@ -766,9 +772,25 @@ async function structure(kind: 'delete' | 'duplicate', retried = false): Promise
   }
   const shared = DEV && els.length === 1 ? instances(refOf(els[0])).length : 1;
   const what = els.length > 1 ? `${els.length} elements` : `<${tagOf(els[0])}>`;
-  const note = shared > 1 ? ` · ${shared} elements share this JSX, so all of them ${kind === 'delete' ? 'are gone' : 'got a copy'}` : '';
+  const did = { delete: 'Deleted', duplicate: 'Duplicated', moveUp: 'Moved', moveDown: 'Moved', wrap: 'Wrapped' }[kind];
+  const done = { delete: 'are gone', duplicate: 'got a copy', moveUp: 'moved', moveDown: 'moved', wrap: 'were wrapped' }[kind];
+  const note = shared > 1 ? ` · ${shared} elements share this JSX, so all of them ${done}` : '';
   if (kind === 'delete') select(null);
-  const text = `${kind === 'delete' ? 'Deleted' : 'Duplicated'} ${what}${note}`;
+  const text = `${did} ${what}${kind === 'moveUp' ? ' up' : kind === 'moveDown' ? ' down' : kind === 'wrap' ? ' in a <div>' : ''}${note}`;
+  // A moved element's old line now belongs to its neighbour: once the page has reloaded, select the element where it ended up.
+  if (r.select && (kind === 'moveUp' || kind === 'moveDown')) {
+    const ref = r.select;
+    const sig = signature(els[0]);
+    // The reload notice comes before the page has updated, and until it does that position still holds the neighbour:
+    // keep looking until the element there is the one that moved (same tag and text), for a few seconds at most.
+    void (async () => {
+      for (let i = 0; i < 30; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        const moved = instances(ref).find((e) => signature(e) === sig);
+        if (moved) return select(moved);
+      }
+    })();
+  }
   panel.setStatus(r.warning ? `${text} — ${r.warning}` : text, r.warning ? 'warn' : 'ok', { undo: true });
 }
 
@@ -1090,6 +1112,14 @@ window.addEventListener(
       if (!selected()) return;
       e.preventDefault();
       panel.openComposer();
+    } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      if (!selectedAll().length) return;
+      e.preventDefault();
+      void structure(e.key === 'ArrowUp' ? 'moveUp' : 'moveDown'); // Alt+Up / Alt+Down: swap with the neighbour above or below
+    } else if ((e.ctrlKey || e.metaKey) && e.altKey && e.key.toLowerCase() === 'g') {
+      if (!selectedAll().length) return;
+      e.preventDefault();
+      void structure('wrap');
     } else if (e.key.startsWith('Arrow')) {
       const els = movable();
       if (!els.length) return;
@@ -1136,6 +1166,8 @@ const panel = createPanel({
   onLayerHover(key) {
     state.hovered = key ? (layerEls.get(key) ?? null) : null;
   },
+  onMove: (dir) => void structure(dir === 'up' ? 'moveUp' : 'moveDown'),
+  onWrap: () => void structure('wrap'),
   onDelete: () => void structure('delete'),
   onDuplicate: () => void structure('duplicate'),
   onParent() {

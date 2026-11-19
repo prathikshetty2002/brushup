@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { EditError, type Edit } from '../src/core/edit-types';
 import { applyJsxEdit } from '../src/core/jsx-patch';
 import { applyEdit } from '../src/core/patch';
-import { duplicateSpan, removeSpan } from '../src/core/structure';
+import { duplicateSpan, removeSpan, swapSpans, wrapSpan } from '../src/core/structure';
 
 const FILE = '/app/src/App.tsx';
 
@@ -12,7 +12,7 @@ const idAt = (code: string, marker: string, name?: string) => {
   const before = code.slice(0, at).split('\n');
   return `src/App.tsx:${before.length}:${before[before.length - 1].length}${name ? `#${name}` : ''}`;
 };
-const edit = (code: string, marker: string, kind: 'delete' | 'duplicate', tag: string, name?: string): Edit => ({ kind, id: idAt(code, marker, name), tag });
+const edit = (code: string, marker: string, kind: 'delete' | 'duplicate' | 'moveUp' | 'moveDown' | 'wrap', tag: string, name?: string): Edit => ({ kind, id: idAt(code, marker, name), tag });
 const go = (code: string, e: Edit) => applyJsxEdit({ [FILE]: code }, FILE, e, { tailwind: false });
 const page = (body: string) => `export default function App() {\n  return (\n    <main>\n${body}\n    </main>\n  );\n}\n`;
 
@@ -147,6 +147,31 @@ describe('static HTML pages', () => {
   });
 });
 
+describe('telling the canvas where a moved element went', () => {
+  it('gives the new position of the element, so it can stay selected after the reload', async () => {
+    const { mkdir, mkdtemp, readFile, rm, writeFile } = await import('node:fs/promises');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const { DevProject } = await import('../src/server/dev-project');
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'brushup-move-'));
+    try {
+      await mkdir(path.join(dir, 'src'));
+      const code = page('      <h1 id="a">One</h1>\n      <p id="b">Two</p>\n      <footer id="c">Three</footer>');
+      await writeFile(path.join(dir, 'src', 'App.tsx'), code);
+      const project = new DevProject(dir);
+      const up = await project.edit(edit(code, 'id="b"', 'moveUp', 'p'));
+      const after = await readFile(path.join(dir, 'src', 'App.tsx'), 'utf8');
+      expect(up.select).toBe(idAt(after, 'id="b"')); // the p is now where the h1 was
+      const down = await project.edit(edit(after, 'id="b"', 'moveDown', 'p'));
+      const back = await readFile(path.join(dir, 'src', 'App.tsx'), 'utf8');
+      expect(down.select).toBe(idAt(back, 'id="b"'));
+      expect(back).toBe(code); // up, then down, is where it started
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('through the dev project, as the canvas uses it', () => {
   it('writes a delete and a duplicate to disk, and undo restores them', async () => {
     const { mkdir, mkdtemp, readFile, rm, writeFile } = await import('node:fs/promises');
@@ -168,5 +193,85 @@ describe('through the dev project, as the canvas uses it', () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('wrapSpan and swapSpans', () => {
+  it('wrap puts an element on its own lines in a block with the contents indented, and stays on one line when it shares one', () => {
+    const code = 'a\n  <p>x</p>\nb\n';
+    expect(wrapSpan(code, 4, 12)).toBe('a\n  <div>\n    <p>x</p>\n  </div>\nb\n');
+    expect(wrapSpan('x <b>y</b> z', 2, 10)).toBe('x <div><b>y</b></div> z');
+    const nested = '  <section>\n    <p>one</p>\n  </section>';
+    expect(wrapSpan(nested, 2, nested.length)).toBe('  <div>\n    <section>\n      <p>one</p>\n    </section>\n  </div>');
+  });
+
+  it('swap exchanges two spans and leaves what is between them alone', () => {
+    expect(swapSpans('[A] and [B]', [0, 3], [8, 11])).toBe('[B] and [A]');
+  });
+});
+
+describe('moving an element up or down among its siblings', () => {
+  const body = '      <h1 id="a">One</h1>\n      <p id="b">Two</p>\n      <footer id="c">Three</footer>';
+
+  it('swaps with the element before it, or after it, keeping the formatting', () => {
+    const code = page(body);
+    expect(go(code, edit(code, 'id="b"', 'moveUp', 'p')).files[FILE]).toBe(page('      <p id="b">Two</p>\n      <h1 id="a">One</h1>\n      <footer id="c">Three</footer>'));
+    expect(go(code, edit(code, 'id="b"', 'moveDown', 'p')).files[FILE]).toBe(page('      <h1 id="a">One</h1>\n      <footer id="c">Three</footer>\n      <p id="b">Two</p>'));
+    expect(go(code, edit(code, 'id="b"', 'moveUp', 'p')).target).toBe('structure');
+  });
+
+  it('moves a multi-element block as a unit', () => {
+    const code = page('      <section id="s">\n        <p>a</p>\n      </section>\n      <aside id="t">side</aside>');
+    expect(go(code, edit(code, 'id="t"', 'moveUp', 'aside')).files[FILE]).toBe(page('      <aside id="t">side</aside>\n      <section id="s">\n        <p>a</p>\n      </section>'));
+  });
+
+  it('refuses at the ends, and says which end', () => {
+    const code = page(body);
+    expect(() => go(code, edit(code, 'id="a"', 'moveUp', 'h1'))).toThrow(/already the first/);
+    expect(() => go(code, edit(code, 'id="c"', 'moveDown', 'footer'))).toThrow(/already the last/);
+  });
+
+  it('refuses to move past an expression or loose text, which could change what the page says or shows', () => {
+    const expr = page('      <p id="a">A</p>\n      {open && <b>x</b>}\n      <p id="c">C</p>');
+    expect(() => go(expr, edit(expr, 'id="a"', 'moveDown', 'p'))).toThrow(/expression/);
+    const text = page('      <p id="a">A</p>\n      Some words\n      <p id="c">C</p>');
+    expect(() => go(text, edit(text, 'id="c"', 'moveUp', 'p'))).toThrow(/loose text/);
+  });
+
+  it('refuses an element that is not a plain child, such as a list item', () => {
+    const code = page('      {items.map((i) => (\n        <li id="li" key={i}>{i}</li>\n      ))}');
+    expect(() => go(code, edit(code, 'id="li"', 'moveUp', 'li'))).toThrow(EditError);
+  });
+});
+
+describe('wrapping an element in a div', () => {
+  it('wraps a child, and an element in a list or a condition, since the wrapper is one more element', () => {
+    const code = page('      <p id="a">Hi</p>');
+    expect(go(code, edit(code, 'id="a"', 'wrap', 'p')).files[FILE]).toBe(page('      <div>\n        <p id="a">Hi</p>\n      </div>'));
+    const cond = page('      {open && <p id="c">x</p>}');
+    expect(go(cond, edit(cond, 'id="c"', 'wrap', 'p')).files[FILE]).toContain('{open && <div><p id="c">x</p></div>}');
+  });
+
+  it('wraps the element a component returns, which delete and duplicate refuse', () => {
+    const code = 'export default function A() {\n  return <p id="r">x</p>;\n}\n';
+    expect(go(code, edit(code, 'id="r"', 'wrap', 'p')).files[FILE]).toBe('export default function A() {\n  return <div><p id="r">x</p></div>;\n}\n');
+  });
+});
+
+describe('moving and wrapping on a static page', () => {
+  const html = '<!doctype html>\n<html>\n<body>\n  <h1>One</h1>\n  <p>Two</p>\n  <p>Three</p>\n</body>\n</html>\n';
+  const files = { 'index.html': html };
+  const ids = () => ({ h1: 'a2', p1: 'a3', p2: 'a4' }); // body is a1... elements in document order: html a0, body a1
+
+  it('swaps siblings and wraps an element, and will not wrap or move the page itself', () => {
+    const first = applyEdit(files, 'index.html', { kind: 'moveDown', id: ids().h1, tag: 'h1' })['index.html'];
+    expect(first).toContain('<p>Two</p>\n  <h1>One</h1>\n  <p>Three</p>');
+    const last = applyEdit(files, 'index.html', { kind: 'moveUp', id: ids().p2, tag: 'p' })['index.html'];
+    expect(last).toContain('<h1>One</h1>\n  <p>Three</p>\n  <p>Two</p>');
+    const wrapped = applyEdit(files, 'index.html', { kind: 'wrap', id: ids().p1, tag: 'p' })['index.html'];
+    expect(wrapped).toContain('  <div>\n    <p>Two</p>\n  </div>');
+    expect(() => applyEdit(files, 'index.html', { kind: 'moveUp', id: ids().h1, tag: 'h1' })).toThrow(/already the first/);
+    expect(() => applyEdit(files, 'index.html', { kind: 'moveDown', id: ids().p2, tag: 'p' })).toThrow(/already the last/);
+    expect(() => applyEdit(files, 'index.html', { kind: 'wrap', id: 'a1', tag: 'body' })).toThrow(/whole page/);
   });
 });

@@ -56,9 +56,9 @@ export interface TextEdit {
   text: string;
 }
 
-/** Take an element out of the source, or write a copy of it right after itself. */
+/** Take an element out of the source, write a copy right after it, swap it with a neighbour, or wrap it in a `<div>`. */
 export interface StructureEdit {
-  kind: 'delete' | 'duplicate';
+  kind: 'delete' | 'duplicate' | 'moveUp' | 'moveDown' | 'wrap';
   ver?: string;
   stale?: Staleness;
   id: string;

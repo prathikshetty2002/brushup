@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { EditError, type Edit, type Scope, type StructureEdit, type StyleEdit, type TextEdit } from './edit-types';
-import { duplicateSpan, removeSpan } from './structure';
+import { duplicateSpan, removeSpan, swapSpans, wrapSpan } from './structure';
 import { afterTagName, mapHtml, type Range, type SourceDoc, type SourceElement } from './html-map';
 import { parseSelector, matches, specificity } from './selector';
 import { readInlineDecls, readRules, splice } from './css-patch';
@@ -143,10 +143,23 @@ function applyStructure(files: Files, entry: string, edit: StructureEdit): Files
   const source = files[entry];
   const doc = mapHtml(source);
   const el = lookup(doc, edit);
-  if (['html', 'head', 'body'].includes(el.tag.toLowerCase())) throw new EditError(`<${el.tag}> holds the whole page, so it can't be ${edit.kind === 'delete' ? 'removed' : 'copied'}`);
+  const verb = { delete: 'removed', duplicate: 'copied', moveUp: 'moved', moveDown: 'moved', wrap: 'wrapped' }[edit.kind];
+  if (['html', 'head', 'body'].includes(el.tag.toLowerCase())) throw new EditError(`<${el.tag}> holds the whole page, so it can't be ${verb}`);
   if (el.inHead) throw new EditError(`<${el.tag}> is in the page head, not on the page itself`);
   const start = el.startTag.start;
   const end = el.endTag ? el.endTag.end : el.startTag.end;
+  if (edit.kind === 'wrap') return { ...files, [entry]: wrapSpan(source, start, end) };
+  if (edit.kind === 'moveUp' || edit.kind === 'moveDown') {
+    // The element sibling next to it: elements only, so text between them stays where it is.
+    const siblings = (el.node.parentNode?.childNodes ?? []).filter((n) => 'tagName' in n);
+    const at = siblings.indexOf(el.node);
+    const other = siblings[at + (edit.kind === 'moveUp' ? -1 : 1)];
+    const found = other && doc.elements.find((e) => e.node === other);
+    if (!found) throw new EditError(`<${el.tag}> is already the ${edit.kind === 'moveUp' ? 'first' : 'last'} element in its parent`);
+    const mine: [number, number] = [start, end];
+    const theirs: [number, number] = [found.startTag.start, found.endTag ? found.endTag.end : found.startTag.end];
+    return { ...files, [entry]: edit.kind === 'moveUp' ? swapSpans(source, theirs, mine) : swapSpans(source, mine, theirs) };
+  }
   const next = edit.kind === 'delete' ? removeSpan(source, start, end) : duplicateSpan(source, start, end);
   return { ...files, [entry]: next };
 }

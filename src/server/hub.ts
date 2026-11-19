@@ -125,7 +125,7 @@ export function createHub(session: FileSession, notes?: NotesStore, ignored?: Ig
     try {
       const out: EditOutcome =
         msg.type === 'edit' ? await session.edit(msg.edit, msg.hash) : msg.type === 'edits' ? await session.editMany(Array.isArray(msg.edits) ? msg.edits : [], msg.hash) : msg.type === 'undo' ? await session.undo() : await session.redo();
-      send(ws, { type: 'result', n: msg.n, ok: true, hash: await session.hash(), target: out.target, warning: out.warning });
+      send(ws, { type: 'result', n: msg.n, ok: true, hash: await session.hash(), target: out.target, warning: out.warning, select: out.select });
       // Always refresh, even for a no-op edit, so the canvas drops any temporary drag/typing preview.
       await reload(out.files);
     } catch (err) {

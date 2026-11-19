@@ -586,6 +586,34 @@ describe('Preview mode', () => {
   });
 });
 
+describe('keeping a moved element selected in dev mode', () => {
+  beforeEach(async () => {
+    o.destroy();
+    document.body.innerHTML = `
+      <p data-brushup-src="src/App.tsx:5:6">Intro</p>
+      <ul data-brushup-src="src/App.tsx:6:6"><li data-brushup-src="src/App.tsx:7:8">item</li></ul>`;
+    o = await loadOverlay({ mode: 'dev' });
+  });
+
+  it('selects the element where it ended up once the page has updated, not its neighbour', async () => {
+    const p = () => document.querySelector('p') as HTMLElement;
+    click(p());
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', altKey: true, bubbles: true, cancelable: true }));
+    await settle();
+    expect(o.last('edit').edit).toMatchObject({ kind: 'moveDown', id: 'src/App.tsx:5:6', tag: 'p' });
+    o.reply({ ok: true, hash: 'h1', target: 'structure', select: 'src/App.tsx:6:6' }); // the p now starts where the ul used to
+    await settle();
+    // The page has not updated yet: that position still holds the ul, and it must not be picked.
+    await new Promise((r) => setTimeout(r, 200));
+    expect(o.last('select').selection).toEqual({ id: 'src/App.tsx:5:6', tag: 'p' });
+    // Hot reload swaps the references, as the server rewrote the file.
+    p().setAttribute('data-brushup-src', 'src/App.tsx:6:6');
+    document.querySelector('ul')!.setAttribute('data-brushup-src', 'src/App.tsx:5:6');
+    await new Promise((r) => setTimeout(r, 400));
+    expect(o.last('select').selection).toEqual({ id: 'src/App.tsx:6:6', tag: 'p' });
+  });
+});
+
 describe('dev-server mode references (component usage sites)', () => {
   beforeEach(async () => {
     o.destroy();
@@ -969,6 +997,71 @@ describe('the Layers tab on a big page', () => {
     filter().dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true, composed: true }));
     filter().dispatchEvent(new KeyboardEvent('keydown', { key: 'n', bubbles: true, composed: true }));
     expect(o.all('edit')).toHaveLength(0);
+  });
+});
+
+describe('move and wrap', () => {
+  const q = (sel: string) => o.root.querySelector(sel) as HTMLButtonElement;
+  const press = (init: KeyboardEventInit) => window.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }));
+
+  it('Alt+Up and Alt+Down ask the server to swap with the neighbour, without nudging the element', async () => {
+    click(el('a2'));
+    press({ key: 'ArrowUp', altKey: true });
+    await settle();
+    expect(o.last('edit').edit).toEqual({ kind: 'moveUp', id: 'a2', tag: 'p' });
+    o.reply({ ok: true, hash: 'h1', target: 'structure' });
+    await settle();
+    expect(status()).toBe('Moved <p> up');
+    press({ key: 'ArrowDown', altKey: true });
+    await settle();
+    expect(o.last('edit').edit).toMatchObject({ kind: 'moveDown', id: 'a2' });
+    expect(o.all('edit').every((m) => m.edit.kind !== 'style')).toBe(true); // an Alt+arrow is not a nudge
+  });
+
+  it('Ctrl+Alt+G wraps the selection in a div', async () => {
+    click(el('a1'));
+    press({ key: 'g', ctrlKey: true, altKey: true });
+    await settle();
+    expect(o.last('edit').edit).toMatchObject({ kind: 'wrap', id: 'a1', tag: 'h1' });
+    o.reply({ ok: true, hash: 'h1', target: 'structure' });
+    await settle();
+    expect(status()).toBe('Wrapped <h1> in a <div>');
+  });
+
+  it('the Layers tab has Up, Down and Wrap buttons that are off until something is selected', async () => {
+    q('[data-tab=layers]').click();
+    const names = ['move-up', 'move-down', 'wrap'];
+    expect(names.map((n) => q(`[data-act=${n}]`).disabled)).toEqual([true, true, true]);
+    click(el('a2'));
+    expect(names.map((n) => q(`[data-act=${n}]`).disabled)).toEqual([false, false, false]);
+    q('[data-act=move-down]').click();
+    await settle();
+    expect(o.last('edit').edit).toMatchObject({ kind: 'moveDown', id: 'a2' });
+    o.reply({ ok: true, hash: 'h1', target: 'structure' }); // edits go one at a time, each after the last was answered
+    await settle();
+    q('[data-act=wrap]').click();
+    await settle();
+    expect(o.last('edit').edit).toMatchObject({ kind: 'wrap', id: 'a2' });
+  });
+
+  it('moves or wraps one element at a time, and says so', async () => {
+    click(el('a1'));
+    click(el('a2'), { shiftKey: true });
+    press({ key: 'ArrowUp', altKey: true });
+    await settle();
+    expect(status()).toBe('Select one element to move or wrap it');
+    expect(o.all('edit')).toHaveLength(0);
+    expect(o.all('edits')).toHaveLength(0);
+  });
+
+  it('shows the reason when the server refuses to move past an expression', async () => {
+    click(el('a2'));
+    press({ key: 'ArrowDown', altKey: true });
+    await settle();
+    o.reply({ ok: false, error: '<p> has an expression ({…}) next to it, which could be a list or a condition, so Brushup won\'t move past it.' });
+    await settle();
+    expect(status()).toContain('has an expression');
+    expect(info()).toContain('<p>');
   });
 });
 

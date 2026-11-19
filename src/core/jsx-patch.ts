@@ -1,7 +1,7 @@
 import type * as t from '@babel/types';
 import path from 'node:path';
 import { EditError, StaleElement, type Edit, type Ident, type StructureEdit, type Target, type TextEdit } from './edit-types';
-import { duplicateSpan, removeSpan } from './structure';
+import { duplicateSpan, removeSpan, swapSpans, wrapSpan } from './structure';
 import type { Files } from './patch';
 import { readRules, splice } from './css-patch';
 import { afterName, findElement, fingerprint, jsxName, parseSource, parseSrc, parseVer, walk } from './jsx';
@@ -257,7 +257,8 @@ const LIST_METHODS = new Set(['map', 'flatMap', 'filter', 'reduce', 'forEach']);
  * element. Only its direct parent matters: a `<p>` inside a `<div>` is plain markup even if that div is conditional
  * or drawn by a `.map` (changing it changes the shared template, which is what editing that JSX means).
  */
-function structureRefusal(ast: t.File, el: t.JSXElement): string | null {
+/** The nodes from the top of the file down to (not including) `el`. */
+function pathTo(ast: t.File, el: t.JSXElement): t.Node[] {
   const path: t.Node[] = [];
   const find = (node: unknown): boolean => {
     if (!node || typeof node !== 'object') return false;
@@ -274,6 +275,11 @@ function structureRefusal(ast: t.File, el: t.JSXElement): string | null {
     return false;
   };
   find(ast);
+  return path;
+}
+
+function structureRefusal(ast: t.File, el: t.JSXElement): string | null {
+  const path = pathTo(ast, el);
   const parent = path[path.length - 1];
   if (parent && (parent.type === 'JSXElement' || parent.type === 'JSXFragment')) return null;
   // Not a plain child: say what it is instead.
@@ -289,10 +295,42 @@ function structureRefusal(ast: t.File, el: t.JSXElement): string | null {
   return 'is the top-level element a component returns, so removing or copying it would leave the component with nothing, or two roots';
 }
 
-function patchStructure(code: string, file: string, edit: StructureEdit): { code: string; warning?: string } {
+/** The neighbouring element a move would swap with, or why there isn't one. */
+function neighbour(ast: t.File, el: t.JSXElement, dir: -1 | 1): t.JSXElement | string {
+  const parent = pathTo(ast, el).pop();
+  if (!parent || (parent.type !== 'JSXElement' && parent.type !== 'JSXFragment')) return 'is not a plain child of another element';
+  const kids = parent.children;
+  let i = kids.indexOf(el) + dir;
+  while (kids[i]?.type === 'JSXText' && !(kids[i] as t.JSXText).value.trim()) i += dir; // blank space between elements
+  const next = kids[i];
+  if (!next) return `is already the ${dir < 0 ? 'first' : 'last'} thing in its parent`;
+  if (next.type === 'JSXElement') return next;
+  return next.type === 'JSXText' ? 'has loose text next to it, and moving past text would change what the page says' : 'has an expression ({…}) next to it, which could be a list or a condition, so Brushup won\'t move past it';
+}
+
+/** The `file:line:col` reference (with the component name, when the edit was addressed to a usage) of an offset in the new source. */
+function refAt(code: string, offset: number, like: string): string {
+  const head = code.slice(0, offset).split('\n');
+  const was = parseSrc(like);
+  return `${was?.file ?? ''}:${head.length}:${head[head.length - 1].length}${was?.name ? `#${was.name}` : ''}`;
+}
+
+function patchStructure(code: string, file: string, edit: StructureEdit): { code: string; warning?: string; movedTo?: number } {
   const { el } = located(code, file, edit);
   const label = parseSrc(edit.id)?.name ?? edit.tag;
-  const why = structureRefusal(parseSource(code, file), el);
+  const ast = parseSource(code, file);
+  // Wrapping works anywhere an element can be written (a child, a list item, a condition, a prop) because the wrapper is one more element.
+  if (edit.kind === 'wrap') return { code: wrapSpan(code, el.start!, el.end!) };
+  if (edit.kind === 'moveUp' || edit.kind === 'moveDown') {
+    const other = neighbour(ast, el, edit.kind === 'moveUp' ? -1 : 1);
+    if (typeof other === 'string') throw new EditError(`<${label}> ${other}.`);
+    const pair: [[number, number], [number, number]] = edit.kind === 'moveUp' ? [[other.start!, other.end!], [el.start!, el.end!]] : [[el.start!, el.end!], [other.start!, other.end!]];
+    // Where the moved element starts afterwards, so the canvas can keep it selected (its old line now belongs to its neighbour).
+    const otherLen = other.end! - other.start!;
+    const movedTo = edit.kind === 'moveUp' ? other.start! : el.start! + otherLen + (other.start! - el.end!);
+    return { code: swapSpans(code, pair[0], pair[1]), movedTo };
+  }
+  const why = structureRefusal(ast, el);
   if (why) throw new EditError(`<${label}> ${why}. Ask Claude to change it, or edit the code by hand.`);
   if (edit.kind === 'delete') return { code: removeSpan(code, el.start!, el.end!) };
   const copy = duplicateSpan(code, el.start!, el.end!);
@@ -448,11 +486,11 @@ function classSource(code: string, file: string, edit: Edit): string {
 }
 
 /** Pure: apply an edit to the JSX file `file` (plus project css in `files` for rule edits). */
-export function applyJsxEdit(files: Files, file: string, edit: Edit, opts: JsxOptions): { files: Files; target: Target; warning?: string } {
+export function applyJsxEdit(files: Files, file: string, edit: Edit, opts: JsxOptions): { files: Files; target: Target; warning?: string; select?: string } {
   if (edit.kind === 'text') return { files: { ...files, [file]: patchText(files[file], file, edit) }, target: 'text' };
   if (edit.kind !== 'style') {
     const done = patchStructure(files[file], file, edit);
-    return { files: { ...files, [file]: done.code }, target: 'structure', ...(done.warning ? { warning: done.warning } : {}) };
+    return { files: { ...files, [file]: done.code }, target: 'structure', ...(done.warning ? { warning: done.warning } : {}), ...(done.movedTo === undefined ? {} : { select: refAt(done.code, done.movedTo, edit.id) }) };
   }
 
   let out = files;

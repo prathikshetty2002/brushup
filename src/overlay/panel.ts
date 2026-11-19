@@ -81,6 +81,8 @@ export interface PanelHooks {
   onParent(): void;
   onDelete(): void;
   onDuplicate(): void;
+  onMove(dir: 'up' | 'down'): void;
+  onWrap(): void;
   /** The Layers tab was opened: build the tree and call `setLayers`. */
   onLayersRefresh(): void;
   onLayerSelect(key: string, add: boolean): void;
@@ -252,6 +254,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .a11ygrouphead .rule { margin: 0; } .a11ygrouphead .gcount { margin-left: auto; color: var(--faint); font: 600 11px var(--mono); }
 .a11yitem .rule { display: inline-block; margin-bottom: 4px; padding: 1px 6px; border-radius: 2px; background: var(--raise); color: var(--muted); font: 600 10px var(--mono); text-transform: uppercase; letter-spacing: .04em; }
 .a11yitem b { display: block; color: var(--text); font-weight: 600; font-size: 12px; line-height: 1.4; } .a11yitem p { margin: 3px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.layacts { display: flex; gap: 4px; margin: 0 0 6px; } .layacts button { padding: 3px 9px; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); font-size: 11px; } .layacts button:hover:not(:disabled) { color: var(--text); } .layacts button:disabled { opacity: .4; }
 .layfilter { width: 100%; height: 26px; margin: 0 0 6px; padding: 0 8px; border: 1px solid var(--fieldline); border-radius: 3px; background: var(--field); color: var(--text); font: 11.5px system-ui; } .layfilter::placeholder { color: var(--faint); }
 .layers .lm { color: var(--accent); background: rgba(var(--accent-rgb), .12); border-radius: 2px; }
 .layers { list-style: none; margin: 0; padding: 0; max-height: 340px; overflow: auto; border: 1px solid var(--line); border-radius: 3px; background: var(--bg); }
@@ -423,11 +426,12 @@ export function createPanel(hooks: PanelHooks) {
           <div class="info">Click an element to select it.</div>
           <div class="fields" hidden></div>
           <label class="shared" hidden title="Off: only the selected element changes. On: the CSS rule is edited, so every element it matches changes."><input type="checkbox" /><span><b>Edit the shared CSS rule</b><small class="why">Off: only this element changes.</small></span></label>
-          <dl class="keys" aria-label="Shortcuts"><div><dt><kbd>drag</kbd></dt><dd>Move</dd></div><div><dt><kbd>↑ ↓ ← →</kbd></dt><dd>Nudge 1px, <kbd>⇧</kbd> for 10</dd></div><div><dt><kbd>double-click</kbd></dt><dd>Edit text</dd></div><div><dt><kbd>Ctrl D</kbd></dt><dd>Duplicate</dd></div><div><dt><kbd>Delete</kbd></dt><dd>Delete element</dd></div><div><dt><kbd>N</kbd></dt><dd>Add a note</dd></div><div><dt><kbd>Esc</kbd></dt><dd>Deselect</dd></div></dl>
+          <dl class="keys" aria-label="Shortcuts"><div><dt><kbd>drag</kbd></dt><dd>Move</dd></div><div><dt><kbd>↑ ↓ ← →</kbd></dt><dd>Nudge 1px, <kbd>⇧</kbd> for 10</dd></div><div><dt><kbd>double-click</kbd></dt><dd>Edit text</dd></div><div><dt><kbd>Ctrl D</kbd></dt><dd>Duplicate</dd></div><div><dt><kbd>Alt ↑ ↓</kbd></dt><dd>Move up or down</dd></div><div><dt><kbd>Delete</kbd></dt><dd>Delete element</dd></div><div><dt><kbd>N</kbd></dt><dd>Add a note</dd></div><div><dt><kbd>Esc</kbd></dt><dd>Deselect</dd></div></dl>
         </div>
         <div data-pane="layers" role="tabpanel" id="brushup-pane-layers" aria-labelledby="brushup-tab-layers" hidden>
           <div class="chbar"><span class="laysum">Open this tab to see the page's elements</span><span class="sp"></span><button class="ghost" data-act="layers-expand" title="Unfold everything">Expand</button><button class="ghost" data-act="layers-collapse" title="Fold everything">Collapse</button></div>
           <input type="search" class="layfilter" placeholder="Find an element: a tag, class, component or text" aria-label="Filter the layers" autocomplete="off" spellcheck="false" />
+          <div class="layacts" role="group" aria-label="Rearrange the selected element"><button data-act="move-up" title="Move up: swap with the element above it (Alt+Up)" disabled>↑ Up</button><button data-act="move-down" title="Move down: swap with the element below it (Alt+Down)" disabled>↓ Down</button><button data-act="wrap" title="Wrap in a div (Ctrl/Cmd+Alt+G)" disabled>Wrap in div</button></div>
           <ul class="layers" aria-label="Elements on the page"></ul>
         </div>
         <div data-pane="changes" role="tabpanel" id="brushup-pane-changes" aria-labelledby="brushup-tab-changes" hidden>
@@ -653,6 +657,9 @@ export function createPanel(hooks: PanelHooks) {
   root.querySelector('[data-act=parent]')!.addEventListener('click', () => hooks.onParent());
   root.querySelector('[data-act=duplicate]')!.addEventListener('click', () => hooks.onDuplicate());
   root.querySelector('[data-act=delete]')!.addEventListener('click', () => hooks.onDelete());
+  root.querySelector('[data-act=move-up]')!.addEventListener('click', () => hooks.onMove('up'));
+  root.querySelector('[data-act=move-down]')!.addEventListener('click', () => hooks.onMove('down'));
+  root.querySelector('[data-act=wrap]')!.addEventListener('click', () => hooks.onWrap());
   // Which side the panel sits on; remembered per browser, never required.
   try {
     if (localStorage.getItem('brushup:dock') === 'left') panel.classList.add('left');
@@ -1394,7 +1401,7 @@ export function createPanel(hooks: PanelHooks) {
       target = noteTarget;
       suggestedKind = suggest;
       addBtn.disabled = !el;
-      root.querySelectorAll<HTMLButtonElement>('[data-act=duplicate], [data-act=delete]').forEach((b) => (b.disabled = !el));
+      root.querySelectorAll<HTMLButtonElement>('[data-act=duplicate], [data-act=delete], [data-act=move-up], [data-act=move-down], [data-act=wrap]').forEach((b) => (b.disabled = !el));
       addBtn.textContent = el ? `+ Add a note on ${noteTarget || 'this element'}` : 'Select an element to add a note';
       if (!el) {
         info.textContent = 'Click an element to select it.';

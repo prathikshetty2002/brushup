@@ -162,7 +162,7 @@ export class DevProject extends FileSession {
     return run && run.last === current && run.hashes.has(ver.file) ? 'own' : 'external';
   }
 
-  protected transform(files: Files, edit: Edit, before: Files): { files: Files; target?: Target; warning?: string } {
+  protected transform(files: Files, edit: Edit, before: Files): { files: Files; target?: Target; warning?: string; select?: string } {
     try {
       return this.structured(files, edit, before);
     } catch (err) {
@@ -217,7 +217,7 @@ export class DevProject extends FileSession {
     await visit(this.root);
   }
 
-  private structured(files: Files, edit: Edit, before: Files): { files: Files; target?: Target; warning?: string } {
+  private structured(files: Files, edit: Edit, before: Files): { files: Files; target?: Target; warning?: string; select?: string } {
     const opts = { tailwind: this.tailwind, scale: this.scale };
     const file = this.resolve(edit.id).file;
     // Always set from the server's own comparison: a client can't claim the file is unchanged.

@@ -84,15 +84,15 @@ export async function getSelection(ctx: ToolContext): Promise<ToolResult> {
 }
 
 interface LoggedEdit {
-  kind: 'style' | 'text' | 'delete' | 'duplicate';
+  kind: 'style' | 'text' | 'delete' | 'duplicate' | 'moveUp' | 'moveDown' | 'wrap';
   id: string;
   props?: Record<string, string>;
   text?: string;
 }
 
 const summarize = (e: LoggedEdit) =>
-  e.kind === 'delete' || e.kind === 'duplicate'
-    ? { target: shortRef(e.id), change: e.kind === 'delete' ? 'element deleted' : 'element duplicated (a copy was added right after it)' }
+  e.kind === 'delete' || e.kind === 'duplicate' || e.kind === 'moveUp' || e.kind === 'moveDown' || e.kind === 'wrap'
+    ? { target: shortRef(e.id), change: { delete: 'element deleted', duplicate: 'element duplicated (a copy was added right after it)', moveUp: 'element moved up, swapped with the one before it', moveDown: 'element moved down, swapped with the one after it', wrap: 'element wrapped in a <div>' }[e.kind] }
     : e.kind === 'text' ? { target: shortRef(e.id), change: `text → "${(e.text ?? '').slice(0, 80)}"` } : { target: shortRef(e.id), change: Object.entries(e.props ?? {}).map(([k, v]) => `${k}: ${v}`).join('; ') };
 
 /** The user's recent manual edits on the canvas. Agents should keep these, not revert them. */
