@@ -133,6 +133,8 @@ Claude reads the notes (via `.brushup/notes.md` or the `brushup_get_notes` tool)
 
 If you disagree with a change, press Undo in your editor or `git checkout` the file, edit the note, and ask again.
 
+**Sharing notes with your team (optional).** By default notes stay on your machine (`.brushup/` is git-ignored). To share them, run `npx brushup init --share-notes` once, then commit `.brushup/notes/` and `.gitignore`. Notes then live one per file in `.brushup/notes/`, so two people adding notes add two files and git never reports a conflict; a teammate's notes arrive with `git pull`, appear on your canvas, and are what your Claude reads. Your existing notes are moved across. Everything else in `.brushup/` (your edit log, selection, checks you ignored) stays local. Two things to know: a note is an instruction for Claude, so review notes in pull requests the way you would review `CLAUDE.md`; and if two people edit the very same note, git will conflict on that one file, which you resolve like any other.
+
 ### Loop C: let Claude look instead of screenshotting
 
 Select an element on the canvas, then ask:

@@ -17,6 +17,7 @@ if (args[0] === 'init') {
   const mcp = rest.includes('--mcp');
   const agents = rest.includes('--agents');
   const wire = !rest.includes('--no-wire');
+  const shareNotes = rest.includes('--share-notes');
   const root = path.resolve(rest.find((a) => !a.startsWith('--')) ?? '.');
   // One command is the whole setup: add the package to the project first if it isn't there, since the wiring imports it.
   if (!rest.includes('--no-install')) {
@@ -28,7 +29,8 @@ if (args[0] === 'init') {
     }
     if (installed.status === 'no-package-json') console.log('No package.json here, so brushup was not installed. For a plain HTML page you do not need to: run  npx brushup <page.html>.');
   }
-  const r = await initProject(root, { mcp, wire, agents });
+  const r = await initProject(root, { mcp, wire, agents, shareNotes });
+  if (r.sharedNotes) console.log(`Shared notes: one file per note in .brushup/notes/ (${r.sharedNotes.moved} moved from notes.json), and .gitignore keeps that folder and ignores the rest of .brushup/. Commit .brushup/notes/ and .gitignore, and your teammates' notes arrive with git pull.`);
   console.log(`/brushup-notes command: ${r.command === 'kept' ? 'a file of that name already exists, left alone' : r.command}`);
   console.log(`CLAUDE.md: ${r.claudeMd}   .gitignore: ${r.gitignore === 'absent' ? 'no .gitignore found' : r.gitignore}${r.mcp ? `   .mcp.json: ${r.mcp}` : ''}`);
   if (r.wire?.next) {
@@ -70,7 +72,7 @@ const port = portFlag >= 0 ? Number(args.splice(portFlag, 2)[1]) : 4321;
 const file = args[0];
 
 if (!file || !Number.isInteger(port)) {
-  console.error('Usage: brushup <page.html> [--port 4321]\n       brushup init [project-folder] [--mcp] [--agents] [--no-wire] [--no-install]   (set up a project, installing brushup if needed: CLAUDE.md, Next/Vite wiring; --mcp registers the MCP server; --agents also sets up AGENTS.md and Cursor)');
+  console.error('Usage: brushup <page.html> [--port 4321]\n       brushup init [project-folder] [--mcp] [--agents] [--no-wire] [--no-install] [--share-notes]   (set up a project, installing brushup if needed: CLAUDE.md, Next/Vite wiring; --mcp registers the MCP server; --agents also sets up AGENTS.md and Cursor)');
   process.exit(1);
 }
 

@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import chokidar from 'chokidar';
 
@@ -79,15 +79,18 @@ export function sanitizeNote(raw: unknown, existing?: Note): Note | null {
 
 const code = (s: string) => '`' + s.replace(/`/g, "'") + '`';
 
+/** Where a note is marked done: the one notes file, or its own file when the notes are shared through git. */
+const WHERE_DONE = { private: '`.brushup/notes.json`', shared: 'its file in `.brushup/notes/` (named by its id)' } as const;
+
 /** The human- and agent-readable copy of the open notes. */
-export function renderNotesMarkdown(notes: Note[]): string {
+export function renderNotesMarkdown(notes: Note[], layout: 'private' | 'shared' = 'private'): string {
   // Numbers are positions in the full list, so "note 3" is the same pin on the canvas and in this file.
   const open = notes.map((n, i) => ({ n, num: i + 1 })).filter((x) => x.n.status === 'open');
   const lines = [
     '# Brushup design notes',
     '',
     'Notes the user pinned on the design canvas. Each says where the element lives in source when known.',
-    'Make the change each note asks for, keep any manual tweaks listed in `.brushup/edits.jsonl`, and when a note is handled set its `"status"` to `"done"` in `.brushup/notes.json`.',
+    'Make the change each note asks for, keep any manual tweaks listed in `.brushup/edits.jsonl`, and when a note is handled set its `"status"` to `"done"` in ' + WHERE_DONE[layout] + '.',
     '',
   ];
   if (!open.length) lines.push('_No open notes._', '');
@@ -111,36 +114,75 @@ export function renderNotesMarkdown(notes: Note[]): string {
   return lines.join('\n');
 }
 
+/** Notes in date order, ties broken by id, so every machine that has the same notes numbers them the same way. */
+const inOrder = (notes: Note[]) => [...notes].sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id < b.id ? -1 : 1));
+
 /**
  * Notes live in `.brushup/notes.json` (source of truth) with a readable
  * `.brushup/notes.md` beside it. The file is re-read on every operation and
  * watched, so edits made by the user or an agent (for example marking a note
  * done) show up on the canvas.
+ *
+ * Shared notes (`brushup init --share-notes`) use the same store with a different layout: one file per note in
+ * `.brushup/notes/`, committed to git. Two people adding notes then add two files and never conflict, which a single JSON array
+ * could not promise. The layout is detected from the folder on every operation, so no restart is needed. `notes.md` stays a local,
+ * git-ignored copy in both.
  */
 export class NotesStore {
   private readonly dir: string;
   private readonly file: string;
+  /** Shared layout: one file per note. */
+  private readonly sharedDir: string;
+  /** The notes as last written or announced in the shared layout, so a change we made ourselves isn't announced back. */
+  private snapshot = '';
   private watcher: ReturnType<typeof chokidar.watch> | null = null;
   private own = new Set<string>();
 
   constructor(readonly root: string) {
     this.dir = path.join(root, '.brushup');
     this.file = path.join(this.dir, 'notes.json');
+    this.sharedDir = path.join(this.dir, 'notes');
+  }
+
+  /** Whether the notes are shared through git: true once `.brushup/notes/` exists. */
+  async shared(): Promise<boolean> {
+    try {
+      await readdir(this.sharedDir);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Read untrusted note JSON into well-formed notes, keeping the stored dates (sanitizeNote stamps "now"; reading must not, or `since` could never tell what changed). */
+  private clean(parsed: unknown[]): Note[] {
+    const stamp = (v: unknown, fallback: string) => (typeof v === 'string' && !Number.isNaN(Date.parse(v)) ? v : fallback);
+    return parsed
+      .map((n) => {
+        const clean = sanitizeNote(n, n as Note);
+        const dates = n as { createdAt?: unknown; updatedAt?: unknown };
+        return clean && { ...clean, createdAt: stamp(dates?.createdAt, clean.createdAt), updatedAt: stamp(dates?.updatedAt, clean.updatedAt) };
+      })
+      .filter((n): n is Note => !!n && !!n.id);
   }
 
   async list(): Promise<Note[]> {
+    if (await this.shared()) {
+      const files = (await readdir(this.sharedDir).catch(() => [] as string[])).filter((f) => f.endsWith('.json') && !f.startsWith('.'));
+      const parsed = await Promise.all(
+        files.map(async (f) => {
+          try {
+            return JSON.parse(await readFile(path.join(this.sharedDir, f), 'utf8')) as unknown;
+          } catch {
+            return null; // unreadable or a merge conflict in the file: skip it, keep the rest
+          }
+        }),
+      );
+      return inOrder(this.clean(parsed.filter((n) => n && typeof n === 'object')));
+    }
     try {
       const parsed = JSON.parse(await readFile(this.file, 'utf8'));
-      // sanitizeNote stamps "now"; reading must not, or `since` could never tell what changed.
-      const stamp = (v: unknown, fallback: string) => (typeof v === 'string' && !Number.isNaN(Date.parse(v)) ? v : fallback);
-      return Array.isArray(parsed)
-        ? parsed
-            .map((n) => {
-              const clean = sanitizeNote(n, n);
-              return clean && { ...clean, createdAt: stamp(n?.createdAt, clean.createdAt), updatedAt: stamp(n?.updatedAt, clean.updatedAt) };
-            })
-            .filter((n): n is Note => !!n && !!n.id)
-        : [];
+      return Array.isArray(parsed) ? this.clean(parsed) : [];
     } catch {
       return [];
     }
@@ -148,6 +190,7 @@ export class NotesStore {
 
   private async persist(notes: Note[]) {
     await mkdir(this.dir, { recursive: true });
+    if (await this.shared()) return this.persistShared(notes);
     const json = JSON.stringify(notes, null, 2) + '\n';
     this.own.add(json);
     const write = async (name: string, content: string) => {
@@ -157,6 +200,41 @@ export class NotesStore {
     };
     await write('notes.json', json);
     await write('notes.md', renderNotesMarkdown(notes));
+  }
+
+  /** One file per note: only the notes that changed are rewritten, and a removed note's file is deleted. */
+  private async persistShared(notes: Note[]) {
+    const ordered = inOrder(notes);
+    this.snapshot = JSON.stringify(ordered);
+    const keep = new Set<string>();
+    for (const n of ordered) {
+      const name = `${n.id}.json`;
+      keep.add(name);
+      const content = JSON.stringify(n, null, 2) + '\n';
+      const file = path.join(this.sharedDir, name);
+      if ((await readFile(file, 'utf8').catch(() => null)) === content) continue;
+      const tmp = path.join(this.sharedDir, `.${n.id}.${process.pid}.tmp`);
+      await writeFile(tmp, content);
+      await rename(tmp, file);
+    }
+    for (const f of await readdir(this.sharedDir).catch(() => [] as string[])) if (f.endsWith('.json') && !f.startsWith('.') && !keep.has(f)) await rm(path.join(this.sharedDir, f), { force: true });
+    await writeFile(path.join(this.dir, 'notes.md'), renderNotesMarkdown(ordered, 'shared'));
+  }
+
+  /** Refresh the local, git-ignored `notes.md` from the shared notes, so a note that arrived with `git pull` is there for an agent reading the file. */
+  private async syncMarkdown(list: Note[]) {
+    await mkdir(this.dir, { recursive: true });
+    await writeFile(path.join(this.dir, 'notes.md'), renderNotesMarkdown(list, 'shared')).catch(() => {});
+  }
+
+  /** Switch to the shared layout: one file per note in `.brushup/notes/`, moving any notes from `notes.json` across. Safe to repeat. */
+  async share(): Promise<{ moved: number }> {
+    if (await this.shared()) return { moved: 0 };
+    const existing = await this.list();
+    await mkdir(this.sharedDir, { recursive: true });
+    await this.persistShared(existing);
+    if (existing.length) await rm(this.file, { force: true }); // the notes live in their own files now, and two copies would drift
+    return { moved: existing.length };
   }
 
   async save(raw: unknown): Promise<Note[]> {
@@ -180,8 +258,17 @@ export class NotesStore {
   watch(onChange: (notes: Note[]) => void) {
     if (this.watcher) return;
     mkdirSync(this.dir, { recursive: true }); // a watch on a folder that doesn't exist yet never fires, even once it does
-    this.watcher = chokidar.watch(this.file, { ignoreInitial: true });
+    // Both layouts are watched: the notes file, and the shared folder (the dot-prefixed .tmp files are ones we write and rename).
+    this.watcher = chokidar.watch([this.file, this.sharedDir], { ignoreInitial: true, ignored: /[\\/]\.[^\\/]*\.tmp$/ });
     const changed = async () => {
+      if (await this.shared()) {
+        const list = await this.list();
+        const now = JSON.stringify(list);
+        if (now === this.snapshot) return; // our own write, or nothing that matters changed
+        this.snapshot = now;
+        await this.syncMarkdown(list);
+        return onChange(list);
+      }
       try {
         const content = await readFile(this.file, 'utf8');
         if (this.own.delete(content)) return; // our own write
@@ -190,6 +277,13 @@ export class NotesStore {
       }
       onChange(await this.list());
     };
+    // Notes pulled in while the server was off are in the folder but not in notes.md yet.
+    void this.shared().then(async (shared) => {
+      if (!shared) return;
+      const list = await this.list();
+      this.snapshot = JSON.stringify(list);
+      await this.syncMarkdown(list);
+    });
     this.watcher.on('add', changed).on('change', changed).on('unlink', changed);
   }
 

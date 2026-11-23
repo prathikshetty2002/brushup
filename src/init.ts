@@ -1,5 +1,6 @@
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { NotesStore } from './server/notes';
 import { wireProject, type WireResult } from './wire';
 
 const START = '<!-- brushup:start -->';
@@ -12,10 +13,10 @@ export const CLAUDE_BLOCK = `${START}
 This project uses Brushup, a visual canvas where the user makes small UI changes by hand (text, size, spacing, position) and pins notes on elements, sections and components.
 
 Before changing UI:
-- Read \`.brushup/notes.md\`: open notes the user pinned, each with the source file:line of the element when known. Do what each note asks.
+- Read \`.brushup/notes.md\` (or, when notes are shared through git, the files in \`.brushup/notes/\`): open notes the user pinned, each with the source file:line of the element when known. Do what each note asks.
 - Read \`.brushup/edits.jsonl\`: recent manual edits made on the canvas. Keep them; do not revert or redo them.
 - \`.brushup/selection.json\` is the element currently selected on the canvas, usually what "this" refers to.
-- When you finish a note, set its \`"status"\` to \`"done"\` in \`.brushup/notes.json\`.
+- When you finish a note, set its \`"status"\` to \`"done"\` (\`brushup_update_note\` does it; by hand, that is in \`.brushup/notes.json\`, or in the note's own file in \`.brushup/notes/\` when notes are shared).
 - Do not spend effort on trivial visual tweaks the user can make on the canvas themselves.
 - If the \`brushup\` MCP tools are available, prefer them (pass the \`cursor\` from the last answer as \`since\` to see only what is new; mark a note done with a one-line \`reply\` saying what you changed): \`brushup_get_notes\`, \`brushup_update_note\`, \`brushup_get_selection\`, \`brushup_recent_edits\`, and \`brushup_inspect\` (how an element renders right now, instead of asking for a screenshot).
 ${END}
@@ -30,10 +31,10 @@ description: Handle the notes pinned in Brushup (and optionally a focus, e.g. /b
 ${COMMAND_MARK}
 Handle my open Brushup notes. $ARGUMENTS
 
-1. Get the open notes: use \`brushup_get_notes\` if the brushup MCP tools are available, otherwise read \`.brushup/notes.md\`. If I gave a focus above, only take the notes that match it.
+1. Get the open notes: use \`brushup_get_notes\` if the brushup MCP tools are available, otherwise read \`.brushup/notes.md\` (or the files in \`.brushup/notes/\` when notes are shared through git). If I gave a focus above, only take the notes that match it.
 2. Read \`.brushup/edits.jsonl\` (or \`brushup_recent_edits\`): the manual tweaks I made on the canvas. Keep them; do not revert or redo them.
 3. For each note, make the change it asks for in the source file it points to. Use \`brushup_inspect\` to see how an element renders now instead of asking me for a screenshot.
-4. Mark each note done with a one-line reply saying what you changed (\`brushup_update_note\`, or set its \`"status"\` to \`"done"\` in \`.brushup/notes.json\`).
+4. Mark each note done with a one-line reply saying what you changed (\`brushup_update_note\`, or set its \`"status"\` to \`"done"\` in \`.brushup/notes.json\`, or in the note's file in \`.brushup/notes/\` when notes are shared).
 5. If a note is unclear or you can't do it, leave it open and say why in one line. Don't guess.
 
 Finish with a short list: which notes you handled, which you left, and the files you touched.
@@ -53,6 +54,8 @@ export interface InitResult {
   gitignore: 'updated' | 'unchanged' | 'absent';
   /** The `/brushup-notes` command in `.claude/commands`. `kept` means a file of that name already exists that is not ours, so it was left alone. */
   command: 'created' | 'updated' | 'unchanged' | 'kept';
+  /** Only set when `shareNotes` was requested: notes now live one per file in `.brushup/notes/`, to be committed. */
+  sharedNotes?: { moved: number };
   /** Only set when `mcp` was requested. */
   mcp?: 'created' | 'updated' | 'unchanged' | 'invalid-json';
   /** Only set when `agents` was requested: the rules file and MCP entry for other agents. */
@@ -115,15 +118,31 @@ async function initCommand(root: string): Promise<InitResult['command']> {
   return 'updated';
 }
 
+/** The .gitignore lines for shared notes: ignore everything in `.brushup/` except the notes folder. (`.brushup/` alone can't be partly undone.) */
+const SHARED_RULES = ['.brushup/*', '!.brushup/notes/', '.brushup/notes/.*'];
+
+/** Make .gitignore keep `.brushup/notes/` and ignore the rest of `.brushup/`; creates the file when there is none, since the rest must stay out of git. */
+async function ignoreForSharedNotes(file: string): Promise<InitResult['gitignore']> {
+  const current = (await exists(file)) ? await readFile(file, 'utf8') : '';
+  const lines = current.split('\n');
+  const kept = lines.filter((l) => !/^\/?\.brushup\/?$/.test(l.trim())); // a bare `.brushup/` would ignore the notes folder too
+  const missing = SHARED_RULES.filter((r) => !kept.some((l) => l.trim() === r));
+  if (kept.length === lines.length && !missing.length) return 'unchanged';
+  const base = kept.join('\n').replace(/\n*$/, '');
+  await writeFile(file, (base ? base + '\n' : '') + missing.join('\n') + (missing.length ? '\n' : ''));
+  return 'updated';
+}
+
 /** Idempotent project setup: CLAUDE.md block, optional AGENTS.md and Cursor MCP entry, `.brushup/` in .gitignore, optional MCP entry, and the Next/Vite wiring. */
-export async function initProject(root: string, options: { mcp?: boolean; wire?: boolean; agents?: boolean } = {}): Promise<InitResult> {
+export async function initProject(root: string, options: { mcp?: boolean; wire?: boolean; agents?: boolean; shareNotes?: boolean } = {}): Promise<InitResult> {
   await mkdir(path.join(root, '.brushup'), { recursive: true });
 
   const claudeMd = await upsertBlock(path.join(root, 'CLAUDE.md'));
 
   const gitignore = path.join(root, '.gitignore');
   let ignore: InitResult['gitignore'] = 'absent';
-  if (await exists(gitignore)) {
+  if (options.shareNotes) ignore = await ignoreForSharedNotes(gitignore);
+  else if (await exists(gitignore)) {
     const current = await readFile(gitignore, 'utf8');
     if (/^\.brushup\/?$/m.test(current)) ignore = 'unchanged';
     else {
@@ -132,5 +151,6 @@ export async function initProject(root: string, options: { mcp?: boolean; wire?:
     }
   }
   const agents = options.agents ? { agentsMd: await upsertBlock(path.join(root, 'AGENTS.md')), cursor: await initMcp(path.join(root, '.cursor', 'mcp.json')) } : undefined;
-  return { claudeMd, command: await initCommand(root), gitignore: ignore, ...(options.mcp ? { mcp: await initMcp(path.join(root, '.mcp.json')) } : {}), ...(agents ? { agents } : {}), ...(options.wire === false ? {} : { wire: await wireProject(root) }) };
+  const sharedNotes = options.shareNotes ? await new NotesStore(root).share() : undefined;
+  return { claudeMd, command: await initCommand(root), gitignore: ignore, ...(sharedNotes ? { sharedNotes } : {}), ...(options.mcp ? { mcp: await initMcp(path.join(root, '.mcp.json')) } : {}), ...(agents ? { agents } : {}), ...(options.wire === false ? {} : { wire: await wireProject(root) }) };
 }
