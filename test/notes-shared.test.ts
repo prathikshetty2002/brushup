@@ -11,6 +11,14 @@ let store: NotesStore;
 const anchor = { tag: 'h1', classes: [], text: 'Hello', src: 'src/App.tsx:3:4', index: 0, page: '/' };
 const notesDir = () => path.join(dir, '.brushup', 'notes');
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** Wait for a file-watcher effect: poll for it instead of hoping a fixed pause is long enough on a busy machine. */
+const until = async (fn: () => boolean | Promise<boolean>, ms = 8000) => {
+  for (let waited = 0; waited < ms; waited += 100) {
+    if (await fn()) return true;
+    await sleep(100);
+  }
+  return false;
+};
 const git = (...args: string[]) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' });
 
 beforeEach(async () => {
@@ -69,8 +77,7 @@ describe('shared notes: one file per note', () => {
     await sleep(700);
     expect(seen).toEqual([]);
     await writeFile(path.join(notesDir(), 'bbbb2222.json'), JSON.stringify({ id: 'bbbb2222', text: 'from git', anchor, status: 'open' }));
-    await sleep(900);
-    expect(seen.at(-1)).toContain('from git');
+    expect(await until(() => seen.at(-1)?.includes('from git') ?? false)).toBe(true);
   });
 
   it('refreshes notes.md when a teammate\'s note arrives, and at start-up for notes pulled while the server was off', async () => {
@@ -79,12 +86,11 @@ describe('shared notes: one file per note', () => {
     const theirs = (id: string, text: string) => writeFile(path.join(notesDir(), `${id}.json`), JSON.stringify({ id, text, anchor, status: 'open', createdAt: '2020-01-01T00:00:00.000Z', updatedAt: '2020-01-01T00:00:00.000Z' }));
     await theirs('dddd4444', 'pulled while the server was off');
     store.watch(() => {});
-    await sleep(500);
-    const md = () => readFile(path.join(dir, '.brushup', 'notes.md'), 'utf8');
-    expect(await md()).toContain('pulled while the server was off');
+    const md = () => readFile(path.join(dir, '.brushup', 'notes.md'), 'utf8').catch(() => '');
+    expect(await until(async () => (await md()).includes('pulled while the server was off'))).toBe(true);
+    await sleep(300); // the watcher is up by now
     await theirs('eeee5555', 'pulled while it was running');
-    await sleep(1000);
-    expect(await md()).toContain('pulled while it was running');
+    expect(await until(async () => (await md()).includes('pulled while it was running'))).toBe(true);
   });
 
   it('skips a note file that is not valid JSON instead of losing the others', async () => {
