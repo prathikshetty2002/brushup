@@ -63,7 +63,8 @@ jobs:
       - run: npm ci
       - run: npm run build
       - name: Install ${{ matrix.browser }}
-        run: npx playwright-core install --with-deps ${{ matrix.browser }}
+        # The browser download is the other thing that stalls on a shared runner: give it a limit per attempt and retry.
+        run: node scripts/with-retry.mjs 3 6 -- node node_modules/playwright-core/cli.js install --with-deps ${{ matrix.browser }}
       - name: Drive the canvas in ${{ matrix.browser }}
         # Up to 3 attempts, each with its own limit: a slow or hung browser on a shared runner is the usual failure. A pass on a later
         # attempt is reported as a warning on the run, not hidden.
@@ -97,7 +98,8 @@ jobs:
       - run: npm run build
       - run: npm pack
       - name: Install ${{ matrix.browser }}
-        run: npx playwright-core install --with-deps ${{ matrix.browser }}
+        # The browser download is the other thing that stalls on a shared runner: give it a limit per attempt and retry.
+        run: node scripts/with-retry.mjs 3 6 -- node node_modules/playwright-core/cli.js install --with-deps ${{ matrix.browser }}
       - name: ${{ matrix.framework }} dev server in ${{ matrix.browser }}
         run: node scripts/with-retry.mjs 3 8 -- node scripts/e2e-dev.mjs ${{ matrix.framework }} ${{ matrix.browser }}
 
