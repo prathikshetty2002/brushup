@@ -43,6 +43,11 @@ export abstract class FileSession {
   /** Hashes of content we just wrote, so the watcher can ignore our own echo. */
   private ownWrites = new Map<string, Set<string>>();
 
+  /** What the canvas should know about how styles are written here, so it can offer the pickers that apply. */
+  styleInfo(): { tailwind: boolean; scale?: 'v3' | 'v4' } {
+    return { tailwind: false };
+  }
+
   protected abstract loadFor(edit: Edit): Promise<Files>;
   /** `before` is every file as it was read from disk for this change, untouched by earlier edits in the same batch. */
   protected abstract transform(files: Files, edit: Edit, before: Files): { files: Files; target?: Target; warning?: string; select?: string };

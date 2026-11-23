@@ -410,12 +410,15 @@ function patchInline(code: string, file: string, edit: Edit, prop: string, value
 
 /* ---------- Tailwind className ---------- */
 
+/** Token names sent from the page, as plain lowercase words: anything else is dropped before it can reach a class name. */
+const names = (v: unknown): string[] | undefined => (Array.isArray(v) ? v.filter((n): n is string => typeof n === 'string' && /^[a-z0-9-]{1,40}$/.test(n)).slice(0, 200) : undefined);
+
 /** Returns patched code, or null if className isn't a plain string we can safely rewrite. */
 function patchClass(code: string, file: string, edit: Edit, prop: string, value: string, scale?: Scale, variant = '', warnings?: string[]): string | null {
   const { el } = located(code, file, edit);
   const sent = edit.kind === 'style' ? edit.hints : undefined;
   // Only snap when the page says 1rem is 16px, otherwise `ml-10` wouldn't be the 40px the user saw.
-  const hints: ClassHints = { lineHeight: sent?.lineHeight, scale: sent?.rootPx === 16 ? scale : undefined, colorTokens: Array.isArray(sent?.colorTokens) ? sent!.colorTokens.filter((n) => typeof n === 'string').slice(0, 200) : undefined };
+  const hints: ClassHints = { lineHeight: sent?.lineHeight, scale: sent?.rootPx === 16 ? scale : undefined, colorTokens: names(sent?.colorTokens), textTokens: names(sent?.textTokens), spacingTokens: names(sent?.spacingTokens) };
   const attr = attrNamed(el, 'className');
   if (!attr) {
     const classes = tailwindClasses('', prop, value, hints, variant);

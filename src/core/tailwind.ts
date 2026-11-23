@@ -35,6 +35,8 @@ const PREFIX: Record<string, string> = {
 const FONT_SIZE = /^!?text-(xs|sm|base|lg|xl|\d+xl|\[(?:length:|size:)?-?[\d.]+(?:px|rem|em|%)?\])(?:\/\S+)?$/;
 // Named sizes bundle a line-height; the arbitrary `text-[40px]` form does not.
 const NAMED_SIZE = /^!?text-(xs|sm|base|lg|xl|\d+xl)(?:\/\S+)?$/;
+const THEME_SPACING = /^var\(--spacing-([a-z0-9-]+)\)$/;
+const THEME_TEXT = /^var\(--text-([a-z0-9-]+)\)$/;
 const THEME_COLOR = /^var\(--color-([a-z0-9-]+)\)$/;
 const COLOR = /^!?text-(white|black|inherit|current|transparent|\[(?:color:)?(?:#|rgb|hsl|oklch|oklab|var\()[^\]]*\]|[a-z]+-\d{2,3}(?:\/\d+)?)$/;
 const WEIGHT_NAMES: Record<string, string> = {
@@ -50,13 +52,25 @@ const WEIGHT_NAMES: Record<string, string> = {
 };
 const WEIGHT = /^!?font-(thin|extralight|light|normal|medium|semibold|bold|extrabold|black|\[\d+\])$/;
 
-function mapping(prop: string, value: string, scale?: Scale, tokens: string[] = []): Mapping {
+function mapping(prop: string, value: string, hints: ClassHints = {}): Mapping {
+  const { scale } = hints;
+  const tokens = hints.colorTokens ?? [];
   const prefix = PREFIX[prop];
   if (prefix) {
     const lookahead = prefix === 'gap' ? '(?!x-|y-)' : '';
-    return { remove: new RegExp(`^!?-?${prefix}-${lookahead}`), make: (scale && snapped(prefix, value, scale)) || `${prefix}-${arb(value)}` };
+    // A named spacing token the page defines (`var(--spacing-gutter)`) is the utility Tailwind makes from it (`px-gutter`).
+    const named = THEME_SPACING.exec(value.trim());
+    const spacing = (hints.spacingTokens ?? []).filter((n) => /^[a-z0-9-]+$/.test(n));
+    const make = named && spacing.includes(named[1]) ? `${prefix}-${named[1]}` : (scale && snapped(prefix, value, scale)) || `${prefix}-${arb(value)}`;
+    return { remove: new RegExp(`^!?-?${prefix}-${lookahead}`), make };
   }
-  if (prop === 'font-size') return { remove: FONT_SIZE, make: `text-${arb(value)}` };
+  if (prop === 'font-size') {
+    // A named size (`var(--text-xl)`) is the utility of that name; sizes the page's theme adds are replaced too when another is chosen.
+    const named = THEME_TEXT.exec(value.trim());
+    const sizes = (hints.textTokens ?? []).filter((n) => /^[a-z0-9-]+$/.test(n));
+    const remove = sizes.length ? new RegExp(`${FONT_SIZE.source}|^!?text-(?:${sizes.join('|')})(?:/\\S+)?$`) : FONT_SIZE;
+    return { remove, make: named && sizes.includes(named[1]) ? `text-${named[1]}` : `text-${arb(value)}` };
+  }
   if (prop === 'color') {
     // A theme colour (`var(--color-ink)`) is the utility Tailwind makes from it (`text-ink`); and the ones already on the element are replaced too.
     const theme = THEME_COLOR.exec(value.trim());
@@ -79,6 +93,10 @@ export interface ClassHints {
   scale?: Scale;
   /** The names of the page's theme colours (`ink` for `--color-ink`), so `text-ink` is known to be a colour and not a size. */
   colorTokens?: string[];
+  /** The names of the page's font sizes (`xl` for `--text-xl`), so a chosen size is written as `text-xl`. */
+  textTokens?: string[];
+  /** The names of the page's custom spacing (`gutter` for `--spacing-gutter`), so a chosen step is written as `px-gutter`. */
+  spacingTokens?: string[];
 }
 
 const V3_STEPS = new Set([0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 72, 80, 96]);
@@ -109,7 +127,7 @@ function snapped(prefix: string, value: string, scale: Scale): string | null {
 export function tailwindClasses(classes: string, prop: string, value: string, hints: ClassHints = {}, variant = ''): string | null {
   if (/[\]\[{}"';\\]/.test(value) || (hints.lineHeight && !/^[\d.]+$/.test(hints.lineHeight))) return null;
   if (variant && !isVariant(variant)) return null;
-  const { remove, make } = mapping(prop.toLowerCase(), value, hints.scale, hints.colorTokens);
+  const { remove, make } = mapping(prop.toLowerCase(), value, hints);
   const tokens = classes.split(/\s+/).filter(Boolean);
   // Only utilities under exactly this variant are the ones replaced: `md:ml-4` is not touched by an edit with no variant, and the reverse.
   const utility = (c: string) => {
@@ -123,7 +141,9 @@ export function tailwindClasses(classes: string, prop: string, value: string, hi
   const tag = (u: string) => (variant ? `${variant}:${u}` : u);
   const out = [...tokens.filter((c) => !isRemoved(c)), tag(make)];
   // Replacing `text-5xl` also drops its built-in line-height; pin the one the page was showing.
-  const lostLineHeight = prop === 'font-size' && tokens.some((c) => isRemoved(c) && NAMED_SIZE.test(utility(c)!));
+  // (Not when the new size is a named one: it brings its own line-height, which is what was asked for.)
+  const namedMake = prop === 'font-size' && !make.startsWith('text-[');
+  const lostLineHeight = prop === 'font-size' && !namedMake && tokens.some((c) => isRemoved(c) && NAMED_SIZE.test(utility(c)!));
   if (lostLineHeight && hints.lineHeight && !out.some((c) => /^!?leading-/.test(utility(c) ?? ''))) out.push(tag(`leading-[${hints.lineHeight}]`));
   return out.join(' ');
 }
@@ -143,7 +163,7 @@ export function isVariant(v: string): boolean {
 
 /** `classes` without the utilities that set `prop` under exactly this variant: the removal half of an edit, for a class list the edit doesn't write into. */
 export function stripClasses(classes: string, prop: string, hints: ClassHints = {}, variant = ''): string {
-  const { remove } = mapping(prop.toLowerCase(), '0', hints.scale, hints.colorTokens);
+  const { remove } = mapping(prop.toLowerCase(), '0', hints);
   return classes
     .split(/\s+/)
     .filter(Boolean)
@@ -156,7 +176,7 @@ export function stripClasses(classes: string, prop: string, hints: ClassHints = 
 
 /** The utilities in `classes` that set `prop` under exactly this variant. */
 export function conflictingClasses(classes: string, prop: string, hints: ClassHints = {}, variant = ''): string[] {
-  const { remove } = mapping(prop.toLowerCase(), '0', hints.scale, hints.colorTokens);
+  const { remove } = mapping(prop.toLowerCase(), '0', hints);
   return classes.split(/\s+/).filter((c) => {
     const at = c.lastIndexOf(':');
     return c && (at < 0 ? '' : c.slice(0, at)) === variant && remove.test(c.slice(at + 1));

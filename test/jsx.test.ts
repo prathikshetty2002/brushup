@@ -616,3 +616,58 @@ describe('template-literal classNames', () => {
     expect(run(code, e(code, { 'margin-left': '40px' }), tw).target).toBe('inline');
   });
 });
+
+describe('named text sizes and spacing tokens', () => {
+  const tw = { tailwind: true };
+  const make = (cls: string) => `export default function P() {\n  return <p className="${cls}">x</p>;\n}\n`;
+  const e = (code: string, props: Record<string, string>, hints: object): StyleEdit => ({ kind: 'style', id: idOf(code, 'p'), tag: 'p', props, hints });
+  const SIZES = ['xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl'];
+
+  it('writes a named size as its own class, replacing the size already there and keeping the colour', () => {
+    const code = make('text-lg text-red-500 font-medium');
+    const out = run(code, e(code, { 'font-size': 'var(--text-3xl)' }, { textTokens: SIZES }), tw).files[FILE];
+    expect(out).toContain('className="text-red-500 font-medium text-3xl"');
+  });
+
+  it('does not pin the old line-height when the new size is a named one, since it brings its own', () => {
+    const code = make('text-lg');
+    const out = run(code, e(code, { 'font-size': 'var(--text-xl)' }, { textTokens: SIZES, lineHeight: '1.5' }), tw).files[FILE];
+    expect(out).toContain('className="text-xl"');
+    expect(out).not.toContain('leading-');
+    // An arbitrary size still pins the line-height the page showed.
+    expect(run(code, e(code, { 'font-size': '40px' }, { lineHeight: '1.5' }), tw).files[FILE]).toContain('text-[40px] leading-[1.5]');
+  });
+
+  it('replaces a size the project\'s theme added, and a size from the theme is written by name', () => {
+    const code = make('text-display p-4');
+    expect(run(code, e(code, { 'font-size': 'var(--text-xl)' }, { textTokens: [...SIZES, 'display'] }), tw).files[FILE]).toContain('className="p-4 text-xl"');
+    expect(run(code, e(code, { 'font-size': 'var(--text-hero)' }, { textTokens: [...SIZES, 'display', 'hero'] }), tw).files[FILE]).toContain('p-4 text-hero');
+  });
+
+  it('does not take a colour token for a size when it replaces a size', () => {
+    const code = make('text-ink text-lg');
+    const out = run(code, e(code, { 'font-size': 'var(--text-xl)' }, { textTokens: SIZES }), tw).files[FILE];
+    expect(out).toContain('text-ink'); // the colour stays
+    expect(out).toContain('text-xl');
+  });
+
+  it('never invents a size the page did not list', () => {
+    const code = make('p-4');
+    expect(run(code, e(code, { 'font-size': 'var(--text-nope)' }, { textTokens: SIZES }), tw).files[FILE]).toContain('text-[var(--text-nope)]');
+  });
+
+  it('writes a custom spacing token by name for a margin, padding or gap', () => {
+    const code = make('p-4 ml-2');
+    const out = run(code, e(code, { 'margin-left': 'var(--spacing-gutter)', 'padding-top': 'var(--spacing-gutter)' }, { spacingTokens: ['gutter'] }), tw).files[FILE];
+    expect(out).toContain('ml-gutter');
+    expect(out).toContain('pt-gutter');
+    expect(out).not.toContain('ml-2');
+    expect(run(code, e(code, { 'margin-left': 'var(--spacing-nope)' }, { spacingTokens: ['gutter'] }), tw).files[FILE]).toContain('ml-[var(--spacing-nope)]');
+  });
+
+  it('drops token names that are not plain lowercase words, since they end up in a class name', () => {
+    const code = make('p-4');
+    const out = run(code, e(code, { 'font-size': 'var(--text-x y)' }, { textTokens: ['x y', 'x"y'] }), tw).files[FILE];
+    expect(out).not.toMatch(/text-x y|x"y/);
+  });
+});

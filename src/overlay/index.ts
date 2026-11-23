@@ -1,6 +1,7 @@
 import type { Edit, Scope, Target } from '../core/edit-types';
 import type { Note } from '../server/notes';
 import { arrangeOffsets, needs } from './arrange';
+import { TEXT_SIZES } from './scale';
 import { moveBase, moveProps, type MoveBase } from './drag';
 import { explainSize, handleLabel, handleProps, sizeProps, type BoxStart, type HandleKind, type SizeStyle } from './handles-math';
 import { morphPage, refreshStylesheets } from './morph';
@@ -124,6 +125,7 @@ function connect() {
       if (panel.a11yOpen()) scanA11y(); // otherwise the next time the tab opens, which scans anyway
     } else if (msg.type === 'info') {
       panel.setRoot(String(msg.root ?? ''));
+      panel.setStyleInfo(Boolean((msg.style as { tailwind?: boolean } | undefined)?.tailwind));
       refreshPanel();
     } else if (msg.type === 'ask') {
       answerAsk(msg);
@@ -235,7 +237,10 @@ function refreshPanel() {
   const el = selected();
   const detail = sels.length > 1 ? `${sels.length} elements selected` : '';
   panel.setArrange(sels.length);
-  if (el) panel.setThemeColors(themeColors());
+  if (el) {
+    panel.setThemeColors(themeColors());
+    panel.setSizeTokens(themeScan().text, themeScan().spacing);
+  }
   panel.show(el, detail || undefined, el ? `<${tagOf(el)}>` : '', el ? suggestKind(el) : 'element', el && DEV ? sourceOf(el) : null);
 }
 
@@ -712,19 +717,25 @@ interface ThemeColor {
   name: string;
   value: string;
 }
-let themeCache: { at: number; colors: ThemeColor[] } | null = null;
+interface ThemeToken {
+  name: string;
+  value: string;
+}
+let themeCache: { at: number; colors: ThemeColor[]; text: ThemeToken[]; spacing: ThemeToken[] } | null = null;
 
 /**
- * The colours the page's theme defines: `--color-*` custom properties declared on the root (Tailwind 4's `@theme`, or the same
- * convention written by hand). They are read from the page's own stylesheets, so a project with none simply has no list.
+ * What the page's theme defines: custom properties declared on the root, which is what Tailwind 4's `@theme` produces and what
+ * the same convention written by hand looks like. `--color-*` are colours, `--text-*` font sizes (not their `--line-height`
+ * companions) and `--spacing-*` named spacing. They are read from the page's own stylesheets, so a project with none simply
+ * has no list, and nothing is guessed.
  */
-function themeColors(): ThemeColor[] {
-  if (themeCache && Date.now() - themeCache.at < 2000) return themeCache.colors;
+function themeScan() {
+  if (themeCache && Date.now() - themeCache.at < 2000) return themeCache;
   const names = new Set<string>();
   const visit = (rules: CSSRuleList) => {
     for (const rule of rules) {
       if (rule instanceof CSSStyleRule && /(^|,)\s*(:root|:host|html)\s*(,|$)/.test(rule.selectorText)) {
-        for (const prop of rule.style) if (/^--color-[a-z0-9-]+$/.test(prop)) names.add(prop.slice(8));
+        for (const prop of rule.style) if (/^--(color|text|spacing)-[a-z0-9-]+$/.test(prop) && !prop.includes('--', 2)) names.add(prop);
       } else if ('cssRules' in rule) visit((rule as CSSGroupingRule).cssRules); // @layer theme { … }, @media, @supports
     }
   };
@@ -736,10 +747,19 @@ function themeColors(): ThemeColor[] {
     }
   }
   const style = getComputedStyle(document.documentElement);
-  const colors = [...names].map((name) => ({ name, value: style.getPropertyValue(`--color-${name}`).trim() })).filter((c) => c.value && !/^(inherit|initial|unset|revert)/.test(c.value));
-  themeCache = { at: Date.now(), colors };
-  return colors;
+  const tokens = (prefix: string) =>
+    [...names]
+      .filter((n) => n.startsWith(`--${prefix}-`))
+      .map((n) => ({ name: n.slice(prefix.length + 3), value: style.getPropertyValue(n).trim() }))
+      .filter((c) => c.value && !/^(inherit|initial|unset|revert)/.test(c.value));
+  themeCache = { at: Date.now(), colors: tokens('color'), text: tokens('text'), spacing: tokens('spacing') };
+  return themeCache;
 }
+
+const themeColors = (): ThemeColor[] => themeScan().colors;
+
+/** The sizes a picked font size may be written as: Tailwind's default names plus any the page's theme adds. */
+const textTokenNames = () => [...new Set([...TEXT_SIZES.map((s) => s.name), ...themeScan().text.map((t) => t.name)])];
 
 /* ---------- editing for a screen size ---------- */
 
@@ -765,7 +785,7 @@ async function commitStyles(items: { el: HTMLElement; props: Record<string, stri
     const ref = refOf(el);
     if (seen.has(ref)) continue; // list items share one source line: a single edit covers them all
     seen.add(ref);
-    const hints = { ...(Number.isFinite(rootPx) ? { rootPx } : {}), ...('font-size' in props ? { lineHeight: lineHeightRatio(el) } : {}), ...('color' in props ? { colorTokens: themeColors().map((c) => c.name) } : {}) };
+    const hints = { ...(Number.isFinite(rootPx) ? { rootPx } : {}), ...('font-size' in props ? { lineHeight: lineHeightRatio(el) } : {}), ...('color' in props ? { colorTokens: themeColors().map((c) => c.name) } : {}), ...('font-size' in props ? { textTokens: textTokenNames() } : {}), ...(Object.keys(props).some((p) => /^(margin|padding)-|^gap$/.test(p)) ? { spacingTokens: themeScan().spacing.map((s) => s.name) } : {}) };
     edits.push({ kind: 'style', id: ref, tag: tagOf(el), props, scope: variant ? 'element' : scope, ...(variant ? { variant } : {}), hints, ...(DEV ? { ident: identOf(el), ver: verOf(el) } : {}) });
   }
   if (edits[0]?.kind === 'style') {

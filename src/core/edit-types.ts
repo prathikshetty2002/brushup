@@ -41,6 +41,10 @@ export interface StyleEdit {
     rootPx?: number;
     /** Names of the page's theme colours (`--color-ink` is `ink`), sent with a colour edit. */
     colorTokens?: string[];
+    /** Names of the page's font sizes (`--text-xl` is `xl`), sent with a font-size edit. */
+    textTokens?: string[];
+    /** Names of the page's custom spacing (`--spacing-gutter` is `gutter`), sent with a margin, padding or gap edit. */
+    spacingTokens?: string[];
   };
 }
 

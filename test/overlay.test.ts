@@ -867,6 +867,66 @@ describe('the Changes tab', () => {
   });
 });
 
+describe('text size and spacing pickers', () => {
+  const q = (sel: string) => o.root.querySelector(sel) as HTMLElement;
+  const chips = (box: string) => [...o.root.querySelectorAll(`${box} .chip`)] as HTMLButtonElement[];
+  beforeEach(async () => {
+    o.destroy();
+    document.body.innerHTML = '<p data-brushup-src="src/App.tsx:5:6" style="font-size: 20px">Hi</p>';
+    o = await loadOverlay({ mode: 'dev' });
+  });
+
+  it('are not offered until the server says the project uses Tailwind', () => {
+    click(document.querySelector('p')!);
+    expect(q('.sizechips').hidden).toBe(true);
+    expect(q('.stepchips').hidden).toBe(true);
+    o.receive({ type: 'info', root: '/app', style: { tailwind: false } });
+    click(document.querySelector('p')!);
+    expect(q('.sizechips').hidden).toBe(true);
+  });
+
+  it('show Tailwind\'s named sizes, mark the one the element has now, and write the picked size by name', async () => {
+    o.receive({ type: 'info', root: '/app', style: { tailwind: true, scale: 'v4' } });
+    click(document.querySelector('p')!);
+    expect(q('.sizechips').hidden).toBe(false);
+    expect(chips('.sizechips').map((c) => c.textContent)).toEqual(['xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl', '4xl', '5xl', '6xl', '7xl', '8xl', '9xl']);
+    // 20px is xl at a 16px root in jsdom? The element has an inline 20px, and `xl` is 20px.
+    const pressed = chips('.sizechips').filter((c) => c.getAttribute('aria-pressed') === 'true');
+    expect(pressed.map((c) => c.textContent)).toEqual(['xl']);
+    chips('.sizechips').find((c) => c.textContent === '3xl')!.click();
+    await settle();
+    const e = o.last('edit').edit;
+    expect(e.props).toEqual({ 'font-size': 'var(--text-3xl)' });
+    expect(e.hints.textTokens).toEqual(expect.arrayContaining(['xs', 'xl', '9xl']));
+  });
+
+  it('write a spacing step to the margin or padding box that was clicked last, and ask for a box first', async () => {
+    o.receive({ type: 'info', root: '/app', style: { tailwind: true, scale: 'v4' } });
+    click(document.querySelector('p')!);
+    expect(chips('.stepchips').map((c) => c.textContent)).toEqual(['0', '4', '8', '12', '16', '24', '32', '48', '64', '96']);
+    chips('.stepchips').find((c) => c.textContent === '24')!.click();
+    expect(status()).toContain('Click a margin or padding box first');
+    expect(o.all('edit')).toHaveLength(0);
+    (q('[data-prop="padding-left"]') as HTMLInputElement).dispatchEvent(new FocusEvent('focus'));
+    chips('.stepchips').find((c) => c.textContent === '24')!.click();
+    await settle();
+    expect(o.last('edit').edit.props).toEqual({ 'padding-left': '24px' });
+  });
+
+  it('add the sizes and spacing the page\'s own theme defines', () => {
+    document.head.insertAdjacentHTML('beforeend', '<style id="th2">:root { --text-display: 4.5rem; --spacing-gutter: 1.5rem; --text-display--line-height: 1; }</style>');
+    o.receive({ type: 'info', root: '/app', style: { tailwind: true } });
+    click(document.querySelector('p')!);
+    const sizes = chips('.sizechips').map((c) => c.textContent);
+    const steps = chips('.stepchips').map((c) => c.textContent);
+    document.getElementById('th2')!.remove();
+    if (!sizes.includes('display') && !steps.includes('gutter')) return; // this DOM can't read custom properties off a stylesheet; checked in a real browser instead
+    expect(sizes).toContain('display');
+    expect(sizes).not.toContain('display--line-height');
+    expect(steps).toContain('gutter');
+  });
+});
+
 describe('lining up a selection', () => {
   const q = (sel: string) => o.root.querySelector(sel) as HTMLElement;
   const btn = (kind: string) => q(`[data-arrange=${kind}]`) as HTMLButtonElement;

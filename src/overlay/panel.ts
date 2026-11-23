@@ -2,6 +2,7 @@ import { RULES } from './a11y';
 import { DESIGN_RULES } from './design';
 import { markDiff } from './diff-marks';
 import { roundTokens, SIMPLE_TOKENS, TOKENS, VISUAL_TOKENS } from '../core/savings';
+import { SPACING_STEPS, TEXT_SIZES } from './scale';
 import { HANDLE_KINDS, SIDES, type HandleKind, type Sides } from './handles-math';
 
 export type Mode = 'edit' | 'preview';
@@ -242,7 +243,10 @@ input[type=color] { padding: 2px; cursor: pointer; } input[type=color]::-webkit-
 input:hover, select:hover, textarea:hover { border-color: var(--faint); } input:disabled { opacity: .35; }
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
 .arrange { margin: 0 0 12px; } .arrangelbl { display: block; margin-bottom: 4px; color: var(--muted); font-size: 11px; } .arrangebtns { display: flex; gap: 2px; flex-wrap: wrap; } .arrangebtns .iconbtn:disabled { opacity: .35; }
-.vary { margin: 0 0 12px; } .tokens { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin: 6px 0 2px; } .tokenlbl { flex: 0 0 100%; color: var(--faint); font-size: 10.5px; }
+.vary { margin: 0 0 12px; } .chips { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin: 6px 0 2px; } .chiplbl { flex: 0 0 100%; color: var(--faint); font-size: 10.5px; }
+.chip { padding: 2px 7px; min-height: 22px; border: 1px solid var(--line); border-radius: 3px; background: transparent; color: var(--muted); font: 500 11px var(--mono); cursor: pointer; } .chip:hover { color: var(--text); border-color: var(--muted); } .chip[aria-pressed=true] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.stepchips { margin: 8px 0 0; }
+.tokens { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin: 6px 0 2px; } .tokenlbl { flex: 0 0 100%; color: var(--faint); font-size: 10.5px; }
 .tokensw { width: 18px; height: 18px; padding: 0; border: 1px solid var(--line-strong, rgba(0,0,0,.25)); border-radius: 2px; cursor: pointer; } .tokensw:hover { outline: 2px solid var(--accent); outline-offset: 1px; }
 .vary summary { cursor: pointer; color: var(--muted); font-size: 11px; list-style: none; } .vary summary::-webkit-details-marker { display: none; } .vary summary::before { content: '▸ '; } .vary[open] summary::before { content: '▾ '; } .vary[open] summary { margin-bottom: 5px; }
 .varyseg { display: flex; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; } .varyseg button { flex: 1; padding: 5px 6px; border: 0; background: transparent; color: var(--muted); font: 500 11px var(--sans); cursor: pointer; } .varyseg button + button { border-left: 1px solid var(--line); }
@@ -551,6 +555,29 @@ export function createPanel(hooks: PanelHooks) {
       b.blur(); // keep the arrow keys working on the page
     }),
   );
+  /* Pickers for Tailwind projects: named text sizes under Size, and spacing steps under the margin and padding box. */
+  const sizeBox = document.createElement('div');
+  sizeBox.className = 'chips sizechips';
+  sizeBox.hidden = true;
+  const stepBox = document.createElement('div');
+  stepBox.className = 'chips stepchips';
+  stepBox.hidden = true;
+  let tailwindOn = false;
+  let lastBox = '';
+  let sizeKey: string | null = null; // null: not built yet (an empty list of custom names is a valid state)
+  let stepKey: string | null = null;
+  const chip = (text: string, title: string, run: () => void) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chip';
+    b.textContent = text;
+    b.title = title;
+    b.addEventListener('click', () => {
+      run();
+      b.blur();
+    });
+    return b;
+  };
   const varyEl = $<HTMLDetailsElement>('.vary');
   const varyBtns = [...varyEl.querySelectorAll<HTMLButtonElement>('[data-vary]')];
   let varyBp = '';
@@ -696,6 +723,7 @@ export function createPanel(hooks: PanelHooks) {
       } else wireScrub(input, input, f, true);
     }
     inputs.set(f.prop, input);
+    if (mini) input.addEventListener('focus', () => (lastBox = f.prop)); // the spacing steps below the box apply to the cell last clicked
     if (f.kind === 'color') {
       // The swatch opens the native picker; the text box takes a typed or pasted hex.
       const hexIn = document.createElement('input');
@@ -739,7 +767,7 @@ export function createPanel(hooks: PanelHooks) {
         const cell = (kind: string, side: string) => `<div class="c ${side[0]}" data-cell="${kind}-${side}"></div>`;
         const sides = (kind: string) => ['top', 'left', 'right', 'bottom'].map((x) => cell(kind, x));
         box.innerHTML = `<span class="cap">Margin</span>${sides('margin').slice(0, 2).join('')}<div class="boxp"><span class="cap">Padding</span>${sides('padding').slice(0, 2).join('')}<div class="core"></div>${sides('padding').slice(2).join('')}</div>${sides('margin').slice(2).join('')}`;
-        fieldsEl.append(box);
+        fieldsEl.append(box, stepBox);
         grid = null;
       } else {
         grid = document.createElement('div');
@@ -753,6 +781,8 @@ export function createPanel(hooks: PanelHooks) {
     else (grid ?? fieldsEl.querySelector<HTMLElement>('.grid:last-of-type')!).append(field);
   }
 
+  // The text sizes get the full width, under the whole Typography grid, not squeezed beside the Size field.
+  fieldsEl.querySelector('.grid')?.after(sizeBox);
   root.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((b) =>
     b.addEventListener('click', () => {
       // The panel shrinks to its header when an element leaves no room beside it. Choosing Edit means the person wants the
@@ -1598,6 +1628,51 @@ export function createPanel(hooks: PanelHooks) {
       arrangeEl.querySelector('.arrangelbl')!.textContent = `Line up ${count} elements`;
       arrangeBtns.forEach((b) => (b.disabled = (b.dataset.arrange?.startsWith('space') ?? false) && count < 3));
     },
+    /** Whether styles are written as Tailwind classes here: the size and spacing pickers only make sense then. */
+    setStyleInfo(tailwind: boolean) {
+      tailwindOn = tailwind;
+      if (!tailwind) {
+        sizeBox.hidden = stepBox.hidden = true;
+        sizeKey = stepKey = null;
+      }
+    },
+    /** The chips under Size and the box model: Tailwind's default sizes and steps, plus the page theme's own `--text-*` and `--spacing-*`. */
+    setSizeTokens(text: { name: string; value: string }[], spacing: { name: string; value: string }[]) {
+      if (!tailwindOn) return;
+      const custom = text.filter((t) => !TEXT_SIZES.some((s) => s.name === t.name));
+      const key = custom.map((c) => `${c.name}=${c.value}`).join('|');
+      if (key !== sizeKey) {
+        sizeKey = key;
+        sizeBox.replaceChildren();
+        const lbl = document.createElement('span');
+        lbl.className = 'chiplbl';
+        lbl.textContent = 'Text size';
+        sizeBox.append(lbl);
+        const sized = (name: string, title: string, px: number) => {
+          const b = chip(name, title, () => hooks.onStyle({ 'font-size': `var(--text-${name})` }, 'auto'));
+          b.dataset.px = String(Math.round(px * 100) / 100);
+          return b;
+        };
+        const rootPx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+        for (const s of TEXT_SIZES) sizeBox.append(sized(s.name, `${s.name} (${s.rem * rootPx}px)`, s.rem * rootPx));
+        for (const c of custom) sizeBox.append(sized(c.name, `${c.name} (${c.value})`, c.value.endsWith('rem') ? parseFloat(c.value) * rootPx : parseFloat(c.value)));
+      }
+      sizeBox.hidden = false;
+      const nameds = spacing.filter((s) => s.name !== 'base');
+      const sKey = nameds.map((c) => `${c.name}=${c.value}`).join('|');
+      if (sKey !== stepKey) {
+        stepKey = sKey;
+        stepBox.replaceChildren();
+        const lbl = document.createElement('span');
+        lbl.className = 'chiplbl';
+        lbl.textContent = 'Spacing step: click a margin or padding box, then pick';
+        stepBox.append(lbl);
+        const apply = (value: string) => (lastBox ? hooks.onStyle({ [lastBox]: value }, 'auto') : api.setStatus('Click a margin or padding box first, then pick a step', 'warn'));
+        for (const n of SPACING_STEPS) stepBox.append(chip(String(n), n === 0 ? '0' : `${n}px (p-${n / 4})`, () => apply(`${n}px`)));
+        for (const s of nameds) stepBox.append(chip(s.name, `${s.name} (${s.value})`, () => apply(`var(--spacing-${s.name})`)));
+      }
+      stepBox.hidden = false;
+    },
     /** Swatches for the page's theme colours (`--color-ink`), under Color: one click writes the theme's own class instead of a hex. */
     setThemeColors(colors: { name: string; value: string }[]) {
       const key = colors.map((c) => `${c.name}=${c.value}`).join('|');
@@ -1703,6 +1778,9 @@ export function createPanel(hooks: PanelHooks) {
         else input.value = String(Math.round(parseInt(raw, 10) / 100) * 100);
         input.disabled = !!f.needsContainer && !container;
       }
+      // The text size the element has now, if it is one of the named sizes.
+      const px = Math.round(parseFloat(cs.fontSize) * 100) / 100;
+      sizeBox.querySelectorAll<HTMLButtonElement>('.chip').forEach((c) => c.setAttribute('aria-pressed', String(Number(c.dataset.px) === px)));
     },
 
     /* ----- notes ----- */

@@ -155,7 +155,7 @@ export function createHub(session: FileSession, notes?: NotesStore, ignored?: Ig
     upgrade(req: IncomingMessage, socket: Duplex, head: Buffer) {
       wss.handleUpgrade(req, socket, head, (ws) => {
         clients.set(ws, { role: 'canvas', lastSeen: Date.now() });
-        send(ws, { type: 'info', root: session.root }); // lets the canvas build open-in-editor links
+        send(ws, { type: 'info', root: session.root, style: session.styleInfo() }); // lets the canvas build open-in-editor links
         // An agent says hello right after connecting; canvas pages get the notes straight away.
         void notes?.list().then((list) => clients.get(ws)?.role === 'canvas' && send(ws, { type: 'notes', notes: list }));
         void ignored?.list().then((items) => clients.get(ws)?.role === 'canvas' && send(ws, { type: 'ignored', items }));

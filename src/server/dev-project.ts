@@ -79,6 +79,10 @@ export class DevProject extends FileSession {
     this.strict = options.strict !== false;
   }
 
+  styleInfo() {
+    return { tailwind: this.tailwind, scale: this.scale };
+  }
+
   /** Where a `file:line:col` reference points, refusing anything outside the project or not JSX/TSX. */
   private resolve(id: string) {
     const loc = parseSrc(id);
