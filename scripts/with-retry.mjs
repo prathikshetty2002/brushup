@@ -24,7 +24,13 @@ const attempt = (n) =>
       timedOut = true;
       console.error(`attempt ${n} did not finish in ${minutes} minutes, stopping it`);
       if (win) spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F']);
-      else process.kill(-child.pid, 'SIGKILL'); // the whole group: the dev server and browser it started too
+      else {
+        try {
+          process.kill(-child.pid, 'SIGKILL'); // the whole group: the dev server and browser it started too
+        } catch {
+          child.kill('SIGKILL'); // a root-owned child (apt under sudo) can't be signalled by us; stop what we can and move on
+        }
+      }
     }, minutes * 60_000);
     child.on('exit', (code) => {
       clearTimeout(timer);

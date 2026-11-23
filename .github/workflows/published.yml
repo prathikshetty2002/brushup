@@ -51,6 +51,10 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
+      - name: Make apt wait for its lock and give up on a stalled mirror
+        if: runner.os == 'Linux'
+        run: |
+          printf '%s\n' 'DPkg::Lock::Timeout "300";' 'Acquire::Retries "3";' 'Acquire::http::Timeout "30";' 'Acquire::https::Timeout "30";' | sudo tee /etc/apt/apt.conf.d/99brushup-ci >/dev/null
       - name: Install ${{ matrix.browser }}
         # The browser download is the other thing that stalls on a shared runner: give it a limit per attempt and retry.
         run: node scripts/with-retry.mjs 3 6 -- node node_modules/playwright-core/cli.js install --with-deps ${{ matrix.browser }}
