@@ -1,9 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.1.11
 
 - **Text size and spacing pickers (Tailwind projects).** A row of named sizes (`xs` to `9xl`) under Size, the current one highlighted: click one to write `text-3xl` in place of the old size, with its own line-height, instead of `text-[60px]`. A row of spacing steps (0, 4, 8, 12, 16, 24, 32, 48, 64, 96 px) under the margin and padding box: click a box, then a step, and it is written as `mt-12`. Sizes and spacing your theme adds (`--text-display`, `--spacing-gutter` in Tailwind 4's `@theme`) show up as extra chips and are written by name (`text-display`, `px-gutter`), only if the page actually defines them. They appear only when the server reports a Tailwind project, so plain HTML and CSS projects are unchanged.
 - **Share notes with your team (opt-in).** `npx brushup init --share-notes` moves your notes into `.brushup/notes/`, one file per note, and rewrites `.gitignore` so git keeps that folder and ignores the rest of `.brushup/`. Commit it, and teammates' notes arrive with `git pull`, show up on your canvas, and are what your Claude reads. One file per note means two people adding notes never conflict (a single JSON array would conflict every time). A note that arrives while the server is running, or while it was off, is in `notes.md` and on the canvas; a file with a merge conflict in it is skipped without losing the others; the layout is detected from the folder, so nothing needs restarting. Off by default, and nothing changes for projects that don't use it.
+
 ## 0.1.10
 
 - **Line up a selection.** Shift-click two or more elements and the Style tab shows a **Line up** row: align left edges, centres or right edges, align top, middle or bottom, and with three or more, space them evenly across or down (the two outer ones stay put). Each element that has to move gets the same edit a drag writes, in one undo step; elements already in place are left alone, and it says "Already lined up" when nothing needs to move.

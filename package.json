@@ -1,6 +1,6 @@
 {
   "name": "brushup",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "type": "module",
   "description": "A visual canvas for touching up agent-generated UI on the page itself. Edits are written back to your HTML/CSS, React and Tailwind source, and Claude Code can read your notes over MCP.",
   "scripts": {
